@@ -309,6 +309,144 @@ describe('the officer portal sharing this origin', () => {
     expect(response).toBeUndefined();
   });
 
+  /*
+   * The half the prefix check does not reach: the portal's API traffic.
+   *
+   * `/portal/` covers the portal's documents and its assets. Its API reads go
+   * to `/api/v1/...` on this same origin, which is not under that prefix, so
+   * every one of them falls into the branches below the exclusion — and those
+   * branches are the ones that answer on the application's behalf.
+   *
+   * Attribution is by referrer, which is the only signal available before
+   * `respondWith` has to be decided. Measured against the nginx config
+   * rendered from Dockerfile.agent, which serves both documents with
+   * Referrer-Policy: strict-origin-when-cross-origin: a worker at scope '/'
+   * sees the full document URL for a same-origin fetch, so a read issued by
+   * /portal/ is attributable and one issued by / is not mistaken for it.
+   *
+   * When there is no referrer to read the request is treated as the agent's,
+   * which is what the worker did before any of this. An unattributable read
+   * is answered exactly as it is today rather than newly left alone.
+   */
+  const fromPortal = (url: string) => ({
+    url,
+    method: 'GET',
+    mode: 'cors',
+    destination: '',
+    referrer: 'https://psirs.example/portal/',
+  });
+
+  it('does not answer a portal reference read out of the agent cache', async () => {
+    sw.putInCache(
+      `${sw.version}-reference`,
+      'https://psirs.example/api/v1/reference/lgas',
+      'cached-lgas',
+    );
+    sw.setOffline(true);
+
+    const response = await sw.fetchEvent(fromPortal('https://psirs.example/api/v1/reference/lgas'));
+
+    // The portal declares no offline story. Left to the network, it gets its
+    // own error rather than data the worker cached for a handset.
+    expect(response).toBeUndefined();
+    expect(sw.networkCalls).toHaveLength(0);
+  });
+
+  it('does not tell an officer that no government money has moved', async () => {
+    /*
+     * The branch under the cacheable list answers any other failed /api/ GET
+     * with a synthesised 503 reading "You are offline. … Nothing has been
+     * sent and nothing has been paid", carrying moneyStatus NOT_DEBITED.
+     *
+     * That is a statement about government money, written for a handset in a
+     * field with no signal, manufactured by the agent's worker about a
+     * request the portal made. A failed fetch is not evidence of what reached
+     * the server, and an officer at a desk whose API is down is not offline.
+     */
+    sw.setOffline(true);
+
+    const response = await sw.fetchEvent(
+      fromPortal('https://psirs.example/api/v1/government/revenue/summary'),
+    );
+
+    expect(response).toBeUndefined();
+  });
+
+  it('does not put a portal response into the agent cache', async () => {
+    await sw.fetchEvent(fromPortal('https://psirs.example/api/v1/revenue/items?search=Vehicle'));
+
+    const reference = sw.cacheContents().get(`${sw.version}-reference`);
+    expect(reference?.size ?? 0).toBe(0);
+  });
+
+  it('still serves the agent its own reference data offline', async () => {
+    // The exclusion must not have been bought by breaking what the worker is
+    // for. A read issued by the agent document is still answered from cache.
+    sw.putInCache(
+      `${sw.version}-reference`,
+      'https://psirs.example/api/v1/reference/lgas',
+      'cached-lgas',
+    );
+    sw.setOffline(true);
+
+    const response = await sw.fetchEvent({
+      url: 'https://psirs.example/api/v1/reference/lgas',
+      method: 'GET',
+      mode: 'cors',
+      destination: '',
+      referrer: 'https://psirs.example/',
+    });
+
+    expect(await response!.text()).toBe('cached-lgas');
+  });
+
+  it('still answers a read it cannot attribute, as it always did', async () => {
+    // No referrer is the case a stricter policy, or a request the browser
+    // issues without one, would produce. It must degrade to today's
+    // behaviour, not to silently leaving the agent without its data.
+    sw.putInCache(
+      `${sw.version}-reference`,
+      'https://psirs.example/api/v1/reference/lgas',
+      'cached-lgas',
+    );
+    sw.setOffline(true);
+
+    const response = await sw.fetchEvent({
+      url: 'https://psirs.example/api/v1/reference/lgas',
+      method: 'GET',
+      mode: 'cors',
+      destination: '',
+      referrer: '',
+    });
+
+    expect(await response!.text()).toBe('cached-lgas');
+  });
+
+  it('is not switched off by a referrer from somebody else\'s site', async () => {
+    /*
+     * The attribution is "a document of ours, under /portal/", not "a URL with
+     * /portal/ in it". Matching on the path alone would let any page anywhere
+     * link to this origin and have the worker stand down, which on a handset
+     * means losing the offline reference data an agent collects with.
+     */
+    sw.putInCache(
+      `${sw.version}-reference`,
+      'https://psirs.example/api/v1/reference/lgas',
+      'cached-lgas',
+    );
+    sw.setOffline(true);
+
+    const response = await sw.fetchEvent({
+      url: 'https://psirs.example/api/v1/reference/lgas',
+      method: 'GET',
+      mode: 'cors',
+      destination: '',
+      referrer: 'https://not-psirs.example/portal/',
+    });
+
+    expect(await response!.text()).toBe('cached-lgas');
+  });
+
   it('still answers the agent shell it does own', async () => {
     // The exclusion must be the portal's prefix and nothing else. A path
     // merely starting with the same letters is the agent's.

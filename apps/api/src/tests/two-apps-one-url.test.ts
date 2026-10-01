@@ -193,20 +193,55 @@ describe("the agent's service worker on a shared origin", () => {
    * so every portal request passes through it, and every branch of it was
    * written for an origin with one application on it. The exclusion lives in
    * sw.js and the agent suite exercises the real file against a mocked worker
-   * global; this checks only that the line is still there, because the cost
-   * of losing it is paid on a handset in a market rather than in CI.
+   * global; this checks only that it is still there, because the cost of
+   * losing it is paid on a handset in a market rather than in CI.
+   *
+   * It used to pin the exact expression —
+   * `url.pathname === '/portal' || url.pathname.startsWith('/portal/')` —
+   * and failed the moment that moved into a named predicate, while the
+   * behaviour it names was intact and better covered than before. A tripwire
+   * worth having survives a refactor of the thing it watches, so what is
+   * asserted now is that the worker still knows both forms of the prefix,
+   * still returns early on them, and still consults the referrer — which is
+   * the only way the portal's /api/ reads, which are not under /portal/ at
+   * all, can be told apart from the agent's.
    */
   test('leaves the portal alone', () => {
     const source = read('apps/agent/public/sw.js');
+
+    for (const [pattern, form] of [
+      [/pathname\s*===\s*'\/portal'/, "the bare '/portal'"],
+      [/pathname\.startsWith\('\/portal\/'\)/, "the '/portal/' prefix"],
+    ] as const) {
+      assert.match(
+        source,
+        pattern,
+        `apps/agent/public/sw.js no longer recognises ${form}. Its navigation ` +
+          "branch caches whatever HTML came back under the literal key " +
+          "'/index.html', so one officer opening the portal replaces the " +
+          "agent's offline shell with a government sign-in page; and its " +
+          'static branch falls back to that same key, so a portal asset ' +
+          'fetched offline comes back as HTML and the portal dies parsing it',
+      );
+    }
+
     assert.match(
       source,
-      /url\.pathname\s*===\s*'\/portal'\s*\|\|\s*url\.pathname\.startsWith\('\/portal\/'\)/,
-      "apps/agent/public/sw.js no longer excludes /portal/. Its navigation " +
-        "branch caches whatever HTML came back under the literal key " +
-        "'/index.html', so one officer opening the portal replaces the " +
-        "agent's offline shell with a government sign-in page; and its " +
-        'static branch falls back to that same key, so a portal asset ' +
-        'fetched offline comes back as HTML and the portal dies parsing it',
+      /if \([A-Za-z]*[Pp]ortal[A-Za-z]*\([^)]*\)\) return;/,
+      'apps/agent/public/sw.js knows the portal prefixes but no longer ' +
+        'returns early for them in its fetch handler, so knowing them ' +
+        'changes nothing',
+    );
+
+    assert.match(
+      source,
+      /request\.referrer/,
+      "apps/agent/public/sw.js no longer reads the referrer, so the portal's " +
+        '/api/ reads — which are on this origin but not under /portal/ — fall ' +
+        'back into the branches that answer for an application. A failed one ' +
+        'then comes back as a 503 reading "Nothing has been sent and nothing ' +
+        'has been paid", which is a claim about government money the portal ' +
+        'itself deliberately declines to make',
     );
   });
 

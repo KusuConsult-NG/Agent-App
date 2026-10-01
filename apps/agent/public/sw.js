@@ -85,6 +85,48 @@ function isNeverCache(url) {
   return NEVER_CACHE.some((path) => url.pathname.startsWith(path));
 }
 
+/** A path the officer portal is served from. */
+function isPortalPath(pathname) {
+  return pathname === '/portal' || pathname.startsWith('/portal/');
+}
+
+/**
+ * A request this worker must leave entirely alone.
+ *
+ * The path places the portal's documents and its assets. It cannot place the
+ * portal's API reads: those go to `/api/v1/...` on this same origin, which is
+ * not under `/portal/`, so they used to fall straight through into the
+ * branches that answer on an application's behalf.
+ *
+ * The referrer is the document that issued the request, and it is the only
+ * signal available in time. Resolving the client through `self.clients` is
+ * asynchronous, and by the time it answers the chance to decline has gone —
+ * `respondWith` has to be called, or not called, synchronously.
+ *
+ * Measured against the nginx config these images actually serve, which sets
+ * `Referrer-Policy: strict-origin-when-cross-origin`: a worker at scope '/'
+ * is given the full document URL for a same-origin fetch, so a read issued by
+ * /portal/ is attributable and one issued by / is not mistaken for it.
+ *
+ * No referrer means not attributable, and an unattributable request is
+ * handled exactly as it was before this function existed. That is the
+ * deliberate direction to fail in: the cost is the portal keeping today's
+ * behaviour under a stricter policy, where the alternative would be an agent
+ * silently losing the offline reference data this worker exists to provide.
+ */
+function belongsToPortal(url, request) {
+  if (isPortalPath(url.pathname)) return true;
+
+  const referrer = request.referrer;
+  if (!referrer) return false;
+  try {
+    const from = new URL(referrer);
+    return from.origin === self.location.origin && isPortalPath(from.pathname);
+  } catch {
+    return false;
+  }
+}
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -113,8 +155,19 @@ self.addEventListener('fetch', (event) => {
    * respondWith leaves the request to the network, which is exactly right:
    * the portal has no offline story and does not want one, because nothing
    * it does is safe to serve stale.
+   *
+   * That claim was once enforced by a check on `/portal/` alone, which is the
+   * portal's documents and assets and not its API reads — those are
+   * `/api/v1/...` on this same origin. So the two branches below went on
+   * answering for the portal: a failed reference read came back out of a
+   * cache filled for a handset, and any other failed GET came back as a
+   * manufactured 503 reading "You are offline. … Nothing has been sent and
+   * nothing has been paid", with moneyStatus NOT_DEBITED. That is a
+   * statement about government money, written for an agent in a field with
+   * no signal, asserted about a request the portal made — and a failed fetch
+   * is no evidence of what reached the server. See `belongsToPortal`.
    */
-  if (url.pathname === '/portal' || url.pathname.startsWith('/portal/')) return;
+  if (belongsToPortal(url, request)) return;
 
   if (url.pathname.startsWith('/api/')) {
     if (isCacheableApi(url) && !isNeverCache(url)) {
