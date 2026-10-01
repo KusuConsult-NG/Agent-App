@@ -330,11 +330,28 @@ export function ReconciliationScreen() {
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
 
-      {loadError && (
-        <Alert kind="info" title="ofcFnNotYourRole">
-          <p style={{ margin: 0 }}>{loadError.message}</p>
-        </Alert>
-      )}
+      {/*
+        * Labelled "not available to your role" only when that is what happened.
+        *
+        * Three reads write this one slot, and the label was fixed: a 500 from
+        * the settlement endpoint, or a request that never left the browser,
+        * told a finance officer the figures were not available to their role.
+        * They stop looking — the screen has given them a reason that is not
+        * theirs to fix — and nobody learns the endpoint is down, on the screen
+        * PSIRS uses to check that money it collected actually arrived.
+        *
+        * The comment above this state already draws one distinction, between
+        * "this is not yours to see" and "what you just did did not happen".
+        * This is the third: "nobody can see it right now".
+        */}
+      {loadError &&
+        (loadError.code === 'FORBIDDEN' ? (
+          <Alert kind="info" title="ofcFnNotYourRole">
+            <p style={{ margin: 0 }}>{loadError.message}</p>
+          </Alert>
+        ) : (
+          <ErrorAlert error={loadError} />
+        ))}
 
       {settlements && (
         <div className="stat-grid">
