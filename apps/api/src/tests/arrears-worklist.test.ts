@@ -502,3 +502,123 @@ describe('who may see it', () => {
     assert.ok(response.status === 404 || response.status === 403, `got ${response.status}`);
   });
 });
+
+/*
+ * The figures above the list, and the filters between them.
+ *
+ * `summary` is the scope and says so in its own comment: it ignores the limit
+ * so a short page is not read as a small debt. What it also ignored was the
+ * amount floor and the deadline window — not by decision, but because those
+ * two predicates live in the list query and were never passed to the summary
+ * one. The LGA filter *was* passed. So one of the three filters moved the
+ * figures and two did not, which is worse than none of them moving: an officer
+ * who narrows by LGA and watches ₦45m become ₦3m has been taught that the
+ * figures follow the filters, and will read them that way when they set a
+ * floor of ₦50,000 and get a list of twelve names under a total of ₦45m.
+ *
+ * The scope figure is worth keeping — it is the only answer to "is this list
+ * most of the money or a corner of it" — so the fix is a second figure rather
+ * than a redefinition of the first.
+ */
+describe('what the figures cover, against what the list does', () => {
+  it('counts the set the list is drawn from, not only the scope it sits in', async () => {
+    // Two debts of different sizes, so a floor can sit between them.
+    const small = await taxpayerOwing('Small', 'MARKET-LEVY');
+    const large = await taxpayerOwing('Large', 'SHOPS-KIOSKS');
+
+    const both = await arrearsWorklist(pool);
+    const smallOwed = BigInt(find(both, small.taxpayerId)!.outstandingKobo);
+    const largeOwed = BigInt(find(both, large.taxpayerId)!.outstandingKobo);
+    assert.ok(largeOwed > smallOwed, 'the fixture only works if the two debts differ');
+
+    const worthTheJourney = await arrearsWorklist(pool, { minimumKobo: largeOwed });
+
+    assert.equal(worthTheJourney.rows.length, 1, 'one debt clears the floor');
+    assert.equal(
+      worthTheJourney.summary.taxpayers,
+      2,
+      'the scope figure still counts everybody who owes, which is what it is for',
+    );
+    assert.equal(
+      worthTheJourney.filtered.taxpayers,
+      1,
+      'and the filtered figure counts the one the officer is actually looking at',
+    );
+    assert.equal(worthTheJourney.filtered.totalKobo, largeOwed.toString());
+    assert.ok(
+      BigInt(worthTheJourney.summary.totalKobo) > BigInt(worthTheJourney.filtered.totalKobo),
+      'the two figures are different numbers, which is the whole point of having both',
+    );
+  });
+
+  it('counts it the same way for the deadline filter as for the amount', async () => {
+    const soon = await taxpayerOwing('Closing', 'SHOPS-KIOSKS', 3);
+    await taxpayerOwing('Roomy', 'SHOPS-KIOSKS', 60);
+
+    const urgent = await arrearsWorklist(pool, { lapsingWithinDays: 7 });
+
+    assert.equal(urgent.summary.taxpayers, 2, 'both still owe');
+    assert.equal(urgent.filtered.taxpayers, 1, 'one is running out');
+    assert.equal(
+      urgent.filtered.totalKobo,
+      find(urgent, soon.taxpayerId)!.outstandingKobo,
+      'and the filtered total is that one debt, not both',
+    );
+  });
+
+  it('agrees with the scope when nothing has been narrowed', async () => {
+    /*
+     * The guard against the two queries drifting apart, which is the failure
+     * the comment above `base` in the service warns about by name. Both
+     * fixtures owe more than the default floor and neither is near its
+     * deadline, so with nothing asked for the two figures describe the same
+     * people and must agree exactly.
+     */
+    await taxpayerOwing('Plain');
+    await taxpayerOwing('Also');
+
+    const list = await arrearsWorklist(pool);
+
+    assert.equal(list.filtered.taxpayers, list.summary.taxpayers);
+    assert.equal(list.filtered.totalKobo, list.summary.totalKobo);
+  });
+
+  it('adds up to the rows it returned, where it returned all of them', async () => {
+    // The arithmetic the officer could do by hand. If these disagree, one of
+    // the two queries has been edited and the other has not.
+    await taxpayerOwing('One');
+    await taxpayerOwing('Two');
+    await taxpayerOwing('Three');
+
+    const list = await arrearsWorklist(pool);
+
+    assert.equal(list.truncated, false, 'three rows is not a capped list');
+    assert.equal(list.filtered.taxpayers, list.rows.length);
+    assert.equal(
+      list.filtered.totalKobo,
+      list.rows.reduce((sum, row) => sum + BigInt(row.outstandingKobo), 0n).toString(),
+    );
+  });
+
+  it('says the list was cut short, and draws the line at the cap rather than beside it', async () => {
+    await taxpayerOwing('First');
+    await taxpayerOwing('Second');
+    await taxpayerOwing('Third');
+
+    const capped = await arrearsWorklist(pool, { limit: 1 });
+    assert.equal(capped.rows.length, 1);
+    assert.equal(capped.truncated, true, 'two more debts are not on the list');
+    assert.equal(capped.filtered.taxpayers, 3, 'and the officer is told how many there are');
+
+    /*
+     * Exactly as many rows as were asked for, and nothing left over. The
+     * screen used to decide this with `rows.length >= 100` against a default
+     * it does not send, so a hundred debts out of a hundred were reported as
+     * cut short and the officer was sent to narrow a filter with nothing left
+     * to find.
+     */
+    const exact = await arrearsWorklist(pool, { limit: 3 });
+    assert.equal(exact.rows.length, 3);
+    assert.equal(exact.truncated, false, 'a list that fits exactly is the whole of it');
+  });
+});

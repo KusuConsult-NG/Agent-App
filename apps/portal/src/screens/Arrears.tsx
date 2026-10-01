@@ -30,6 +30,9 @@ import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, ReferenceListFailure, Stat, Table, formatDate } from '../ui';
 import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
+// The one figure on this screen that goes inside a sentence rather than into a
+// `Stat`, so it cannot come from `<Money>`.
+import { formatNaira } from '@psirs/shared';
 
 interface Lga {
   id: string;
@@ -64,6 +67,10 @@ interface Worklist {
     lapsedInvoices: number;
     inFlightInvoices: number;
   };
+  /** The set the rows are drawn from, counted whole even where it is capped. */
+  filtered: { taxpayers: number; totalKobo: string };
+  /** True when that set is larger than the rows returned. */
+  truncated: boolean;
   rows: ArrearsRow[];
 }
 
@@ -101,6 +108,8 @@ export function ArrearsScreen() {
             lapsedInvoices: 0,
             inFlightInvoices: 0,
           },
+          filtered: { taxpayers: 0, totalKobo: '0' },
+          truncated: false,
           rows: [],
         });
       });
@@ -194,6 +203,24 @@ export function ArrearsScreen() {
               )}
             </Alert>
 
+            {/*
+              * The gap the officer makes themselves.
+              *
+              * This card explains two reasons its figures are wider than the
+              * list — money in flight, and money that has lapsed — and said
+              * nothing about the two filters immediately above it. The LGA
+              * filter reaches these figures and the amount and deadline ones
+              * do not, so an officer who narrows by LGA and watches ₦45m
+              * become ₦3m has been taught that the figures follow the filters.
+              */}
+            {worklist.filtered.taxpayers !== worklist.summary.taxpayers ? (
+              <Alert kind="info">
+                {t.ofcArFiltersAreNarrower
+                  .replace('{{n}}', String(worklist.filtered.taxpayers))
+                  .replace('{{amount}}', formatNaira(worklist.filtered.totalKobo))}
+              </Alert>
+            ) : null}
+
             {worklist.summary.lapsedInvoices > 0 ? (
               <Alert kind="warning" title="ofcArLapsedTitle">
                 {t.ofcArLapsedExplained.replace(
@@ -206,9 +233,18 @@ export function ArrearsScreen() {
 
           <div className="card">
             <h2 className="card__title">{t.ofcArWhoToCall}</h2>
-            {worklist.rows.length >= 100 ? (
+            {/*
+              * From the counted set, not from the row count against a
+              * hardcoded hundred — which was both coupled to a default this
+              * screen does not send and wrong at exactly the cap, telling an
+              * officer with a hundred debts out of a hundred to go and narrow
+              * a filter.
+              */}
+            {worklist.truncated ? (
               <Alert kind="info">
-                {t.ofcArShowingLargest.replace('{{n}}', String(worklist.rows.length))}
+                {t.ofcArShowingLargest
+                  .replace('{{n}}', String(worklist.rows.length))
+                  .replace('{{m}}', String(worklist.filtered.taxpayers))}
               </Alert>
             ) : null}
             <Table

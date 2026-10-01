@@ -152,8 +152,42 @@ export interface ArrearsSummary {
   inFlightInvoices: number;
 }
 
+/**
+ * What the officer's own filters left on the list.
+ *
+ * `summary` is the scope: everyone the caller may see who owes a collectable
+ * debt. It deliberately ignores the limit, so a short page is not read as a
+ * small debt. What it also ignored was the minimum and the deadline window —
+ * not by decision but because those two predicates sit in the list query and
+ * were never passed to the summary one. The LGA filter *was* passed, so the
+ * figures moved for one of the three filters and stood still for the other
+ * two, which is the worst of both readings: an officer who watches the totals
+ * respond to a filter concludes they respond to all of them.
+ *
+ * They are both worth having. The scope figure answers "is this list most of
+ * the money or a corner of it"; this one answers "what am I looking at". So
+ * the screen is given both rather than one of them being quietly redefined.
+ */
+export interface ArrearsFiltered {
+  /** Taxpayers meeting the amount and deadline asked for, before the limit. */
+  taxpayers: number;
+  /** What those taxpayers owe between them, in kobo. */
+  totalKobo: string;
+}
+
 export interface ArrearsWorklist {
   summary: ArrearsSummary;
+  /** The set `rows` is drawn from, counted whole even where it is capped. */
+  filtered: ArrearsFiltered;
+  /**
+   * True when the filtered set is larger than the rows returned.
+   *
+   * Taken from the counted set rather than from `rows.length === limit`, which
+   * is wrong at exactly the cap: a list of a hundred debts out of a hundred
+   * would be reported as cut short, and the officer sent to narrow a filter
+   * with nothing left to find.
+   */
+  truncated: boolean;
   rows: ArrearsRow[];
 }
 
@@ -315,6 +349,49 @@ export async function arrearsWorklist(
   );
 
   /*
+   * The same list the officer is looking at, counted rather than returned.
+   *
+   * The predicates are the list query's, down to the inner join on `lgas`:
+   * the comment above `base` warns about two queries answering one question
+   * differently, and this is the second query. The join cannot change the set
+   * while `taxpayers.lga_id` is NOT NULL against `lgas(id)`, and it is kept
+   * anyway so the two selects can be read side by side. `taxpayer_compliance`
+   * is left out because it contributes nothing but `last_payment_at`, which
+   * this query does not select.
+   *
+   * The invariant that keeps them in step is asserted rather than assumed:
+   * where nothing was capped, this count equals the number of rows.
+   */
+  const filtered = await queryOne<{ taxpayers: string; total_kobo: string }>(
+    db,
+    `${base},
+     on_the_list AS (
+       SELECT t.id, SUM(c.owed_kobo) AS owed_kobo
+         FROM collectable c
+         JOIN taxpayers t ON t.id = c.taxpayer_id
+         JOIN lgas l      ON l.id = t.lga_id
+        WHERE t.status = 'ACTIVE'
+          AND ($2 OR t.lga_id = ANY($3::uuid[]))
+          AND ($4::uuid IS NULL OR t.lga_id = $4::uuid)
+        GROUP BY t.id
+       HAVING SUM(c.owed_kobo) >= $5::bigint
+          AND ($6::int IS NULL
+               OR MIN(c.expires_at) <= now() + ($6::int || ' days')::interval)
+     )
+     SELECT count(*)::text                        AS taxpayers,
+            COALESCE(SUM(owed_kobo), 0)::text     AS total_kobo
+       FROM on_the_list`,
+    [
+      IN_FLIGHT_PAYMENT_STATUSES,
+      statewide,
+      lgaIds,
+      params.lgaId ?? null,
+      minimum.toString(),
+      lapsingWithinDays,
+    ],
+  );
+
+  /*
    * The summary counts the whole scoped population, not the page.
    *
    * A total that only added up the rows returned would fall every time
@@ -387,6 +464,8 @@ export async function arrearsWorklist(
     [IN_FLIGHT_PAYMENT_STATUSES, statewide, lgaIds, params.lgaId ?? null],
   );
 
+  const onTheList = Number.parseInt(filtered?.taxpayers ?? '0', 10);
+
   return {
     summary: {
       taxpayers: Number.parseInt(summary?.taxpayers ?? '0', 10),
@@ -396,6 +475,11 @@ export async function arrearsWorklist(
       lapsedInvoices: Number.parseInt(summary?.lapsed_invoices ?? '0', 10),
       inFlightInvoices: Number.parseInt(summary?.in_flight ?? '0', 10),
     },
+    filtered: {
+      taxpayers: onTheList,
+      totalKobo: filtered?.total_kobo ?? '0',
+    },
+    truncated: onTheList > rows.length,
     rows: rows.map((row) => ({
       taxpayerId: row.taxpayer_id,
       taxpayerType: row.taxpayer_type,

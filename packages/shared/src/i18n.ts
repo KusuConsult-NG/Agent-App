@@ -1444,6 +1444,7 @@ export interface TranslationDictionary {
   ofcArLapsedExplained: string;
   ofcArWhoToCall: string;
   ofcArShowingLargest: string;
+  ofcArFiltersAreNarrower: string;
   ofcArOwedFor: string;
   ofcArDaysLeft: string;
   ofcArNoDeadline: string;
@@ -5138,7 +5139,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcArLapsedTitle: "Debt that cannot be paid as it stands",
     ofcArLapsedExplained: "{{n}} invoice(s) have passed their payment deadline. The platform will refuse money against them, so they are counted above but kept off the call list — collecting means raising a fresh assessment first.",
     ofcArWhoToCall: "Who to call",
-    ofcArShowingLargest: "Showing the {{n}} largest debts. Narrow by LGA or amount to see further down.",
+    ofcArShowingLargest: "Showing the {{n}} largest of the {{m}} debts on this list. Narrow by LGA or amount to see further down.",
+    ofcArFiltersAreNarrower: "The four figures above cover everyone in this scope. The list below is narrower: {{n}} taxpayer(s), owing {{amount}} between them, meet the amount and the deadline you asked for.",
     ofcArOwedFor: "Owed for",
     ofcArDaysLeft: "Days left to pay",
     ofcArNoDeadline: "No deadline",
@@ -8626,7 +8628,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcArLapsedTitle: "Bashin da ba a iya biya kamar yadda yake",
     ofcArLapsedExplained: "Daftari {{n}} sun wuce ranar karshen biya. Tsarin zai ki karbar kudi a kansu, don haka an kidaya su a sama amma ba a sa su cikin jerin kira ba — karba yana nufin fara sabon kimantawa.",
     ofcArWhoToCall: "Wanda za a kira",
-    ofcArShowingLargest: "Ana nuna manyan bashi {{n}}. Ka rage ta LGA ko adadi domin ganin kasa.",
+    ofcArShowingLargest: "Ana nuna manyan bashi {{n}} daga cikin bashi {{m}} da ke wannan jerin. Ka rage ta LGA ko adadi domin ganin kasa.",
+    ofcArFiltersAreNarrower: "Jimillar hudu da ke sama sun kunshi kowa a wannan iyaka. Jerin da ke kasa ya fi kankanta: masu biyan haraji {{n}}, da ke bin {{amount}} tsakaninsu, sun dace da adadin da ranar karshe da ka nema.",
     ofcArOwedFor: "Bashin",
     ofcArDaysLeft: "Kwanakin da suka rage a biya",
     ofcArNoDeadline: "Babu ranar karshe",
