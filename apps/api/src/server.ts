@@ -154,6 +154,21 @@ async function main() {
     });
   }
 
+  /*
+   * And a deployment whose payments are not real says so, every boot, beside
+   * it. Same reasoning as the warning above: not a refusal, because a flag
+   * nobody can boot with answers nothing, but impossible to run quietly.
+   */
+  if (config.payments.demoAllowMockGateway) {
+    log.warn('the payment gateway on this deployment is a MOCK', {
+      component: 'boot',
+      flag: 'DEMO_ALLOW_MOCK_GATEWAY',
+      effect: 'collections complete without any money moving, and may be simulated outright',
+      stillEnforced: 'webhook signatures, and every rule about which status codes close a transaction',
+      intendedFor: 'demonstrations only — a receipt issued here is not evidence anybody paid',
+    });
+  }
+
   const app = createApp();
   const server = app.listen(config.port, () => {
     log.info('listening', {

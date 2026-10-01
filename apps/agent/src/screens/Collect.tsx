@@ -710,6 +710,18 @@ interface TransactionStatus {
     acknowledgement_code: string | null;
   };
   events: { to_status: string; reason: string | null; created_at: string }[];
+  /**
+   * Whether this deployment would accept `POST /payments/simulate`.
+   *
+   * Decided by the server, because only the server knows which gateway is
+   * configured and whether the deployment named itself a demonstration. This
+   * screen used to decide with `import.meta.env.DEV` — right while the only
+   * deployment that could simulate was a developer's, and wrong the moment
+   * `DEMO_ALLOW_MOCK_GATEWAY` existed, because a production build hid the
+   * control on exactly the deployment that had just been given it. A field
+   * agent on a real deployment is sent `false` and sees nothing.
+   */
+  simulation_available?: boolean;
 }
 
 /**
@@ -1168,10 +1180,11 @@ export function TransactionScreen({
             </button>
           )}
 
-          {/* Development only. The API refuses simulation outside the mock
-              gateway, but the control should not be visible to a field agent
-              in a production build either. */}
-          {import.meta.env.DEV && transaction.gateway_reference && (
+          {/* Only where the server says the endpoint behind it would answer:
+              the mock gateway, on a developer's machine or on a deployment
+              that named itself a demonstration. A field agent on a real
+              deployment never sees this. */}
+          {data.simulation_available && transaction.gateway_reference && (
             <div className="card" style={{ marginTop: 14 }}>
               <h2 className="card__title">{t.colDevGateway}</h2>
               <p className="card__hint">{t.colDevGatewayHint}</p>

@@ -220,6 +220,46 @@ agent at `/` and the portal at `/portal/` — so the `portal` service is
 optional. See *One URL for both apps* below. That is the arrangement to prefer
 for a demo or a pilot, because it is one address to publish rather than two.
 
+### Making a demonstration deployment work at all
+
+A demonstration deployment is a **real** deployment: production image,
+`NODE_ENV=production`, and every production control in force. Two of those
+controls stop a field agent doing the thing a demonstration exists to show,
+and each is lifted by a flag that names itself. Both go on the **API**
+service.
+
+| Flag | Without it | What it still enforces |
+|---|---|---|
+| `DEMO_RELAX_DEVICE_BINDING=true` | The seeded agent already has a handset, so a presenter opening the app in their own browser is that agent's *second* handset and cannot collect. Two people and a portal login to show one screen. | A REVOKED or SUSPENDED handset is still refused — the half worth demonstrating. |
+| `DEMO_ALLOW_MOCK_GATEWAY=true` | `PAYMENT_GATEWAY=mock` is refused at boot, so the gateway is a real one nobody has credentials for, and `POST /payments/simulate` is refused. The agent starts a payment and watches it stay PENDING for ever. | Every other production refusal — a mock TIN service, local storage, a per-instance rate limiter — plus webhook signatures and every rule about which status codes close a transaction. |
+
+Neither refuses to boot, because a flag nobody can start with answers nothing.
+Each is logged at **warn** on every boot instead, by name, beside the port and
+the gateway, so a deployment cannot run with them quietly.
+
+> **Never set either on a deployment collecting real money.** A revoked
+> handset that can be replaced without anybody looking is a revocation that
+> meant nothing, and a receipt issued against a mock gateway is not evidence
+> that anybody paid.
+
+With `DEMO_ALLOW_MOCK_GATEWAY` on, the agent app's **Simulate success /
+Simulate failure** controls appear again on the collection screen. The app no
+longer decides that for itself — it used to key off its own build mode, which
+hid the control on exactly the deployment that had just been given it — so the
+server reports `simulation_available` on every transaction status and the app
+follows it.
+
+### A demonstration needs demonstration data
+
+`npm run seed -- --demo --demo-agent` **refuses in production**, and that stays
+refused: those are ACTIVE government accounts, an administrator among them,
+sharing one published password. A production database gets reference data only.
+
+So a demonstration deployment needs either its own real agent and taxpayers
+created through the portal, or a database seeded before `NODE_ENV` was set to
+production. Signing in works either way — it is having nothing to collect from
+that makes the app look broken.
+
 ### `VITE_AGENT_APP_URL` — only on the standalone `portal` service
 
 A field agent who signs into the officer portal is no longer turned away: they
