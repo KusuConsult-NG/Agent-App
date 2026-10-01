@@ -1046,12 +1046,46 @@ export async function registerDevice(params: {
      */
     const approveNow = isFirst || (params.autoApprove ?? config.security.deviceAutoApprove);
 
-    const device = await queryOne<{ id: string; status: string }>(
+    /*
+     * Registering the same handset twice, which a button on a bad connection
+     * does by itself.
+     *
+     * This was a bare INSERT after the count above, and `agent_devices` carries
+     * `UNIQUE (agent_id, device_identifier)`. Two taps, or one tap and the
+     * app's retry, give two requests that both count zero prior devices and
+     * both insert. One wins; the other gets a 23505, and the agent is shown a
+     * failure for something that in fact succeeded -- on the screen that
+     * decides whether they can collect at all.
+     *
+     * ONLY the concurrent case changes. A handset that is already registered
+     * has always been handled, and handled well: the `if (existing)` branch
+     * above returns its row untouched, writing no journal line, and refuses a
+     * REVOKED one outright. Two requests arriving together are the one case
+     * that branch cannot see, because neither has committed when the other
+     * looks.
+     *
+     * `DO NOTHING` rather than `DO UPDATE`, because the loser is not making a
+     * change and must not be recorded as one. On a conflict the row is read
+     * back and returned exactly as the branch above would have returned it,
+     * and the journal and audit entries below are skipped: one registration,
+     * one DEVICE_REGISTERED line, whatever the network did to the request. A
+     * second line against the same handset would be a record of something
+     * that never happened, in the journal somebody reads to decide whether to
+     * trust the device.
+     *
+     * The REVOKED refusal is repeated here so the two paths cannot disagree.
+     * Reaching it needs a revocation to land between this transaction's SELECT
+     * and its INSERT, which is as narrow as it sounds — but a conflict handler
+     * that returned a revoked handset as usable, while the branch above
+     * refused it, is the kind of disagreement that only shows up once.
+     */
+    const inserted = await queryOne<{ id: string; status: string }>(
       client,
       `INSERT INTO agent_devices
          (agent_id, device_identifier, device_name, browser, operating_system, pwa_version,
           status, approved_at, approved_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (agent_id, device_identifier) DO NOTHING
        RETURNING id, status`,
       [
         params.agentId,
@@ -1065,6 +1099,34 @@ export async function registerDevice(params: {
         approveNow ? params.actorId : null,
       ],
     );
+
+    if (!inserted) {
+      const already = await queryOne<{ id: string; status: string }>(
+        client,
+        'SELECT id, status FROM agent_devices WHERE agent_id = $1 AND device_identifier = $2',
+        [params.agentId, params.deviceIdentifier],
+      );
+      if (already?.status === 'REVOKED') {
+        throw new AppError({
+          statusCode: 403,
+          code: 'DEVICE_REVOKED_CANNOT_REREGISTER',
+          message:
+            'This device has been revoked and cannot be registered again. Use a different device.',
+        });
+      }
+      if (!already) {
+        // The conflict says a row exists; not finding it means the unique
+        // index and this lookup disagree, which is worth saying out loud
+        // rather than returning a shrug.
+        throw new Error(
+          'agent_devices reported a conflict on (agent_id, device_identifier) and then ' +
+            'had no such row; the unique index and this lookup disagree.',
+        );
+      }
+      return { deviceId: already.id, status: already.status };
+    }
+
+    const device = inserted;
 
     await refreshClearance(client, params.agentId);
     await journal(client, {
