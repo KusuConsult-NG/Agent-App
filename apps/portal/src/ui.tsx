@@ -190,8 +190,33 @@ function fieldLabel(field: string): string {
  * That the *server's* codes are still rendered in English is a real gap and a
  * larger one. It is recorded rather than guessed at here.
  */
+/**
+ * The errors whose meaning is fixed, and can therefore be translated.
+ *
+ * Everything here is raised by the api client rather than by the server: a
+ * request that never arrived, an upload that failed, a step-up the officer
+ * walked away from. So every refusal PSIRS itself raises reaches a
+ * Hausa-reading officer in English, in a portal whose three thousand interface
+ * strings are translated and whose language toggle sits in the sidebar of
+ * every signed-in page.
+ *
+ * `STEP_UP_REQUIRED` is the first of the server's own, and the one every
+ * officer meets: it guards each consequential money action in this portal. Its
+ * next step was already translated in the map below while its message was not,
+ * so a Hausa reader got the instruction in Hausa under an English heading —
+ * the same failure that map was written to end, the other way round.
+ *
+ * The rest are measured and not translated. Twenty-six refusals an officer can
+ * receive carry a code of their own — a period already closed, a report
+ * already signed, a role already retired — and each means one fixed thing,
+ * which is the test this map sets. Translating them is a reviewed decision
+ * about which refusals cost an officer something when unread, in the way
+ * `hausa-safety-strings` records that decision for the agent, and
+ * `docs/HAUSA-REVIEW-QUESTIONS.md` is where it is now asked.
+ */
 const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   UNKNOWN: 'errRequestFailed',
+  STEP_UP_REQUIRED: 'ofcStepUpNeeded',
   // Raised by the api client, not the server: a request that never arrived.
   NETWORK: 'ofcLgCouldNotReachThe',
   UPLOAD_FAILED: 'errUploadFailed',
@@ -209,24 +234,31 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
  * instruction in English.
  *
  * Keyed by the error's own code, which has always travelled beside it, so
- * nothing new is sent. Only codes specific enough to imply one next step are
- * here: `VALIDATION_FAILED`, and anything a caller passed to `forbidden()` or
- * `conflict()`, means something different every time it is raised and keeps
- * the server's words.
+ * nothing new is sent. `VALIDATION_FAILED` and `FORBIDDEN` mean something
+ * different every time they are raised and keep the server's words.
+ *
+ * ELEVEN ENTRIES WERE FOR REFUSALS AN OFFICER CANNOT RECEIVE.
+ *
+ * This map was a copy of the agent application's, and all but one of its
+ * entries named a refusal that only the agent guard can raise. The version
+ * gate opens with `if (req.auth?.role !== 'agent') return next()`, so
+ * UPDATE_REQUIRED and UPDATE_REQUIRED_TO_ENUMERATE can only reach a user whose
+ * role is agent. DEVICE_NOT_REGISTERED, DEVICE_REVOKED, DEVICE_SUSPENDED and
+ * AGENT_NOT_CLEARED are raised inside `requireActiveAgent`, and this portal
+ * calls no route behind it. TIN_SERVICE_UNAVAILABLE and TIN_NOT_FOUND come out
+ * of `registerTaxpayer`, which is one of those routes.
+ * KYC_PROVIDER_UNAVAILABLE comes from `POST /agents/me/kyc`, the applicant's
+ * own submission, and is worded for them — "nothing has been recorded against
+ * your application". PAYMENT_UNCONFIRMED and PAYMENT_FAILED come from the
+ * payment confirmation path, which this portal does not call at all.
+ *
+ * None of that cost an officer anything directly. What it cost was this map's
+ * only other use: it is the record of which refusals the portal expects, and
+ * eleven wrong entries made it useless as that record — which is why the
+ * twenty-six it does receive went unnoticed for as long as they did.
  */
 const TRANSLATED_NEXT_STEPS: Record<string, keyof TranslationDictionary> = {
   STEP_UP_REQUIRED: 'nsStepUpRequired',
-  DEVICE_NOT_REGISTERED: 'nsDeviceNotRegistered',
-  DEVICE_REVOKED: 'nsDeviceRevoked',
-  DEVICE_SUSPENDED: 'nsDeviceSuspended',
-  UPDATE_REQUIRED: 'nsUpdateRequired',
-  UPDATE_REQUIRED_TO_ENUMERATE: 'nsUpdateRequiredToEnumerate',
-  TIN_SERVICE_UNAVAILABLE: 'nsTinServiceUnavailable',
-  TIN_NOT_FOUND: 'nsTinNotFound',
-  KYC_PROVIDER_UNAVAILABLE: 'nsKycProviderUnavailable',
-  PAYMENT_UNCONFIRMED: 'nsPaymentUnconfirmed',
-  PAYMENT_FAILED: 'nsPaymentFailed',
-  AGENT_NOT_CLEARED: 'nsAgentNotCleared',
 };
 
 /** The next step for an error, or the server's own words when it has none. */

@@ -3581,6 +3581,8 @@ export interface TranslationDictionary {
   nsPaymentFailed: string;
   nsAgentNotCleared: string;
   nsNoTaxPayable: string;
+  /** The officer portal's heading over `nsStepUpRequired`. */
+  ofcStepUpNeeded: string;
   /*
    * What the job monitor says about a job, and how often it runs.
    *
@@ -7115,6 +7117,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     nsAgentNotCleared: 'Open "My Application" to see what is still outstanding.',
     nsNoTaxPayable:
       'Do not increase the amount to make the assessment go through. Tell the taxpayer there is nothing to pay on this.',
+    ofcStepUpNeeded: 'This action needs a one-time code before it can go through.',
     ofcOvJobHealthy: 'Running on schedule.',
     ofcOvJobRunning: 'Running now.',
     ofcOvJobOverdue: 'Has not started when it should have. The schedule itself may have stopped.',
@@ -10618,6 +10621,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     nsAgentNotCleared: 'Ka bude "Nemana" domin ka ga abin da ya rage.',
     nsNoTaxPayable:
       'Kada ka kara adadin don kimantawar ta wuce. Ka gaya wa mai biyan haraji babu abin da zai biya kan wannan.',
+    ofcStepUpNeeded: 'Wannan aikin yana bukatar lamba ta lokaci daya kafin ya wuce.',
     ofcOvJobHealthy: 'Yana gudana bisa tsarin lokaci.',
     ofcOvJobRunning: 'Yana gudana yanzu.',
     ofcOvJobOverdue:

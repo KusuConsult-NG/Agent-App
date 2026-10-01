@@ -6,7 +6,7 @@ prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
 was already done.
 
-This is that list and nothing else. Eighteen questions, grouped by who can
+This is that list and nothing else. Nineteen questions, grouped by who can
 answer them and what it costs to leave them open. Every one links back to the
 section of `HAUSA-REVIEW.md` that sets it out properly — this page is an index,
 not a replacement, and none of it repeats the reasoning.
@@ -529,6 +529,54 @@ three real agents rather than applied as corrections:
   numeral **five**.
 
 > `HAUSA-REVIEW.md` § *Group 3*
+
+---
+
+## 7. Twenty-six refusals the officer portal still says in English
+
+**Which of these should be translated, and which should keep the server's
+words?** This is the only question on this page that is about the officer
+portal rather than the agent application, and it exists because the portal is
+translated: three thousand interface strings, with the language toggle in the
+sidebar of every signed-in page so an officer who finds they want Hausa does
+not have to sign out to say so.
+
+Its error component translated six codes and every one of them was raised by
+the browser rather than by PSIRS — a request that never arrived, an upload that
+failed, a step-up the officer walked away from. `STEP_UP_REQUIRED` has now been
+added, because it guards every consequential money action in the portal and its
+instruction was already in Hausa under an English heading. These are the rest.
+
+Each carries a code of its own and names one fixed state, which is the test the
+map in `apps/portal/src/ui.tsx` sets for what may be translated at all:
+
+| Where an officer meets it | Refusals |
+|---|---|
+| Revenue periods | `PERIOD_CLOSED`, `PERIOD_NOT_OPEN`, `PERIOD_OPEN` |
+| The audit workbench | `ALREADY_SIGNED`, `ALREADY_WITHDRAWN`, `SAMPLE_COMPLETED` |
+| Roles and departments | `ROLE_EXISTS`, `ROLE_RETIRED`, `ROLE_NOT_RETIRED`, `ALREADY_GRANTED`, `DEPARTMENT_EXISTS` |
+| Officer devices and sessions | `DEVICE_ALREADY_BLOCKED`, `DEVICE_NOT_BLOCKED`, `SESSION_ALREADY_ENDED`, `DEVICE_ALREADY_SUSPENDED` |
+| Enumeration and objections | `ASSESSMENT_WITHDRAWN`, `OBJECTION_DECIDED` |
+| Allocations and awards | `ALREADY_FORFEITED`, `AWARD_FORFEITED`, `ROUND_EXHAUSTED` |
+| The rest | `GROUP_NOT_ACTIVE`, `INVITATION_ALREADY_USED`, `KYC_ALREADY_CLEARED`, `PAYE_ALREADY_CANCELLED`, `REVENUE_ITEM_INACTIVE`, `TARGET_NOT_ACTIVE` |
+
+**Why they are listed rather than translated.** Twenty-six Hausa sentences
+written in one pass and reviewed by nobody would be worse than the English they
+replace: the reader cannot tell a guess from a translation, which is the policy
+the map's own comment states. And the selection is a judgement about which
+refusals cost an officer something when unread — the same judgement
+`apps/agent/src/tests/hausa-safety-strings.test.tsx` records for the agent,
+where the tier is not every string that touches money but the ones whose
+meaning inverted leaves somebody out of pocket.
+
+Our reading is that the first two rows are the tier: closing a revenue period
+and signing an audit report are acts an officer's name goes on, and "already
+closed" read as "closed now" is an officer believing they have done something
+they have not. The last row is mostly administrative and can stay in English.
+But that is a judgement about how PSIRS works, not about Hausa, and it is
+yours.
+
+> `apps/portal/src/ui.tsx` § *TRANSLATED_ERRORS*
 
 ---
 
