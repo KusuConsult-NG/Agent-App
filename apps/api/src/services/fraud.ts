@@ -417,17 +417,37 @@ export async function evaluateRefereeRisk(
     });
   }
 
-  // Referee and applicant sharing a phone number — they must be different people.
-  const sharedWithApplicant = await queryOne<{ count: string }>(
+  /*
+   * Referee and applicant sharing a phone number — they must be different
+   * people.
+   *
+   * Both of the applicant's own numbers count. The application form captures a
+   * primary number on the user record and an alternate on the agent record,
+   * and a referee reachable on either one is the applicant. Matching only the
+   * primary left the alternate as a way through, and this is the CRITICAL flag
+   * that holds the agent's incentive until an officer resolves it, so the gap
+   * was worth more than the rule was catching.
+   *
+   * `nominateReferee` already refuses both at the door; this stays as the
+   * record-level check, for referees created before that guard covered the
+   * alternate and for any path that does not go through the route.
+   */
+  const sharedWithApplicant = await queryOne<{ matched: string }>(
     client,
-    `SELECT count(*)::text AS count
+    `SELECT CASE WHEN u.phone = $2 THEN 'PRIMARY'
+                 WHEN a.alternate_phone = $2 THEN 'ALTERNATE'
+            END AS matched
        FROM agents a JOIN users u ON u.id = a.user_id
-      WHERE a.id = $1 AND u.phone = $2`,
+      WHERE a.id = $1 AND $2 IN (u.phone, a.alternate_phone)`,
     [referee.agent_id, referee.phone],
   );
-  if (Number.parseInt(sharedWithApplicant?.count ?? '0', 10) > 0) {
+  if (sharedWithApplicant?.matched) {
     await insertFlag('REFEREE_SHARES_APPLICANT_CONTACT', 'CRITICAL', {
-      reason: 'The referee phone number is the same as the applicant phone number',
+      reason:
+        sharedWithApplicant.matched === 'ALTERNATE'
+          ? 'The referee phone number is the same as the applicant alternate phone number'
+          : 'The referee phone number is the same as the applicant phone number',
+      matchedField: sharedWithApplicant.matched,
     });
   }
 

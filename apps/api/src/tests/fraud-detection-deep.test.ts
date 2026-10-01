@@ -5,7 +5,8 @@
  * Tests confirm:
  * 1. RAPID_SUCCESSION — ≥5 transactions in 20 seconds raises MEDIUM flag on AGENT
  * 2. SHARED_PHONE_NUMBER — ≥4 taxpayers sharing one phone raises MEDIUM flag on TAXPAYER
- * 3. REFEREE_SHARES_APPLICANT_CONTACT — same phone as agent raises CRITICAL
+ * 3. REFEREE_SHARES_APPLICANT_CONTACT — a referee on either of the applicant's
+ *    own numbers (primary or alternate) raises CRITICAL; an unrelated one does not
  * 4. Flag de-duplication — re-raising an existing open flag does nothing
  * 5. HIGH/CRITICAL fraud flag blocks commission promotion (PRD §28)
  * 6. Commission promotes once flag is RESOLVED
@@ -267,6 +268,69 @@ describe('REFEREE_SHARES_APPLICANT_CONTACT fraud rule', () => {
 
     assert.ok(flag, 'REFEREE_SHARES_APPLICANT_CONTACT flag must have been raised');
     assert.equal(flag!.severity, 'CRITICAL');
+  });
+
+  it('raises CRITICAL flag when referee uses the applicant alternate phone', async () => {
+    /*
+     * The applicant's own second number, from the same application form. A
+     * referee reachable there is the applicant, so the rule has to read both
+     * columns — this case used to pass the rule silently, and `nominateReferee`
+     * let the nomination through with it.
+     */
+    const alternate = '+2348031000888';
+    await pool.query(`UPDATE agents SET alternate_phone = $2 WHERE id = $1`, [agentId, alternate]);
+
+    const refRow = await queryOne<{ id: string }>(
+      pool,
+      `INSERT INTO referees (agent_id, reference_code, full_name, phone, email, relationship, category, status)
+       VALUES ($1, $2, 'Alternate Phone Ref', $3, 'alt@test.com', 'Friend', 'COMMUNITY_LEADER', 'INVITED')
+       RETURNING id`,
+      [agentId, `REF-FRAUD-ALT-${Date.now()}`, alternate],
+    );
+
+    await withTransaction((client) =>
+      evaluateRefereeRisk(client, { refereeId: refRow!.id }),
+    );
+
+    const flag = await queryOne<{ severity: string; detail: { matchedField?: string } }>(
+      pool,
+      `SELECT severity, detail FROM referee_risk_flags
+        WHERE referee_id = $1 AND rule = 'REFEREE_SHARES_APPLICANT_CONTACT'`,
+      [refRow!.id],
+    );
+
+    assert.ok(flag, 'REFEREE_SHARES_APPLICANT_CONTACT flag must have been raised');
+    assert.equal(flag!.severity, 'CRITICAL');
+    // The officer resolving it is told which of the two numbers matched.
+    assert.equal(flag!.detail.matchedField, 'ALTERNATE');
+  });
+
+  it('does not flag a referee whose phone matches neither applicant number', async () => {
+    await pool.query(`UPDATE agents SET alternate_phone = $2 WHERE id = $1`, [
+      agentId,
+      '+2348031000888',
+    ]);
+
+    const refRow = await queryOne<{ id: string }>(
+      pool,
+      `INSERT INTO referees (agent_id, reference_code, full_name, phone, email, relationship, category, status)
+       VALUES ($1, $2, 'Unrelated Ref', '+2348031000111', 'other@test.com', 'Friend', 'COMMUNITY_LEADER', 'INVITED')
+       RETURNING id`,
+      [agentId, `REF-FRAUD-OK-${Date.now()}`],
+    );
+
+    await withTransaction((client) =>
+      evaluateRefereeRisk(client, { refereeId: refRow!.id }),
+    );
+
+    const flag = await queryOne<{ severity: string }>(
+      pool,
+      `SELECT severity FROM referee_risk_flags
+        WHERE referee_id = $1 AND rule = 'REFEREE_SHARES_APPLICANT_CONTACT'`,
+      [refRow!.id],
+    );
+
+    assert.equal(flag, null, 'a genuine referee must not be flagged');
   });
 });
 
