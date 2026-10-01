@@ -93,6 +93,30 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   BANK_CHANGE_ALREADY_PENDING: 'errBankChangeAlreadyPending',
   BANK_CHANGE_ALREADY_SETTLED: 'errBankChangeAlreadySettled',
   PAYOUT_IN_FLIGHT: 'errPayoutInFlight',
+
+  /*
+   * COLLECTING, WHICH IS WHAT THE APPLICATION IS FOR
+   *
+   * Every refusal `createAssessmentIn` raises reaches an agent from the screen
+   * they collect on, and not one of them was in this map — in an application
+   * that has offered Hausa since it was built, and after the same gap was
+   * closed once already on the path to becoming an agent.
+   *
+   * Three had no code to key on and were raised as INVALID_REQUEST, the code a
+   * malformed field gets. They were named first, in `services/revenue.ts`,
+   * for the reason the comment above gives: a sentence nobody can name is a
+   * sentence nobody can translate.
+   *
+   * Each has one fixed meaning, which is the test this map sets. None of them
+   * carries a figure, so none needs a placeholder: the agent chose the levy
+   * off a list a moment earlier and knows which one it was.
+   */
+  TAXPAYER_NOT_ACTIVE: 'errTaxpayerNotActive',
+  REVENUE_ITEM_INACTIVE: 'errRevenueItemInactive',
+  REVENUE_ITEM_NOT_FOR_TAXPAYER_TYPE: 'errRevenueItemNotForTaxpayerType',
+  REVENUE_ITEM_NOT_IN_LGA: 'errRevenueItemNotInLga',
+  NO_TAX_PAYABLE: 'errNoTaxPayable',
+  ASSESSMENT_AMOUNT_ZERO: 'errAssessmentAmountZero',
 };
 
 /**
@@ -148,9 +172,15 @@ export function errorText(
  *
  * Keyed by the error's own code, which has always travelled beside it, so
  * nothing new is sent. Only codes specific enough to imply one next step are
- * here: `VALIDATION_FAILED`, and anything a caller passed to `forbidden()` or
- * `conflict()`, means something different every time it is raised and keeps
- * the server's words.
+ * here. `VALIDATION_FAILED` and `FORBIDDEN` mean something different every
+ * time they are raised and keep the server's words.
+ *
+ * That sentence used to say the same of anything passed to `conflict()`, which
+ * was never true of the map above it — half its entries are conflict codes —
+ * and it was the reason the one next step on the collect path stayed in
+ * English. `NO_TAX_PAYABLE` always means one thing and its next step is the
+ * only instruction on that path that costs a trader money if it is not read:
+ * it tells the agent not to raise the figure to force the assessment through.
  */
 const TRANSLATED_NEXT_STEPS: Record<string, keyof TranslationDictionary> = {
   STEP_UP_REQUIRED: 'nsStepUpRequired',
@@ -165,6 +195,7 @@ const TRANSLATED_NEXT_STEPS: Record<string, keyof TranslationDictionary> = {
   PAYMENT_UNCONFIRMED: 'nsPaymentUnconfirmed',
   PAYMENT_FAILED: 'nsPaymentFailed',
   AGENT_NOT_CLEARED: 'nsAgentNotCleared',
+  NO_TAX_PAYABLE: 'nsNoTaxPayable',
 };
 
 /** The next step for an error, or the server's own words when it has none. */

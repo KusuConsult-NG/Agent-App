@@ -113,6 +113,23 @@ export function unauthorised(message = 'You need to sign in to continue.'): AppE
   return new AppError({ statusCode: 401, code: 'UNAUTHENTICATED', message });
 }
 
+/**
+ * A refusal of a well-formed request, named.
+ *
+ * `badRequest` is 400 INVALID_REQUEST and nothing else, which is right for a
+ * schema failure: the client sent a shape the endpoint does not accept, and
+ * the detail list says which field. It is wrong for a refusal that means one
+ * fixed thing every time it is raised — "this levy does not apply to an
+ * individual" — because the agent application translates by code, and a
+ * sentence nobody can name is a sentence nobody can translate.
+ *
+ * Same status, so nothing branching on 400 changes. Only the code becomes
+ * specific enough to key a Hausa sentence on.
+ */
+export function refused(code: string, message: string, nextStep?: string): AppError {
+  return new AppError({ statusCode: 400, code, message, nextStep });
+}
+
 export function forbidden(message: string, nextStep?: string): AppError {
   return new AppError({ statusCode: 403, code: 'FORBIDDEN', message, nextStep });
 }

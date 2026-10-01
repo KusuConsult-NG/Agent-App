@@ -147,6 +147,22 @@ export interface TranslationDictionary {
   errPayoutInFlight: string;
   errAgentNotCleared: string;
   errDeviceNotRegistered: string;
+  /*
+   * THE COLLECT SCREEN'S OWN REFUSALS.
+   *
+   * Every one of these is raised by `createAssessmentIn` and reaches the agent
+   * from the screen they collect on. The map in the agent's `ui.tsx` held
+   * twenty-four codes and not one of them was on this path, so an agent
+   * standing in a market was told in English why the levy they had just chosen
+   * would not go through. Three of them had no code specific enough to key on
+   * and were raised as INVALID_REQUEST; they were named first.
+   */
+  errTaxpayerNotActive: string;
+  errRevenueItemInactive: string;
+  errRevenueItemNotForTaxpayerType: string;
+  errRevenueItemNotInLga: string;
+  errNoTaxPayable: string;
+  errAssessmentAmountZero: string;
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
@@ -3564,6 +3580,7 @@ export interface TranslationDictionary {
   nsPaymentUnconfirmed: string;
   nsPaymentFailed: string;
   nsAgentNotCleared: string;
+  nsNoTaxPayable: string;
   /*
    * What the job monitor says about a job, and how often it runs.
    *
@@ -3987,6 +4004,18 @@ export const translations: Record<Language, TranslationDictionary> = {
       'You are not yet cleared to collect revenue. Your application must be completed and approved first.',
     errDeviceNotRegistered:
       'This device is not registered to your account. Register it before you collect anything.',
+    errTaxpayerNotActive:
+      'This taxpayer record has been closed, so nothing new can be assessed against it. Any PSIRS office can put it back on the register.',
+    errRevenueItemInactive:
+      'This tax or levy is not being collected at the moment. Choose another, or ask a PSIRS officer.',
+    errRevenueItemNotForTaxpayerType:
+      'This tax or levy does not apply to this kind of taxpayer. Check whether the record is an individual or a business.',
+    errRevenueItemNotInLga:
+      'This tax or levy is not collected in this taxpayer’s Local Government Area.',
+    errNoTaxPayable:
+      'No tax is payable on the amount declared, so there is no invoice to raise. The figures are not wrong — this taxpayer is below the threshold.',
+    errAssessmentAmountZero:
+      'The amount works out to nothing from the figures entered. Check them, and tell a PSIRS officer if they are right — the rate may be wrong rather than the figures.',
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
@@ -7084,6 +7113,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     nsPaymentUnconfirmed: 'Open the transaction from your history to see its current status.',
     nsPaymentFailed: 'Start the payment again, or choose a different payment method.',
     nsAgentNotCleared: 'Open "My Application" to see what is still outstanding.',
+    nsNoTaxPayable:
+      'Do not increase the amount to make the assessment go through. Tell the taxpayer there is nothing to pay on this.',
     ofcOvJobHealthy: 'Running on schedule.',
     ofcOvJobRunning: 'Running now.',
     ofcOvJobOverdue: 'Has not started when it should have. The schedule itself may have stopped.',
@@ -7476,6 +7507,18 @@ export const translations: Record<Language, TranslationDictionary> = {
       'Ba a ba ka izinin karbar haraji ba tukuna. Dole a kammala bukatarka a kuma amince da ita.',
     errDeviceNotRegistered:
       'Ba a yi rajistar wannan na’ura a asusunka ba. Ka yi rajistarta kafin ka karbi komai.',
+    errTaxpayerNotActive:
+      'An rufe rikodin wannan mai biyan haraji, don haka ba za a kimanta masa wani sabon abu ba. Kowane ofishin PSIRS zai iya mayar da shi cikin rajista.',
+    errRevenueItemInactive:
+      'Ba a karbar wannan haraji ko kudin shiga a yanzu. Ka zabi wani, ko ka tambayi jami’in PSIRS.',
+    errRevenueItemNotForTaxpayerType:
+      'Wannan haraji ko kudin shiga bai shafi irin wannan mai biyan haraji ba. Ka duba ko rikodin na mutum ne ko na kasuwanci.',
+    errRevenueItemNotInLga:
+      'Ba a karbar wannan haraji ko kudin shiga a karamar hukumar wannan mai biyan haraji ba.',
+    errNoTaxPayable:
+      'Babu harajin da ya kamata a biya kan adadin da aka bayyana, don haka babu takardar biya da za a yi. Lissafin ba kuskure ba ne — wannan mai biyan haraji yana kasa da iyakar.',
+    errAssessmentAmountZero:
+      'Adadin ya zo babu daga lissafin da aka shigar. Ka duba su, kuma ka gaya wa jami’in PSIRS idan sun dace — watakila kudin ne ba daidai ba, ba lissafin ba.',
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
@@ -10573,6 +10616,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     nsPaymentUnconfirmed: 'Ka bude cinikin daga tarihinka domin ka ga halin da yake ciki yanzu.',
     nsPaymentFailed: 'Ka sake fara biyan, ko ka zabi wata hanyar biya.',
     nsAgentNotCleared: 'Ka bude "Nemana" domin ka ga abin da ya rage.',
+    nsNoTaxPayable:
+      'Kada ka kara adadin don kimantawar ta wuce. Ka gaya wa mai biyan haraji babu abin da zai biya kan wannan.',
     ofcOvJobHealthy: 'Yana gudana bisa tsarin lokaci.',
     ofcOvJobRunning: 'Yana gudana yanzu.',
     ofcOvJobOverdue:

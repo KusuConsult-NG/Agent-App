@@ -15,7 +15,7 @@ import type { PoolClient } from 'pg';
 import { parseKobo, formatNaira, assertTransactionTransition, type Kobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
-import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
+import { conflict, forbidden, notFound, refused } from '../lib/errors';
 import { generateVerificationCode } from '../lib/crypto';
 import { escapeLike } from '../lib/like';
 import {
@@ -361,13 +361,32 @@ export async function createAssessmentIn(
     if (item.status !== 'ACTIVE') {
       throw conflict('REVENUE_ITEM_INACTIVE', `"${item.name}" is not currently collectable.`);
     }
+    /*
+     * Named refusals, not anonymous ones.
+     *
+     * Everything in this block is reached from the agent's collect screen, and
+     * the agent application translates a refusal by its code. These two were
+     * raised as INVALID_REQUEST — the same code a malformed field gets — so
+     * there was nothing to key a Hausa sentence on, and an agent standing in a
+     * market was told in English why the levy they had just chosen would not
+     * go through. `REVENUE_ITEM_INACTIVE` immediately above was already named;
+     * these are the two beside it that were not.
+     *
+     * The status stays 400. The request is well formed and the catalogue
+     * simply does not allow it, which is what it always said; what changes is
+     * that the sentence can now be said in the reader's language.
+     */
     if (!item.applicable_taxpayer_types.includes(taxpayer.taxpayer_type)) {
-      throw badRequest(
+      throw refused(
+        'REVENUE_ITEM_NOT_FOR_TAXPAYER_TYPE',
         `"${item.name}" does not apply to ${taxpayer.taxpayer_type.toLowerCase()} taxpayers.`,
       );
     }
     if (item.applicable_lga_ids.length > 0 && !item.applicable_lga_ids.includes(taxpayer.lga_id)) {
-      throw badRequest(`"${item.name}" is not collected in this taxpayer's Local Government Area.`);
+      throw refused(
+        'REVENUE_ITEM_NOT_IN_LGA',
+        `"${item.name}" is not collected in this taxpayer's Local Government Area.`,
+      );
     }
     if (params.assessmentType === 'SELF_ASSESSMENT' && !item.self_assessable) {
       throw forbidden(`"${item.name}" cannot be self-assessed.`);
@@ -426,7 +445,15 @@ export async function createAssessmentIn(
           'The figures are not wrong — this taxpayer is below the threshold. Do not increase the amount to make the assessment go through.',
         );
       }
-      throw badRequest(
+      /*
+       * Named for the same reason as the two above, and this one matters more:
+       * it is the sentence an agent sees when a rate is misconfigured, which
+       * `a-rate-has-to-be-usable` describes as blaming them for a figure they
+       * did not enter and cannot change. Unreadable as well as unfair was the
+       * worse of the two halves.
+       */
+      throw refused(
+        'ASSESSMENT_AMOUNT_ZERO',
         'The calculated amount is zero. Check the values entered before raising an invoice.',
       );
     }
