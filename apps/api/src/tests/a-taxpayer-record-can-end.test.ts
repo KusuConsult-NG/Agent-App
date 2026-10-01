@@ -170,13 +170,28 @@ describe('A record that is taken off the register', () => {
     const chased = await taxpayer({ withArrears: true });
     const ended = await taxpayer({ withArrears: true });
 
-    // Both invoices moved into the six-week window, the way the reminder test
-    // does it: the sweep is driven by the expiry date, not by the clock.
+    /*
+     * Both invoices moved into the two-week window: the sweep is driven by the
+     * expiry date, not by the clock.
+     *
+     * This used the six-week window, at `interval '42 days'`. No invoice this
+     * platform issues can be forty-two days from expiry — every one is given
+     * thirty — so that fixture reached a state nothing could produce, and what
+     * the case proved was that the fixture ran. What it is actually about is
+     * the exclusion of an ended record, which holds in any window.
+     */
     await pool.query(
-      `UPDATE invoices SET expires_at = now() + interval '42 days', status = 'UNPAID',
-              reminder_sent_6w = false
+      `UPDATE invoices SET expires_at = now() + interval '14 days', status = 'UNPAID',
+              reminder_sent_2w = false
         WHERE taxpayer_id = ANY($1::uuid[])`,
       [[chased, ended]],
+    );
+
+    // For this event only: `reminder-sweep` deactivates the two-week template
+    // inside its own cases, and depending on what it left behind would make
+    // this pass or fail on shard ordering.
+    await pool.query(
+      `UPDATE notification_templates SET status = 'ACTIVE' WHERE event = 'TAX_REMINDER_2W'`,
     );
 
     await setStatus(ended, 'CLOSED', 'Business wound up; notice filed with the corporate registry.');
@@ -188,7 +203,7 @@ describe('A record that is taken off the register', () => {
       pool,
       `SELECT DISTINCT n.user_id, t.id AS taxpayer_id
          FROM notifications n JOIN taxpayers t ON t.phone = n.recipient
-        WHERE n.event = 'TAX_REMINDER_6W'`,
+        WHERE n.event = 'TAX_REMINDER_2W'`,
     );
     const remindedIds = reminded.map((row) => row.taxpayer_id);
     assert.ok(remindedIds.includes(chased), 'the open record is still chased');

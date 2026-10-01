@@ -242,6 +242,16 @@ export interface CreateAssessmentParams {
   latitude?: number | null;
   longitude?: number | null;
   channel?: 'AGENT_PWA' | 'OFFICER' | 'API';
+  /**
+   * How long the invoice may be paid for, in days. Defaults to thirty.
+   *
+   * Nothing passes it. Not a route, not a service, not a test — so thirty days
+   * is the only validity any invoice in this platform has ever had, which is
+   * worth saying because something downstream was built for a longer one: the
+   * reminder sweep declares a six-week window that a thirty-day invoice can
+   * never enter, and so has never sent that reminder to anybody. See the note
+   * at the top of `services/reminders.ts`.
+   */
   invoiceValidityDays?: number;
   ipAddress?: string | null;
   /*

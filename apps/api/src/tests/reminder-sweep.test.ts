@@ -40,7 +40,7 @@ import {
 import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
-import { sendDueReminders } from '../services/reminders';
+import { REMINDER_WINDOWS, sendDueReminders } from '../services/reminders';
 
 let agent: { token: string; device: string };
 
@@ -84,13 +84,12 @@ beforeEach(async () => {
 });
 
 /**
- * An unpaid invoice due at a chosen instant.
+ * An unpaid invoice, with the expiry the platform gave it.
  *
- * Built through the API — the assessment is what creates the invoice — and
- * then moved in time, which is the honest way to reach a window that is two
- * weeks wide without waiting two weeks.
+ * Nothing is moved: this is what an invoice raised today actually looks like,
+ * which is the only way to ask whether a reminder window can be reached.
  */
-async function invoiceDueAt(suffix: string, expiresAt: Date): Promise<string> {
+async function freshInvoice(suffix: string): Promise<string> {
   const auth = { token: agent.token, deviceId: agent.device };
   const taxpayer = await post(
     '/taxpayers',
@@ -128,8 +127,21 @@ async function invoiceDueAt(suffix: string, expiresAt: Date): Promise<string> {
   );
   assert.ok(invoice, 'the assessment raised an invoice');
 
-  await pool.query('UPDATE invoices SET expires_at = $2 WHERE id = $1', [invoice!.id, expiresAt]);
   return invoice!.id;
+}
+
+/**
+ * The same invoice, due at a chosen instant.
+ *
+ * Moved in time, which is the honest way to reach a window that is two weeks
+ * wide without waiting two weeks — honest only as far as the instant chosen is
+ * one the platform can produce. See the last describe block in this file for
+ * what that rules out.
+ */
+async function invoiceDueAt(suffix: string, expiresAt: Date): Promise<string> {
+  const id = await freshInvoice(suffix);
+  await pool.query('UPDATE invoices SET expires_at = $2 WHERE id = $1', [id, expiresAt]);
+  return id;
 }
 
 /** Fourteen days out — squarely inside the two-week window (13–15 days). */
@@ -288,5 +300,135 @@ describe('The reminder sweep only counts what it actually queued', () => {
     assert.equal(result.sent, 0, JSON.stringify(result));
     assert.equal((await messagesFor(invoiceId)).length, 0);
     assert.equal(await reminderFlag(invoiceId), false);
+  });
+});
+
+// ===========================================================================
+/**
+ * A reminder nothing can reach.
+ *
+ * The sweep declares three windows — six, four and two weeks before an
+ * invoice's expiry — and the file that declares them read as a description of
+ * what PSIRS sends. `createAssessmentIn` gives every invoice thirty days to be
+ * paid, and `invoiceValidityDays`, the parameter that would change that, is
+ * passed by nothing anywhere: not a route, not a service, not a test. So the
+ * gap between now and an invoice's expiry starts at thirty days and only
+ * shrinks, and a window whose floor is forty-one days cannot be entered.
+ *
+ * TAX_REMINDER_6W has therefore never been sent to anybody. The template is
+ * approved and the Hausa translation written; the flag column exists on every
+ * invoice and is false on all of them. The two suites that appeared to cover
+ * it first moved an invoice's expiry out to forty-two days, which is a state
+ * the platform cannot produce — so what they proved was that the fixture ran.
+ *
+ * These measure it instead of asserting it, against an invoice with the expiry
+ * the platform gave it, so the day a revenue item is given a longer window to
+ * pay this fails rather than the comment quietly going out of date.
+ */
+describe('the reminder ladder, against the invoices the platform issues', () => {
+  const window = (event: string) => {
+    const found = REMINDER_WINDOWS.find((entry) => entry.event === event);
+    assert.ok(found, `no ${event} window`);
+    return found!;
+  };
+
+  /** The validity of an invoice the platform just raised, in whole days. */
+  async function validityOf(invoiceId: string): Promise<number> {
+    const row = await queryOne<{ days: string }>(
+      pool,
+      `SELECT round(EXTRACT(EPOCH FROM (expires_at - now())) / 86400)::text AS days
+         FROM invoices WHERE id = $1`,
+      [invoiceId],
+    );
+    return Number.parseInt(row!.days, 10);
+  }
+
+  it('gives every invoice thirty days, because nothing can ask for more', async () => {
+    const invoiceId = await freshInvoice('10');
+    assert.equal(
+      await validityOf(invoiceId),
+      30,
+      'the only validity this platform issues, and the number every window below is judged against',
+    );
+  });
+
+  it('cannot reach the six-week window with any invoice it can raise', async () => {
+    const validity = await validityOf(await freshInvoice('11'));
+    const sixWeeks = window('TAX_REMINDER_6W');
+
+    assert.ok(
+      sixWeeks.minDays > validity,
+      `the six-week window opens at ${sixWeeks.minDays} days and an invoice is born with ` +
+        `${validity}; the gap only shrinks from there, so nothing can ever be inside it`,
+    );
+  });
+
+  it('reaches the other two, and reaches the four-week one the next day', async () => {
+    const validity = await validityOf(await freshInvoice('12'));
+
+    for (const event of ['TAX_REMINDER_4W', 'TAX_REMINDER_2W']) {
+      assert.ok(
+        window(event).maxDays <= validity,
+        `${event} opens at ${window(event).maxDays} days, within the ${validity} an invoice has`,
+      );
+    }
+
+    /*
+     * And how soon. A thirty-day invoice is inside the 27–29 day window one
+     * day after it is raised, so the taxpayer assessed on the Monday is told
+     * on the Tuesday that they have four weeks to pay. True, and not what a
+     * ladder of three reminders was drawn for — recorded here as a figure
+     * rather than an opinion.
+     */
+    assert.equal(validity - window('TAX_REMINDER_4W').maxDays, 1);
+  });
+
+  it('sends no six-week reminder across the whole life of a real invoice', async () => {
+    /*
+     * The end-to-end form. The invoice is walked through every day of its life
+     * by moving its expiry one day closer at a time — each of those is a state
+     * the platform reaches on its own — and the sweep is run at each step.
+     * Forty-one days is never among them.
+     */
+    const invoiceId = await freshInvoice('13');
+
+    for (let daysLeft = 30; daysLeft >= 3; daysLeft -= 1) {
+      await pool.query(
+        `UPDATE invoices SET expires_at = now() + ($2 || ' days')::interval WHERE id = $1`,
+        [invoiceId, String(daysLeft)],
+      );
+      await sendDueReminders();
+    }
+
+    const flags = await queryOne<{
+      reminder_sent_6w: boolean;
+      reminder_sent_4w: boolean;
+      reminder_sent_2w: boolean;
+    }>(
+      pool,
+      `SELECT reminder_sent_6w, reminder_sent_4w, reminder_sent_2w FROM invoices WHERE id = $1`,
+      [invoiceId],
+    );
+
+    assert.equal(flags!.reminder_sent_4w, true, 'the four-week reminder went out');
+    assert.equal(flags!.reminder_sent_2w, true, 'and the two-week one');
+    assert.equal(
+      flags!.reminder_sent_6w,
+      false,
+      'and the six-week one did not, on any day of the invoice it was meant for',
+    );
+
+    const sent = await query<{ event: string }>(
+      pool,
+      `SELECT DISTINCT event FROM notifications
+        WHERE entity_type = 'invoice' AND entity_id = $1 AND event LIKE 'TAX_REMINDER%'`,
+      [invoiceId],
+    );
+    const events = sent.map((row) => row.event).sort();
+    assert.deepEqual(
+      events,
+      ['TAX_REMINDER_2W', 'TAX_REMINDER_4W'],
+      'two of the three reminders exist for this taxpayer, and the suite says which two',
+    );
   });
 });

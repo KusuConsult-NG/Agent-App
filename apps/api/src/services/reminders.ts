@@ -1,11 +1,40 @@
 /**
  * Tax due-date reminder sweep (PRD §44).
  *
- * Sends reminders at three windows before an invoice's `expires_at` date:
+ * Three windows are declared before an invoice's `expires_at` date:
  *
  *   6 weeks (42 days)  — TAX_REMINDER_6W
  *   4 weeks (28 days)  — TAX_REMINDER_4W
  *   2 weeks (14 days)  — TAX_REMINDER_2W
+ *
+ * TWO OF THEM FIRE. THE FIRST CANNOT.
+ *
+ * `createAssessmentIn` gives every invoice thirty days to be paid.
+ * `invoiceValidityDays` is a parameter on its own call that would change that
+ * and no caller anywhere passes it, so thirty days is not a default, it is the
+ * only value the platform issues. The gap between now and an invoice's expiry
+ * therefore starts at thirty days and only shrinks, and a window whose floor
+ * is forty-one days is a window no invoice can enter.
+ *
+ * So TAX_REMINDER_6W has never been sent to anybody. Its template is
+ * approved, its Hausa translation is written, its flag column exists on every
+ * invoice and is false on all of them. Two suites appeared to cover it by
+ * moving an invoice's expiry out to forty-two days first, which is a state the
+ * platform cannot produce; both now use a window an invoice really passes
+ * through.
+ *
+ * TAX_REMINDER_4W fires, and fires early: a thirty-day invoice enters the
+ * 27–29 day window one day after it is raised. A taxpayer assessed on the
+ * Monday is told on the Tuesday that they have four weeks to pay, which is
+ * true and is not what a ladder of three reminders was drawn for.
+ *
+ * The 6W entry stays rather than being deleted, for the reason the dead
+ * predicate list gives in its own words: inert and correct beats absent and
+ * wrong. If a revenue item is ever given a longer window to pay — and the
+ * annual obligations are the obvious candidates — a sixty-day invoice should
+ * get all three reminders rather than silently get two. What is removed is the
+ * claim that it works today, which is what `a-reminder-nothing-can-reach`
+ * measures so that this comment cannot go quietly out of date.
  *
  * Safeguards:
  *
@@ -62,7 +91,12 @@ interface ReminderWindow {
   flagColumn: 'reminder_sent_6w' | 'reminder_sent_4w' | 'reminder_sent_2w';
 }
 
-const WINDOWS: ReminderWindow[] = [
+/**
+ * Exported so the reachability of each window can be measured against the
+ * invoices the platform actually issues, rather than asserted in a comment.
+ * See the note at the top of this file: the first entry is inert today.
+ */
+export const REMINDER_WINDOWS: ReminderWindow[] = [
   { event: 'TAX_REMINDER_6W', minDays: 41, maxDays: 43, flagColumn: 'reminder_sent_6w' },
   { event: 'TAX_REMINDER_4W', minDays: 27, maxDays: 29, flagColumn: 'reminder_sent_4w' },
   { event: 'TAX_REMINDER_2W', minDays: 13, maxDays: 15, flagColumn: 'reminder_sent_2w' },
@@ -82,7 +116,7 @@ export async function sendDueReminders(db: Db = pool): Promise<{ sent: number; s
   let totalSent = 0;
   let totalSkipped = 0;
 
-  for (const window of WINDOWS) {
+  for (const window of REMINDER_WINDOWS) {
     const result = await processWindow(db, window);
     totalSent += result.sent;
     totalSkipped += result.skipped;

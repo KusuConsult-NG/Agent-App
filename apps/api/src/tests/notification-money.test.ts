@@ -176,18 +176,37 @@ describe('an amount a citizen is shown', () => {
     );
     assert.equal(assessment.status, 201, JSON.stringify(assessment.body));
 
+    /*
+     * Into the two-week window, not the six-week one.
+     *
+     * This read `interval '42 days'` and asserted on TAX_REMINDER_6W. Forty-two
+     * days is not a state the platform can produce — every invoice is issued
+     * with thirty — so the case was proving that the fixture ran. Fourteen days
+     * is a day every invoice passes through, and the wording under test here is
+     * the money in the message, which is the same question on either template.
+     */
     const moved = await pool.query(
-      `UPDATE invoices SET expires_at = now() + interval '42 days', status = 'UNPAID',
-              reminder_sent_6w = false
+      `UPDATE invoices SET expires_at = now() + interval '14 days', status = 'UNPAID',
+              reminder_sent_2w = false
         WHERE taxpayer_id = $1`,
       [taxpayer.body.taxpayerId],
     );
     assert.ok((moved.rowCount ?? 0) > 0, 'the assessment should have raised an invoice');
 
+    /*
+     * And the wording switched on, for this event only. `reminder-sweep` takes
+     * the two-week template out of service inside its own cases, and a file
+     * that depended on whatever state it was left in would pass or fail on
+     * shard ordering.
+     */
+    await pool.query(
+      `UPDATE notification_templates SET status = 'ACTIVE' WHERE event = 'TAX_REMINDER_2W'`,
+    );
+
     const result = await sendDueReminders();
     assert.ok(result.sent > 0, `no reminder was sent: ${JSON.stringify(result)}`);
 
-    const messages = await messagesFor('TAX_REMINDER_6W');
+    const messages = await messagesFor('TAX_REMINDER_2W');
     const reminder = messages.find((m) => /is due|due on/i.test(m));
     assert.ok(reminder, `no reminder message found in ${JSON.stringify(messages).slice(0, 300)}`);
     assert.match(reminder!, /₦3,000\.00/, `a reminder must read as naira. Got: ${reminder}`);
