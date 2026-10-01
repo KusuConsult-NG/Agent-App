@@ -58,6 +58,34 @@ COPY apps/agent ./apps/agent
 COPY apps/portal ./apps/portal
 
 RUN npm run build --workspace @psirs/shared
+# ---------------------------------------------------------------------------
+# The one build-time setting either client has, and the reason it is declared.
+#
+# apps/agent/src/lib/verification-url.ts reads
+# `import.meta.env.VITE_VERIFICATION_BASE_URL`: the public address printed and
+# QR-encoded onto a thermal paper receipt. Vite picks prefixed names out of the
+# build environment and bakes the value into the bundle.
+#
+# In a Docker build a name reaches `RUN` only if the stage declares it. Without
+# this line the variable is unreachable in the only front-end image this
+# repository ships — `--build-arg` is dropped with a warning, a platform's
+# service variable never arrives, and the bundle is built with the value
+# absent. packages/shared/src/escpos.ts emits the QR block only when a URL is
+# supplied, so every receipt then prints with no QR code and no link at all,
+# while nothing fails and no log says so.
+#
+# Absent stays a legitimate value — the note at the top of verification-url.ts
+# explains why a missing link beats a wrong one — so there is no default and
+# no startup check. What this declaration changes is only that an operator who
+# sets it gets it.
+#
+# It is NOT the API's `VERIFICATION_BASE_URL`. That one is read at runtime by
+# apps/api/src/lib/public-urls.ts and governs the QR on PDF certificates and
+# the referee, attestation and citizen links. The two cover different paper
+# and both have to be set; on a single-origin deployment both carry the
+# `/portal` subpath.
+# ---------------------------------------------------------------------------
+ARG VITE_VERIFICATION_BASE_URL
 RUN npm run build --workspace @psirs/agent
 
 # ---------------------------------------------------------------------------
@@ -70,8 +98,8 @@ RUN npm run build --workspace @psirs/agent
 # names the cause.
 #
 # `--base=/portal/` on the command line rather than `base` in
-# vite.config.ts, so the same source still builds for `/` in
-# Dockerfile.portal and in `npm run dev`. Verified: the emitted index.html
+# vite.config.ts, so the same source still builds for `/` under `npm run dev`,
+# where the portal is served on its own port. Verified: the emitted index.html
 # names /portal/assets/... and /portal/icon.svg.
 #
 # This rewrites build-time asset URLs only. `API_BASE = '/api/v1'` in

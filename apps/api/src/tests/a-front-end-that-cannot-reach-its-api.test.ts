@@ -444,6 +444,64 @@ test('the SPA fallback is still there, underneath the proxy', () => {
   }
 });
 
+/*
+ * A receipt that cannot be made to carry an address.
+ *
+ * The thermal receipt and the PDF certificate print the same public address
+ * from two different places. The certificate takes it from the API at runtime
+ * (`VERIFICATION_BASE_URL`, apps/api/src/lib/public-urls.ts). The receipt
+ * takes it from the agent bundle, where Vite baked it in at build time from
+ * `VITE_VERIFICATION_BASE_URL`.
+ *
+ * Neither front-end image declared that name as a build argument, and a name
+ * a Docker stage does not declare never reaches `RUN`. So the setting was
+ * documented, read by the client, and unreachable in the only images this
+ * repository ships: the certificate carried a working link and the receipt
+ * carried none, with nothing failing and no log saying so.
+ *
+ * Measured, not assumed: building the agent with the name exported into the
+ * shell puts the value in the bundle and changes the asset hash, which is
+ * what makes a declared `ARG` sufficient — Vite reads prefixed names out of
+ * the build environment, and that is what an `ARG` becomes inside `RUN`.
+ */
+test('both front-end images can be given the address a receipt prints', () => {
+  const name = 'VITE_VERIFICATION_BASE_URL';
+
+  // Pinned to the client, so renaming the variable in one place fails here
+  // rather than silently leaving a declaration nothing reads.
+  assert.match(
+    read('apps/agent/src/lib/verification-url.ts'),
+    new RegExp(`import\\.meta\\.env\\.${escapeForRegExp(name)}\\b`),
+    `the agent no longer reads ${name}; this guard is pinned to the wrong name`,
+  );
+
+  for (const { image, name: marker } of FRONT_ENDS) {
+    const source = directivesOnly(read(image));
+
+    const declaration = source.indexOf(`ARG ${name}`);
+    assert.ok(
+      declaration >= 0,
+      `${marker}: ${image} never declares \`ARG ${name}\`, so the address a ` +
+        'thermal receipt prints cannot be supplied to the build and every ' +
+        'receipt comes out with no QR code and no link',
+    );
+
+    /*
+     * Order is the whole of it. An `ARG` is in scope from where it appears, so
+     * one written after the build it is meant to parameterise is inert — and
+     * inert in the quietest possible way, since the image still builds and
+     * still serves.
+     */
+    const build = source.indexOf('RUN npm run build --workspace @psirs/agent');
+    assert.ok(build >= 0, `${marker}: ${image} no longer builds the agent workspace`);
+    assert.ok(
+      declaration < build,
+      `${marker}: ${image} declares \`ARG ${name}\` after the agent build, ` +
+        'where it has no effect on the bundle',
+    );
+  }
+});
+
 // ===========================================================================
 
 describe('what the build context carries, and what it must not', () => {

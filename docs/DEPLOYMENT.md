@@ -530,7 +530,10 @@ front-end one:
    to start without it.
 3. Delete the `portal` service, or leave it running on its own hostname. Both
    work; nothing in the combined image depends on it being gone.
-   `Dockerfile.portal` is unchanged and still builds the portal alone at `/`.
+   `Dockerfile.portal` is **no longer a portal-only image** — it is derived
+   from `Dockerfile.agent` and serves exactly the same thing, so a service
+   pointed at either name gets a correct deployment. That change is the
+   subject of the header comment in both files.
 
 ### `VERIFICATION_BASE_URL`, which is the one that bites
 
@@ -552,6 +555,37 @@ this is worth getting right before anything is issued.
 `portalOrigin()` strips a trailing slash and a trailing `/verify`, so
 `.../portal`, `.../portal/` and `.../portal/verify` all resolve the same way.
 `PUBLIC_PORTAL_URL`, if it is set at all, needs the same subpath.
+
+### `VITE_VERIFICATION_BASE_URL`, which is the other one, and is not the same
+
+```
+VITE_VERIFICATION_BASE_URL=https://<your-host>/portal
+```
+
+**Two variables print the same address onto two different pieces of paper, and
+setting one does not set the other.**
+
+- `VERIFICATION_BASE_URL` is read by the API at **run time** and governs the
+  PDF certificate, the referee invitation, the attestation link and the
+  citizen SMS. A restart picks up a change.
+- `VITE_VERIFICATION_BASE_URL` is read by the **agent bundle**, and governs
+  only the QR code and link on a **thermal paper receipt** printed from a
+  handset. Vite bakes it in, so a change needs a **rebuild**, not a restart.
+
+The receipt one used to be unsettable. Both front-end images now declare
+`ARG VITE_VERIFICATION_BASE_URL` immediately before they build the agent — a
+name a Docker stage does not declare never reaches `RUN`, so until that line
+existed a `--build-arg` was dropped with a warning and a platform service
+variable never arrived. Set it as an ordinary variable on the front-end
+service and redeploy; it is read during the build.
+
+Left unset, the receipt prints with the verification code and **no QR code and
+no link at all** — `packages/shared/src/escpos.ts` emits that block only when a
+URL is supplied. That is deliberate rather than broken: the note at the top of
+`apps/agent/src/lib/verification-url.ts` explains why a government receipt
+carrying a dead address is worse than one carrying none, and a localhost value
+is discarded for the same reason. But a demonstration where the QR on the paper
+is part of the story needs this set.
 
 ### Why the portal is built differently in this image
 
@@ -735,10 +769,11 @@ service's log.
 
 - [ ] Secrets provisioned in the secret manager, none of them a development value
 - [ ] Every integration pointed at a real provider **and its mapping confirmed against that provider's sandbox** — see `docs/INTEGRATION-VERIFICATION.md`
-- [ ] `VERIFICATION_BASE_URL` set to the real portal, over HTTPS — this is printed onto every receipt and cannot be corrected afterwards
+- [ ] `VERIFICATION_BASE_URL` set to the real portal, over HTTPS — this is printed onto every certificate and cannot be corrected afterwards
 - [ ] `DEMO_RELAX_DEVICE_BINDING` is **not** set — see *Running a demonstration*; it is device binding off, and a revoked handset that can be replaced unseen is a revocation that meant nothing
 - [ ] `DATABASE_URL` is a transaction-mode pooler (port 6543), or `DB_POOL_SIZE` × the instance count fits the pooler's client limit — see *Sign-in times out*
-- [ ] `VERIFICATION_BASE_URL` carries the `/portal` subpath, since `Dockerfile.agent` serves both front ends on one origin — see *One URL for both apps*. Without it every receipt QR code points at the agent app's sign-in form, and a printed receipt cannot be recalled
+- [ ] `VERIFICATION_BASE_URL` carries the `/portal` subpath, since `Dockerfile.agent` serves both front ends on one origin — see *One URL for both apps*. Without it every certificate QR code points at the agent app's sign-in form, and a printed certificate cannot be recalled
+- [ ] `VITE_VERIFICATION_BASE_URL` set on the front-end service, with the same `/portal` subpath — a **different** variable, read at build time, and the only one that puts a QR code on a thermal paper receipt. Unset, receipts print with the code and no link; it needs a redeploy, not a restart
 - [ ] DNS and TLS certificates for the API, the portal and the agent PWA
 - [ ] `CORS_ORIGINS` set to the real portal and PWA origins
 - [ ] Webhook URL registered with Remita, and its source addresses allowlisted
