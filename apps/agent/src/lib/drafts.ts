@@ -232,6 +232,27 @@ export interface SyncOutcome {
 const SYNC_BATCH = 50;
 
 /**
+ * The sync in flight, if one is.
+ *
+ * Two things now ask for a sync: the connectivity effect in `App.tsx`, and the
+ * message the service worker posts when the browser reports the signal back —
+ * which until recently had no receiver at all, so a second caller was not
+ * something this function had to think about.
+ *
+ * With both, two syncs of one queue can be in the air together, and the server
+ * then has to sort out two requests carrying the same capture. It does, now,
+ * and the sorting out took three attempts to get right. Not making the second
+ * request is cheaper than answering it correctly.
+ *
+ * A caller arriving mid-flight is given the running sync rather than a second
+ * one. That is what they asked for — "send the queue" — and it is already
+ * being sent. The one thing it does not do is pick up a draft captured after
+ * the running sync read the queue; that draft stays PENDING and goes with the
+ * next trigger, which is the same as it would have done before.
+ */
+let inFlight: Promise<SyncOutcome> | null = null;
+
+/**
  * Push queued drafts to the server, which assigns the real identifiers
  * (PRD §30: "Offline records must receive server-generated IDs after
  * synchronization").
@@ -239,9 +260,30 @@ const SYNC_BATCH = 50;
  * Batches are delivered in order and each is settled before the next is sent,
  * so a connection that dies partway leaves the delivered ones gone from the
  * phone and the rest still queued. The failure is rethrown: a sync that did
- * not finish must never look like one that did.
+ * not finish must never look like one that did — and it is rethrown to every
+ * caller sharing the flight, because a caller told nothing happened when a
+ * sync failed is a caller that will not retry.
  */
-export async function syncDrafts(
+export function syncDrafts(
+  poster: (drafts: Pick<Draft, 'clientReference' | 'draftType' | 'payload' | 'capturedAt'>[]) => Promise<{
+    results: {
+      clientReference: string;
+      status: string;
+      entityId?: string;
+      code?: string;
+      detail?: string;
+      message: string;
+    }[];
+  }>,
+): Promise<SyncOutcome> {
+  if (inFlight) return inFlight;
+  inFlight = runSync(poster).finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+
+async function runSync(
   poster: (drafts: Pick<Draft, 'clientReference' | 'draftType' | 'payload' | 'capturedAt'>[]) => Promise<{
     results: {
       clientReference: string;
