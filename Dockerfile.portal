@@ -122,7 +122,20 @@ server {
         # agent holding the phone, rather than by a proxy error page.
         client_max_body_size 12m;
 
-        proxy_pass http://${API_ORIGIN};
+        # Resolved per request, not once at startup. A literal hostname is
+        # resolved when nginx loads this file and then held for the life of
+        # the process, so when the API service is redeployed onto a new
+        # private address this front end goes on dialling the container that
+        # has gone — every call fails at the network and sign-in reports "The
+        # request failed", with no deploy of its own to blame. The same note
+        # in Dockerfile.agent explains it at length.
+        #
+        # `$request_uri` is required with a variable upstream: nginx stops
+        # appending the URI itself, and without it every call arrives at the
+        # API as `/`.
+        resolver ${NGINX_RESOLVER} valid=10s ipv6=on;
+        set $api_origin ${API_ORIGIN};
+        proxy_pass http://$api_origin$request_uri;
         proxy_http_version 1.1;
         proxy_set_header Connection "";
 
@@ -156,7 +169,7 @@ EOF
 # `$proxy_add_x_forwarded_for` — every nginx variable in this file is
 # `$name`-shaped and envsubst cannot tell them apart from its own.
 # ---------------------------------------------------------------------------
-ENV NGINX_ENVSUBST_FILTER=(API_ORIGIN|PORT)
+ENV NGINX_ENVSUBST_FILTER=(API_ORIGIN|PORT|NGINX_RESOLVER)
 
 # ---------------------------------------------------------------------------
 # The port the platform routes to, not the one this image happens to prefer.
@@ -171,6 +184,20 @@ ENV NGINX_ENVSUBST_FILTER=(API_ORIGIN|PORT)
 # EXECUTES files ending .sh in a subshell, so an export from a .sh would not
 # survive to 20-envsubst-on-templates.sh, which is the whole point of this.
 # ---------------------------------------------------------------------------
+# The DNS server this container actually has, for the resolver the /api/
+# proxy needs. Read from /etc/resolv.conf rather than hardcoded, because
+# Docker's embedded DNS is 127.0.0.11 and a platform's own is something else.
+COPY <<'SH' /docker-entrypoint.d/15-nginx-resolver.envsh
+# shellcheck shell=sh
+NGINX_RESOLVER="$(awk '/^nameserver/ { printf "%s ", $2 }' /etc/resolv.conf 2>/dev/null)"
+if [ -z "${NGINX_RESOLVER}" ]; then
+  NGINX_RESOLVER="127.0.0.11"
+fi
+export NGINX_RESOLVER
+echo "15-nginx-resolver.envsh: resolving the API through ${NGINX_RESOLVER}"
+SH
+RUN chmod +x /docker-entrypoint.d/15-nginx-resolver.envsh
+
 COPY <<'SH' /docker-entrypoint.d/10-default-port.envsh
 # shellcheck shell=sh
 export PORT="${PORT:-80}"

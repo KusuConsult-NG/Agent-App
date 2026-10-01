@@ -159,16 +159,45 @@ for (const { image, client, name } of FRONT_ENDS) {
     const proxyPass = /proxy_pass\s+http:\/\/([^;\s]+);/.exec(source);
     assert.ok(proxyPass, `${image} has a /api/ location with no proxy_pass`);
 
-    // No trailing slash and no path: the API mounts its own routes at
-    // /api/v1 (`app.use('/api/v1', api)`), so the URI has to pass through
-    // unchanged. A trailing slash makes nginx rewrite it and every route 404s.
-    assert.equal(
-      proxyPass![1],
-      '${API_ORIGIN}',
-      `${image} proxies to ${JSON.stringify(proxyPass![1])}. It must be a ` +
-        'bare ${API_ORIGIN} with no trailing slash or path: the API serves ' +
-        'the /api/v1 prefix itself, and anything else rewrites the URI',
+    /*
+     * A VARIABLE UPSTREAM, AND THE `$request_uri` IT OBLIGES.
+     *
+     * With a literal hostname, nginx resolves the upstream once when it loads
+     * the config and holds that address for the life of the process. Where the
+     * API is a separate service on a private network its address changes on
+     * every redeploy, so the front end goes on dialling a container that has
+     * gone: every /api/v1 call fails at the network and sign-in reports "The
+     * request failed", with no deploy of its own to blame.
+     *
+     * A variable defers resolution to each request. The cost is that nginx
+     * then stops appending the request URI by itself — so without
+     * `$request_uri` every call arrives at the API as `/`, the API answers 404
+     * for everything, and the cause looks nothing like the symptom. Measured
+     * against a stand-in upstream that echoes what it received:
+     *
+     *     /api/v1/reference/lgas?limit=1&search=pam
+     *       -> /api/v1/reference/lgas?limit=1&search=pam
+     *
+     * `$request_uri` carries the query string as well as the path, so a
+     * filtered list keeps its filters.
+     */
+    assert.match(
+      proxyPass![1]!,
+      /^\$[a-z_]+\$request_uri$/,
+      `${image} proxies to "${proxyPass![1]}". It must be a VARIABLE followed ` +
+        'by $request_uri — a literal hostname is resolved once at startup and ' +
+        'then stale for the life of the process, and a variable without ' +
+        '$request_uri sends every call to "/"',
     );
+
+    assert.match(
+      source,
+      /resolver\s+\S+/,
+      `${image} uses a variable upstream but declares no resolver, so nginx ` +
+        'has no DNS server to ask and every /api/ request fails with "no ' +
+        'resolver defined to resolve"',
+    );
+
   });
 
   test(`${name}: the API origin is substituted, and is not optional`, () => {

@@ -280,6 +280,22 @@ the client assumes is the origin it gets. Nothing in either client changed, and
 neither did CORS, the CSP or the cookie — which is the point of fixing it on
 this side rather than the other.
 
+### If the front end stops reaching the API after an API redeploy
+
+Symptom: the apps load, but every call fails at the network and sign-in says
+"The request failed. Try again, or contact support." `/api/v1/reference/lgas`
+in a browser does not load either. Nothing was deployed to the front end.
+
+Cause: nginx used to resolve `API_ORIGIN` **once**, when it loaded its config,
+and hold that address for the life of the process. On a private network the
+API's address changes every time the API is redeployed, so the front end went
+on dialling a container that no longer existed.
+
+Both front-end images now put the upstream in a variable with a `resolver`, so
+the name is resolved per request and an API redeploy is picked up within
+seconds. If you are running an older image, restarting the front-end service
+is the workaround — it re-resolves on start.
+
 Set **`API_ORIGIN`** on each front-end service to the API's `host:port` on the
 private network:
 

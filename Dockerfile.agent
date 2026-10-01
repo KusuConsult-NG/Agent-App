@@ -125,8 +125,34 @@ server {
     # it. `^~` so this beats the static-file regex below rather than
     # racing it.
     #
-    # No trailing slash on proxy_pass: the API mounts its routes at
-    # `/api/v1` already, so the URI passes through unchanged.
+    # RESOLVED PER REQUEST, NOT ONCE AT STARTUP.
+    #
+    # `proxy_pass http://${API_ORIGIN};` with a literal hostname is resolved
+    # by nginx when it loads this file, and the result is then held for the
+    # life of the process. On a platform where the API is a separate service
+    # on a private network, that address changes every time the API is
+    # redeployed — and the front end goes on dialling the container that has
+    # gone. What the person sees is a front end that worked, then stopped,
+    # with no deploy of its own to blame: every /api/v1 call fails at the
+    # network and sign-in reports "The request failed."
+    #
+    # It is also brittle the other way. A name that does not resolve at load
+    # is a fatal configuration error, so a front end that starts before its
+    # API exists does not start at all.
+    #
+    # Putting the upstream in a variable defers resolution to each request,
+    # and `resolver` says which DNS server to ask. The resolver line is
+    # generated at container start from /etc/resolv.conf by
+    # 15-nginx-resolver.envsh, because the address differs between Docker's
+    # embedded DNS and a platform's own, and hardcoding 127.0.0.11 would
+    # work in one and silently fail in the other.
+    #
+    # `$request_uri` IS REQUIRED HERE. With a variable in proxy_pass nginx
+    # stops appending the request URI by itself, and without it every call
+    # would arrive at the API as `/` — the API would answer 404 for
+    # everything and the cause would look nothing like the symptom.
+    # `$request_uri` carries the path AND the query string, so a filtered
+    # list keeps its filters.
     # --------------------------------------------------------------------
     location ^~ /api/ {
         # A KYC document is a photograph of an ID card and the API accepts
@@ -137,7 +163,9 @@ server {
         # person holding the phone, not by a proxy error page.
         client_max_body_size 12m;
 
-        proxy_pass http://${API_ORIGIN};
+        resolver ${NGINX_RESOLVER} valid=10s ipv6=on;
+        set $api_origin ${API_ORIGIN};
+        proxy_pass http://$api_origin$request_uri;
         proxy_http_version 1.1;
         proxy_set_header Connection "";
 
@@ -246,7 +274,7 @@ EOF
 # eat `$uri`, `$host`, `$remote_addr` and `$proxy_add_x_forwarded_for` —
 # every nginx variable here is `$name`-shaped and envsubst cannot tell them
 # from its own.
-ENV NGINX_ENVSUBST_FILTER=(API_ORIGIN|PORT)
+ENV NGINX_ENVSUBST_FILTER=(API_ORIGIN|PORT|NGINX_RESOLVER)
 
 # The port the platform routes to, not the one this image prefers. Railway
 # injects PORT and expects the process to honour it; an image listening
@@ -256,6 +284,29 @@ ENV NGINX_ENVSUBST_FILTER=(API_ORIGIN|PORT)
 # `.envsh`, not `.sh`: the nginx entrypoint SOURCES .envsh and EXECUTES .sh
 # in a subshell, so an export from a .sh would not survive to
 # 20-envsubst-on-templates.sh, which is the entire point.
+# The DNS server this container actually has.
+#
+# Written into the config as `resolver`, which the /api/ proxy needs because
+# its upstream is a variable and so is resolved per request rather than once
+# at load. The address is read from /etc/resolv.conf rather than hardcoded:
+# Docker's embedded DNS is 127.0.0.11, a platform's own is something else, and
+# a wrong resolver fails at request time with "no resolver defined" or a
+# timeout — neither of which names DNS as the problem.
+#
+# `.envsh`, so the export survives to 20-envsubst-on-templates.sh.
+# Falls back to Docker's embedded DNS, then to a public resolver, because an
+# empty value makes nginx refuse to load the file at all.
+COPY <<'SH' /docker-entrypoint.d/15-nginx-resolver.envsh
+# shellcheck shell=sh
+NGINX_RESOLVER="$(awk '/^nameserver/ { printf "%s ", $2 }' /etc/resolv.conf 2>/dev/null)"
+if [ -z "${NGINX_RESOLVER}" ]; then
+  NGINX_RESOLVER="127.0.0.11"
+fi
+export NGINX_RESOLVER
+echo "15-nginx-resolver.envsh: resolving the API through ${NGINX_RESOLVER}"
+SH
+RUN chmod +x /docker-entrypoint.d/15-nginx-resolver.envsh
+
 COPY <<'SH' /docker-entrypoint.d/10-default-port.envsh
 # shellcheck shell=sh
 export PORT="${PORT:-80}"
