@@ -549,7 +549,7 @@ three real agents rather than applied as corrections:
 
 ---
 
-## 7. Twenty-six refusals the officer portal still says in English
+## 7. The refusals the officer portal still says in English
 
 **Which of these should be translated, and which should keep the server's
 words?** This is the only question on this page that is about the officer
@@ -562,10 +562,24 @@ Its error component translated six codes and every one of them was raised by
 the browser rather than by PSIRS — a request that never arrived, an upload that
 failed, a step-up the officer walked away from. `STEP_UP_REQUIRED` has now been
 added, because it guards every consequential money action in the portal and its
-instruction was already in Hausa under an English heading. These are the rest.
+instruction was already in Hausa under an English heading.
 
-Each carries a code of its own and names one fixed state, which is the test the
-map in `apps/portal/src/ui.tsx` sets for what may be translated at all:
+**The scale, counted rather than estimated.** The platform raises **171
+distinct error codes**; the officer portal says 1 of them in Hausa, and the
+agent application says 23. The first version of this section said twenty-six,
+from a search that matched `conflict('CODE'` on a single line and missed every
+multi-line call and every `new AppError({ code: … })` literal — which is most
+of them. It understated the gap by a factor of six, on the page this document
+exists to keep honest, which is why all three figures are now recomputed by
+`scripts/build-hausa-review.mjs` and the build refuses when this sentence
+disagrees with them.
+
+Not all 171 can reach an officer. Many are the agent's, many are the platform
+talking to itself — a storage write that did not complete, a malformed body, a
+route that does not exist. The ones below are a **sample, not the set**: those
+an officer meets while doing the work the portal is for, each carrying a code
+of its own and naming one fixed state, which is the test the map in
+`apps/portal/src/ui.tsx` sets for what may be translated at all:
 
 | Where an officer meets it | Refusals |
 |---|---|
@@ -577,7 +591,7 @@ map in `apps/portal/src/ui.tsx` sets for what may be translated at all:
 | Allocations and awards | `ALREADY_FORFEITED`, `AWARD_FORFEITED`, `ROUND_EXHAUSTED` |
 | The rest | `GROUP_NOT_ACTIVE`, `INVITATION_ALREADY_USED`, `KYC_ALREADY_CLEARED`, `PAYE_ALREADY_CANCELLED`, `REVENUE_ITEM_INACTIVE`, `TARGET_NOT_ACTIVE` |
 
-**Why they are listed rather than translated.** Twenty-six Hausa sentences
+**Why they are listed rather than translated.** A page of Hausa sentences
 written in one pass and reviewed by nobody would be worse than the English they
 replace: the reader cannot tell a guess from a translation, which is the policy
 the map's own comment states. And the selection is a judgement about which

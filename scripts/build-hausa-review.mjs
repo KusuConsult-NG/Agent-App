@@ -28,7 +28,7 @@
  * `apps/agent/src/tests/hausa-safety-strings.test.tsx`, not a heuristic.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -69,6 +69,55 @@ function safetyKeys() {
   );
   const block = source.slice(source.indexOf('SAFETY_KEYS'), source.indexOf('];', source.indexOf('SAFETY_KEYS')));
   return [...block.matchAll(/'([A-Za-z0-9_]+)'/g)].map((m) => m[1]);
+}
+
+/**
+ * Every error code the API can return, and how many of them each front end
+ * says in Hausa.
+ *
+ * Counted rather than written down, because the first attempt at writing it
+ * down was wrong. A sweep for `conflict('CODE'` on one line found 26 and
+ * missed every multi-line call and every `new AppError({ code: … })` literal —
+ * which is most of them. 26 went into the reviewer's index as the size of the
+ * gap, understating it by a factor of six, on the page this script exists to
+ * keep honest.
+ *
+ * `db/` is excluded: revenue items and notification templates carry a `code`
+ * field too, and `PIT`, `ROAD` and `RECEIPT_GENERATED_SMS` are not refusals.
+ */
+function apiErrorCodes() {
+  const codes = new Set();
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== 'tests' && entry.name !== 'db') walk(path);
+      } else if (entry.name.endsWith('.ts')) {
+        const source = readFileSync(path, 'utf8');
+        for (const match of source.matchAll(/(?:conflict|refused)\(\s*'([A-Z_][A-Z_0-9]*)'/g)) {
+          codes.add(match[1]);
+        }
+        for (const match of source.matchAll(/code:\s*'([A-Z_][A-Z_0-9]*)'/g)) {
+          // An `AppError` literal, not a catalogue row that happens to have a
+          // `code` column.
+          const window = source.slice(Math.max(0, match.index - 400), match.index + 400);
+          if (window.includes('AppError') || window.includes('statusCode')) codes.add(match[1]);
+        }
+      }
+    }
+  };
+  walk(join(ROOT, 'apps', 'api', 'src'));
+  return codes;
+}
+
+/** How many of those codes an application translates, by reading its map. */
+function translatedServerCodes(app, codes) {
+  const source = readFileSync(join(ROOT, 'apps', app, 'src', 'ui.tsx'), 'utf8');
+  const start = source.indexOf('const TRANSLATED_ERRORS');
+  const block = source.slice(start, source.indexOf('\n};', start));
+  return [...block.matchAll(/^  ([A-Z_][A-Z_0-9]*):/gm)]
+    .map((match) => match[1])
+    .filter((code) => codes.has(code));
 }
 
 /** The Hausa notification templates, read out of the migration that inserts them. */
@@ -323,23 +372,71 @@ const kaStrings = Object.values(ha).filter((value) =>
 
 const QUESTIONS = join(ROOT, 'docs', 'HAUSA-REVIEW-QUESTIONS.md');
 const questions = readFileSync(QUESTIONS, 'utf8');
-const questionsWrong = [
-  ...[...questions.matchAll(/\b(\d,\d{3}) (?:dictionary strings|keys|strings)\b/g)].map((m) => [
-    m[1],
-    total,
-    'the dictionary',
-  ]),
-  ...[...questions.matchAll(/\*\*(\d{3}) strings address the reader as/g)].map((m) => [
-    m[1],
-    String(kaStrings),
-    'the `ka` count',
-  ]),
-  ...[...questions.matchAll(/\| \*\*Total\*\* \| \*\*(\d{3})\*\* of/g)].map((m) => [
-    m[1],
-    String(kaStrings),
-    'the `ka` count',
-  ]),
-].filter(([said, actual]) => said !== actual);
+
+const errorCodes = apiErrorCodes();
+const portalTranslated = translatedServerCodes('portal', errorCodes);
+const agentTranslated = translatedServerCodes('agent', errorCodes);
+
+/*
+ * Each figure this document states, and what it is supposed to be.
+ *
+ * `optional` is for the ones that may legitimately be absent -- the historical
+ * references, and the `ka` table if somebody reflows it away. Everything else
+ * MUST match at least once, because the first version of this guard matched
+ * nothing at all: the sentence it was written for wraps between the number and
+ * the words after it, the pattern found no occurrences, and no occurrences read
+ * as no disagreements. A check that cannot fail is worse than no check, because
+ * the page then looks guarded. `\s+` rather than a space for the same reason:
+ * prose in this document is wrapped by hand and the wrap point moves.
+ */
+const FIGURES = [
+  {
+    what: 'the dictionary',
+    pattern: /\b(\d,\d{3})\s+(?:dictionary strings|keys|strings)\b/g,
+    actual: total,
+  },
+  {
+    what: 'the `ka` count',
+    pattern: /\*\*(\d{3})\s+strings\s+address\s+the\s+reader\s+as/g,
+    actual: String(kaStrings),
+  },
+  {
+    what: 'the `ka` count',
+    pattern: /\|\s+\*\*Total\*\*\s+\|\s+\*\*(\d{3})\*\*\s+of/g,
+    actual: String(kaStrings),
+  },
+  {
+    what: 'the API',
+    pattern: /raises\s+\*\*(\d+)\s+distinct\s+error\s+codes\*\*/g,
+    actual: String(errorCodes.size),
+  },
+  {
+    what: 'the portal map',
+    pattern: /the\s+officer\s+portal\s+says\s+(\d+)\s+of\s+them/g,
+    actual: String(portalTranslated.length),
+  },
+  {
+    what: 'the agent application',
+    pattern: /the\s+agent\s+application\s+says\s+(\d+)/g,
+    actual: String(agentTranslated.length),
+  },
+];
+
+const questionsWrong = [];
+for (const { what, pattern, actual } of FIGURES) {
+  const found = [...questions.matchAll(pattern)];
+  if (found.length === 0) {
+    console.error(
+      `docs/HAUSA-REVIEW-QUESTIONS.md no longer states ${what}.\n` +
+        'The figure was checked and the sentence carrying it is gone or reworded,\n' +
+        'so nothing is checking it now. Restate it or drop the check deliberately.',
+    );
+    process.exit(1);
+  }
+  for (const match of found) {
+    if (match[1] !== actual) questionsWrong.push([match[1], actual, what]);
+  }
+}
 
 if (questionsWrong.length > 0) {
   const [said, actual, what] = questionsWrong[0];
