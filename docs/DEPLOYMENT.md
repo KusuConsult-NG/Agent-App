@@ -315,10 +315,9 @@ const API_BASE = '/api/v1';    // apps/agent/src/lib/api.ts, apps/portal/src/lib
 ```
 
 That is deliberate, and `apps/agent/vite.config.ts` says why beside the dev
-proxy that makes it work locally: *"The PWA and API share an origin in
-production; the dev proxy keeps cookies, CSP and CORS behaviour the same in
-development."* The refresh-token cookie, the CSP and the absence of any CORS
-preflight all rest on it.
+proxy that makes it work locally: the PWA and API share an origin in
+production, and the proxy keeps the CSP and the absence of a CORS preflight
+the same in development. Both of those rest on the shared origin.
 
 **Deploying the three as separate services breaks that assumption, and neither
 nginx config restores it.** `Dockerfile.agent` and `Dockerfile.portal` define
@@ -339,8 +338,37 @@ inert.
 
 Each front-end image now serves `/api/` by proxying to the API, so the origin
 the client assumes is the origin it gets. Nothing in either client changed, and
-neither did CORS, the CSP or the cookie — which is the point of fixing it on
-this side rather than the other.
+neither did CORS or the CSP — which is the point of fixing it on this side
+rather than the other.
+
+### Where the refresh token actually lives
+
+**Not in a cookie.** This platform sets none — `grep -r cookie apps/api/src`
+finds a comment and the logger's redaction list, and nothing that writes one.
+This paragraph used to say "the refresh-token cookie, the CSP and the absence
+of any CORS preflight all rest on it", and `config.ts` said twice that taking
+`NODE_ENV` off production would turn off "the cookie hardening". None of it
+existed, and the claim is worth correcting rather than deleting because it
+asserted the opposite of the truth about the one thing it named.
+
+Both clients hold the refresh token in web storage, where script can read it:
+
+| | key | default | with "remember me" |
+|---|---|---|---|
+| Agent | `psirs.refresh` | `localStorage` | `localStorage` |
+| Officer portal | `psirs.portal.refresh` | `sessionStorage` | `localStorage` |
+
+An httpOnly cookie is not readable by injected script; web storage is. So the
+exposure a reader of the old sentence would have ruled out is the exposure
+this platform actually has, which is why `script-src 'self'` in both
+`index.html` files is load-bearing rather than belt-and-braces, and why
+`connect-src` is kept to `'self'` alone — together they are what bounds what
+a compromised bundle could read and where it could send it.
+
+Nothing here argues for a change. Both clients need the token from JavaScript
+to put it in an `Authorization` header, and a refresh cookie would need CSRF
+protection this platform does not have. It is written down so the next
+decision is made against what is true.
 
 ### If the front end stops reaching the API after an API redeploy
 

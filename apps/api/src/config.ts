@@ -255,8 +255,9 @@ export const config = {
      * is dead at the one screen it exists for.
      *
      * The alternative offered was taking `NODE_ENV` off production, which
-     * also turns off the published-secret refusal, the cookie hardening and
-     * the replica warning. Weakening four controls to get one is a bad trade,
+     * also turns off the published-secret refusal, the minimum secret length
+     * and the replica warning. Weakening four controls to get one is a bad
+     * trade,
      * so this names the one — exactly as `DEMO_RELAX_DEVICE_BINDING` does for
      * device binding, and deliberately in the same shape.
      *
@@ -634,7 +635,7 @@ export const config = {
      * `NODE_ENV=production`, so that flag is inert exactly where a demo
      * actually runs — and the alternative offered was to take `NODE_ENV` off
      * production on that service, which would also turn off the
-     * published-secret refusal, the cookie hardening and the replica
+     * published-secret refusal, the minimum secret length and the replica
      * warnings. Weakening four things to get one is a bad trade.
      *
      * So this names the one thing. Set it and an agent may collect from a
