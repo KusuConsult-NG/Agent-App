@@ -152,72 +152,92 @@ export async function deviceForSignIn(
       [params.userId, handle],
     );
 
-  let existing = await find(fingerprint);
+  const refuse = () => {
+    throw forbidden(
+      'This device has been blocked. Sign in from another one.',
+      'An administrator can unblock it.',
+    );
+  };
 
   /*
    * The row this machine used to be, before it sent an identifier.
    *
    * Only worth looking for when an identifier arrived and the new handle
-   * matched nothing: that is exactly the first sign-in after this change
+   * matches nothing: that is exactly the first sign-in after this change
    * reached the browser. Adopting the row rather than inserting beside it
-   * keeps the device's history, its label and -- the point -- its status. A
-   * BLOCKED row found here refuses below, which is what stops this change
-   * from unblocking every blocked device on the day it ships.
+   * keeps the device's history, its label and -- the point -- its status.
+   * Without this, the first sign-in after the portal started sending an
+   * identifier would have left every existing row behind, which would have
+   * unblocked every blocked device in the estate on the day of the fix.
+   *
+   * A BLOCKED row found here is refused on the spot rather than adopted, and
+   * its handle is left alone, so that a second machine which shared the row
+   * still matches it: both were blocked, and both stay blocked until somebody
+   * says otherwise.
+   *
+   * This refusal and the `withTransaction` wrapper `auth.ts` puts around the
+   * call are redundant, and the measurement is the only reason I know which
+   * claim to make. Remove this line alone and nothing fails: the adoption
+   * rewrites the row onto the new handle, the upsert below conflicts with that
+   * same row, sees BLOCKED and refuses anyway, and the rollback undoes the
+   * rewrite. Remove the transaction alone and nothing fails either, because
+   * this line stops the rewrite happening. Remove BOTH and two tests fail --
+   * the second machine stops matching the row and walks past the block, and a
+   * refused attempt leaves the row carrying a different handle.
+   *
+   * So neither is "the" protection. The guess that this one was load-bearing
+   * on its own was wrong, and so was the earlier guess that the transaction
+   * was.
    *
    * Two machines that shared one legacy row split apart over time: the first
    * to sign in adopts it, the second finds neither handle and gets its own.
    * That is the conflation unwinding, in the only direction it can.
-   *
-   * Two things keep a BLOCKED row's handle intact, and they are redundant:
-   * the `status` test below, and the fact that `auth.ts` calls this inside
-   * `withTransaction`, so the refusal thrown further down rolls the UPDATE
-   * back anyway.
-   *
-   * Measured, because the obvious guess was wrong twice. Removing the status
-   * test alone changes no observable behaviour and kills no test — the
-   * rollback covers it. Removing the transaction alone also kills no test —
-   * the status test covers it. Removing BOTH fails two: a second machine that
-   * shared the blocked row stops matching it and walks past the block, and a
-   * refused attempt leaves the row carrying a different handle.
-   *
-   * So neither is "the" protection and neither is ornamental. Both stay, and
-   * the pair is what the tests pin.
    */
-  if (!existing && params.clientDeviceId) {
+  if (params.clientDeviceId && !(await find(fingerprint))) {
     const legacy = await find(legacyFingerprintOf(params.userAgent));
+    if (legacy?.status === 'BLOCKED') refuse();
     if (legacy) {
-      if (legacy.status !== 'BLOCKED') {
-        await client.query('UPDATE officer_devices SET fingerprint = $2 WHERE id = $1', [
-          legacy.id,
-          fingerprint,
-        ]);
-      }
-      existing = legacy;
+      await client.query('UPDATE officer_devices SET fingerprint = $2 WHERE id = $1', [
+        legacy.id,
+        fingerprint,
+      ]);
     }
   }
 
-  if (existing) {
-    if (existing.status === 'BLOCKED') {
-      throw forbidden(
-        'This device has been blocked. Sign in from another one.',
-        'An administrator can unblock it.',
-      );
-    }
-    await client.query(
-      'UPDATE officer_devices SET last_seen_at = now(), user_agent = $2 WHERE id = $1',
-      [existing.id, params.userAgent],
-    );
-    return existing.id;
-  }
-
-  const created = await queryOne<{ id: string }>(
+  /*
+   * The row, whether it already existed or starts here, in one statement.
+   *
+   * This was a SELECT, then a touch if it hit, then a bare INSERT if it
+   * missed -- which is a race with a unique constraint at the end of it:
+   * `UNIQUE (user_id, fingerprint)`. An officer double-clicking sign-in, or
+   * two tabs restoring at once, gives two requests that both miss the SELECT
+   * and both insert. One wins; the other gets a 23505, and the officer gets a
+   * 500 from the one screen that is supposed to let them in. It heals on a
+   * retry, because by then the row exists -- which is exactly the kind of
+   * fault that gets dismissed as a glitch and never fixed.
+   *
+   * `ON CONFLICT DO UPDATE` collapses all three into one round trip and makes
+   * the loser of the race take the winner's row, which is the right answer:
+   * it is the same computer, and the row it wanted now exists. It also leaves
+   * one place where a BLOCKED row is recognised instead of two, and that one
+   * place is reachable by an ordinary sign-in from a blocked machine -- so it
+   * is pinned by a test rather than defended by an argument.
+   *
+   * The UPDATE touching a blocked row before the refusal is rolled back:
+   * `auth.ts` calls this inside `withTransaction`, and the throw unwinds it.
+   */
+  const row = await queryOne<{ id: string; status: string }>(
     client,
     `INSERT INTO officer_devices (user_id, fingerprint, label, user_agent)
      VALUES ($1,$2,$3,$4)
-     RETURNING id`,
+     ON CONFLICT (user_id, fingerprint) DO UPDATE
+       SET last_seen_at = now(), user_agent = EXCLUDED.user_agent
+     RETURNING id, status`,
     [params.userId, fingerprint, labelFor(params.userAgent), params.userAgent],
   );
-  return created!.id;
+
+  if (row!.status === 'BLOCKED') refuse();
+  return row!.id;
 }
 
 // ===========================================================================
