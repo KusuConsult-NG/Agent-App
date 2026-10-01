@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { ApiRequestError, login, logout, type ApiError, type User } from '../lib/api';
 import { belongsInPortal } from '../lib/permissions';
-import { Alert, ErrorAlert, LanguageToggle } from '../ui';
+import { Alert, ErrorAlert, LanguageToggle, agentAppUrl, crestUrl } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 
 export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }) {
@@ -74,7 +74,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
           */}
         <LanguageToggle />
         <div style={{ textAlign: 'center', marginBottom: 22 }}>
-          <img src="/icon.svg" alt="" width={54} height={54} />
+          <img src={crestUrl()} alt="" width={54} height={54} />
           <h1 style={{ fontSize: 'var(--text-lg)', margin: '10px 0 2px' }}>{t.ofcLoginTitle}</h1>
           <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--muted)' }}>
             {t.authPsirsFull}
@@ -91,6 +91,27 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
             <p style={{ margin: '6px 0 0' }}>
               {t.ofcLoginSignInWorked}
             </p>
+            {/*
+              * And the door, where this build knows where it is.
+              *
+              * The two sentences above told an agent they were in the wrong
+              * place and left them there, which was all the portal could
+              * honestly do while the agent app was on a hostname it had no
+              * way to know. Served from one origin it is at the root, one
+              * relative link away, and a signpost without a direction is
+              * only half a signpost.
+              *
+              * `agentAppUrl()` is null unless this portal was built for a
+              * subpath, which happens only in the combined image. Deployed
+              * on its own hostname the portal still cannot know, and sending
+              * an agent to a dead link would leave them worse off than the
+              * sentence alone.
+              */}
+            {agentAppUrl() && (
+              <p style={{ margin: '10px 0 0' }}>
+                <a href={agentAppUrl()!}>{t.ofcLoginOpenAgentApp}</a>
+              </p>
+            )}
           </Alert>
         )}
 

@@ -11,7 +11,7 @@
 import React, { useEffect, useState, type FormEvent } from 'react';
 import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { usePublicI18n } from '../lib/i18n';
-import { LanguageToggle } from '../ui';
+import { LanguageToggle, crestUrl } from '../ui';
 import { Alert, ErrorAlert, KeyValue, Loading, Money, formatDate } from '../ui';
 import {
   VERIFICATION_TEXT,
@@ -100,7 +100,7 @@ export function VerifyScreen({ code }: { code?: string }) {
       <div className="public__card">
           <LanguageToggle />
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
-          <img src="/icon.svg" alt="" width={48} height={48} />
+          <img src={crestUrl()} alt="" width={48} height={48} />
           <h1 style={{ fontSize: '1.05rem', margin: '10px 0 2px' }}>{t.pubVerifyTitle}</h1>
           <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
             {t.pubService}
@@ -387,7 +387,7 @@ export function RefereePortalScreen({ token }: { token: string }) {
         <div className="public__card">
           <LanguageToggle />
           <div style={{ textAlign: 'center', marginBottom: 18 }}>
-            <img src="/icon.svg" alt="" width={48} height={48} />
+            <img src={crestUrl()} alt="" width={48} height={48} />
             <h1 style={{ fontSize: '1rem', margin: '10px 0 0' }}>{t.pubRefereeTitle}</h1>
           </div>
           <ErrorAlert error={error} />
@@ -404,7 +404,7 @@ export function RefereePortalScreen({ token }: { token: string }) {
         <div className="public__card">
           <LanguageToggle />
           <div style={{ textAlign: 'center', marginBottom: 18 }}>
-            <img src="/icon.svg" alt="" width={48} height={48} />
+            <img src={crestUrl()} alt="" width={48} height={48} />
             <h1 style={{ fontSize: '1rem', margin: '10px 0 0' }}>{t.pubDeclineTitle}</h1>
           </div>
 
@@ -459,7 +459,7 @@ export function RefereePortalScreen({ token }: { token: string }) {
       <div className="public__card">
           <LanguageToggle />
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
-          <img src="/icon.svg" alt="" width={48} height={48} />
+          <img src={crestUrl()} alt="" width={48} height={48} />
           <h1 style={{ fontSize: '1.05rem', margin: '10px 0 2px' }}>{t.pubRefereeTitle}</h1>
           <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
             {t.pubService} · {invitation.referenceCode}
@@ -752,7 +752,7 @@ export function GroupAttestationScreen({ token }: { token: string }) {
         <div className="public__card">
           <LanguageToggle />
           <div style={{ textAlign: 'center', marginBottom: 18 }}>
-            <img src="/icon.svg" alt="" width={48} height={48} />
+            <img src={crestUrl()} alt="" width={48} height={48} />
             <h1 style={{ fontSize: '1rem', margin: '10px 0 0' }}>{t.pubAttestTitle}</h1>
           </div>
           <ErrorAlert error={error} />
@@ -766,7 +766,7 @@ export function GroupAttestationScreen({ token }: { token: string }) {
       <div className="public__card">
           <LanguageToggle />
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
-          <img src="/icon.svg" alt="" width={48} height={48} />
+          <img src={crestUrl()} alt="" width={48} height={48} />
           <h1 style={{ fontSize: '1.05rem', margin: '10px 0 2px' }}>{t.pubAttestTitle}</h1>
           <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
             {t.pubService} · {view.groupCode}
@@ -1310,7 +1310,7 @@ export function CitizenPortalScreen() {
       <div className="public__card">
           <LanguageToggle />
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
-          <img src="/icon.svg" alt="" width={48} height={48} />
+          <img src={crestUrl()} alt="" width={48} height={48} />
           <h1 style={{ fontSize: '1.05rem', margin: '10px 0 2px' }}>
             {t.pubCitizenTitle}
           </h1>
