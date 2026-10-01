@@ -115,6 +115,33 @@ FROM nginx:1.27-alpine AS runner
 # image exists to provide never in effect.
 RUN rm -rf /etc/nginx/conf.d/default.conf
 
+# ---------------------------------------------------------------------------
+# The security headers, written once because nginx will not merge them.
+#
+# `add_header` does not accumulate across scopes. A location declaring any
+# `add_header` of its own REPLACES the inherited set instead of adding to it,
+# so these four written once at server scope were served on `/`, `/index.html`
+# and `/portal/` and on nothing else: every location that sets a
+# `Cache-Control` — /sw.js, both /assets/ prefixes, the manifest and the icon
+# regex — answered with none of them.
+#
+# The documents keeping them is why it went unnoticed. Clickjacking and
+# referrer leakage are document concerns, and the documents were covered. What
+# was lost is `nosniff` on every static asset, which is the one of the four
+# that means something on a script, a stylesheet or an SVG.
+#
+# One file included at every scope that needs it, rather than four lines
+# repeated six times, so the set cannot drift between locations. It carries no
+# `${...}` names and is therefore not a template — `NGINX_ENVSUBST_FILTER`
+# does not reach it and does not need to.
+# ---------------------------------------------------------------------------
+COPY <<'EOF' /etc/nginx/snippets/psirs-security-headers.conf
+add_header X-Frame-Options "DENY" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Permissions-Policy "geolocation=(self), camera=(self), microphone=()" always;
+EOF
+
 COPY <<'EOF' /etc/nginx/templates/default.conf.template
 server {
     listen ${PORT} default_server;
@@ -122,10 +149,7 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
-    add_header X-Frame-Options "DENY" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Permissions-Policy "geolocation=(self), camera=(self), microphone=()" always;
+    include /etc/nginx/snippets/psirs-security-headers.conf;
 
     gzip on;
     gzip_vary on;
@@ -136,6 +160,7 @@ server {
     # decides what an agent may be shown offline, so a stale copy is a
     # correctness problem and not just a slow update.
     location = /sw.js {
+        include /etc/nginx/snippets/psirs-security-headers.conf;
         add_header Cache-Control "no-cache, no-store, must-revalidate";
         expires 0;
     }
@@ -206,6 +231,7 @@ server {
     # block below.
     # --------------------------------------------------------------------
     location ^~ /portal/assets/ {
+        include /etc/nginx/snippets/psirs-security-headers.conf;
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
@@ -236,6 +262,7 @@ server {
 
     # The agent's hashed assets.
     location ^~ /assets/ {
+        include /etc/nginx/snippets/psirs-security-headers.conf;
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
@@ -271,6 +298,7 @@ server {
     # always, and reaches nothing else.
     # ------------------------------------------------------------------
     location = /manifest.webmanifest {
+        include /etc/nginx/snippets/psirs-security-headers.conf;
         default_type application/manifest+json;
         expires 7d;
         add_header Cache-Control "public";
@@ -282,6 +310,7 @@ server {
     # disk is the right answer, and a missing one should 404 rather than
     # fall back to an HTML shell.
     location ~* \.(?:manifest|webmanifest|svg|png|ico)$ {
+        include /etc/nginx/snippets/psirs-security-headers.conf;
         expires 7d;
         add_header Cache-Control "public";
     }

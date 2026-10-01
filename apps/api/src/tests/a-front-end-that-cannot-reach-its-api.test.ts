@@ -114,6 +114,67 @@ function directivesOnly(source: string): string {
     .join('\n');
 }
 
+/**
+ * Every `location` block in an nginx config, with its body.
+ *
+ * Brace-matched rather than line-matched: `add_header` four lines below a
+ * `location` is only inside it if no closing brace came between, and a regexp
+ * over lines cannot tell. Comments are already stripped by `directivesOnly`,
+ * so a brace inside prose cannot throw the count off.
+ */
+function locationBlocks(template: string): { selector: string; body: string }[] {
+  const blocks: { selector: string; body: string }[] = [];
+  const opener = /location\s+([^{]+?)\s*\{/g;
+  let match: RegExpExecArray | null;
+  while ((match = opener.exec(template)) !== null) {
+    let depth = 1;
+    let i = opener.lastIndex;
+    while (i < template.length && depth > 0) {
+      if (template[i] === '{') depth += 1;
+      else if (template[i] === '}') depth -= 1;
+      i += 1;
+    }
+    blocks.push({ selector: match[1]!.trim(), body: template.slice(opener.lastIndex, i - 1) });
+  }
+  return blocks;
+}
+
+/**
+ * The body of one `COPY <<'EOF' <path>` heredoc in a Dockerfile.
+ *
+ * These images carry their nginx configuration inline, and a check that reads
+ * the Dockerfile as one blob cannot tell which file a directive lands in. The
+ * extraction fails loudly rather than returning an empty string: a guard that
+ * silently checks nothing is worse than no guard.
+ */
+function heredocBody(image: string, destination: string): string {
+  const source = read(image);
+  const pattern = new RegExp(
+    `COPY <<'EOF' ${escapeForRegExp(destination)}\\n([\\s\\S]*?)\\nEOF\\n`,
+  );
+  const match = pattern.exec(source);
+  assert.ok(match, `${image} has no heredoc writing ${destination}`);
+  return match![1]!;
+}
+
+/**
+ * The config with every `location { ... }` body taken out.
+ *
+ * What is left is the scope a location inherits from, which is the only place
+ * a header can be written once and reach `location /`.
+ */
+function stripLocationBodies(template: string): string {
+  let out = '';
+  let cursor = 0;
+  for (const block of locationBlocks(template)) {
+    const at = template.indexOf(block.body, cursor);
+    if (at < 0) continue;
+    out += template.slice(cursor, at);
+    cursor = at + block.body.length;
+  }
+  return out + template.slice(cursor);
+}
+
 /** `MAX_DOCUMENT_BYTES` as the API actually defines it. */
 function apiMaxDocumentBytes(): number {
   const source = read('apps/api/src/services/kyc-documents.ts');
@@ -368,6 +429,94 @@ for (const { image, client, name } of FRONT_ENDS) {
     );
   });
 }
+
+/*
+ * Where the security headers go when a location sets one of its own.
+ *
+ * nginx does not merge `add_header`. A location that declares any `add_header`
+ * replaces the whole inherited set rather than adding to it, so the four
+ * headers written once at server scope — X-Frame-Options, nosniff,
+ * Referrer-Policy, Permissions-Policy — vanish from every response served by a
+ * location that sets its own `Cache-Control`. Measured against the real
+ * template: `/`, `/index.html` and `/portal/` carried all four, while
+ * `/sw.js`, `/manifest.webmanifest`, `/icon.svg` and both `/assets/` paths
+ * carried none.
+ *
+ * The documents keeping them is why nothing looked wrong: clickjacking and
+ * referrer leakage are document concerns and the documents were covered. What
+ * was actually lost is `nosniff` on every static asset, which is the one of
+ * the four that means anything on a script, a stylesheet or an SVG.
+ *
+ * The invariant is structural rather than a list of paths, because the next
+ * location added with a `Cache-Control` on it would lose them in exactly the
+ * same silent way.
+ */
+test('every location that sets a header of its own keeps the security headers', () => {
+  const SECURITY_HEADERS = [
+    'X-Frame-Options',
+    'X-Content-Type-Options',
+    'Referrer-Policy',
+    'Permissions-Policy',
+  ];
+  const INCLUDES_SNIPPET = /include\s+\S*security-headers\.conf;/;
+  const declares = (scope: string, header: string) =>
+    new RegExp(`add_header ${escapeForRegExp(header)}\\b`).test(scope);
+
+  for (const { image, name } of FRONT_ENDS) {
+    /*
+     * The snippet's contents, checked before anything is allowed to satisfy a
+     * header by including it.
+     *
+     * An earlier version of this guard accepted `include …security-headers`
+     * as proof of all four headers without ever reading the file, so deleting
+     * `nosniff` from the snippet passed every assertion while the header was
+     * gone from every response in the image. An include is only evidence if
+     * the thing included is known to carry them.
+     */
+    const snippet = heredocBody(image, '/etc/nginx/snippets/psirs-security-headers.conf');
+    for (const header of SECURITY_HEADERS) {
+      assert.ok(
+        declares(snippet, header),
+        `${name}: ${image} — the security-header snippet no longer declares ` +
+          `${header}, so every scope that includes it is served without it`,
+      );
+    }
+
+    /*
+     * The nginx template alone, not the whole Dockerfile.
+     *
+     * Reading the whole file let the snippet heredoc stand in for server
+     * scope: deleting the server-scope include passed, because the words
+     * `add_header X-Frame-Options` were still somewhere in the file. The
+     * scope a location inherits from is a region of the template, so that is
+     * what has to be looked at.
+     */
+    const template = directivesOnly(heredocBody(image, '/etc/nginx/templates/default.conf.template'));
+
+    const serverScope = stripLocationBodies(template);
+    for (const header of SECURITY_HEADERS) {
+      assert.ok(
+        declares(serverScope, header) || INCLUDES_SNIPPET.test(serverScope),
+        `${name}: ${image} does not set ${header} at server scope, so ` +
+          '`location /` and `location /portal/` — which declare no header of ' +
+          'their own — serve the documents without it',
+      );
+    }
+
+    for (const block of locationBlocks(template)) {
+      if (!/\badd_header\b/.test(block.body)) continue;
+      for (const header of SECURITY_HEADERS) {
+        assert.ok(
+          declares(block.body, header) || INCLUDES_SNIPPET.test(block.body),
+          `${name}: ${image} — \`location ${block.selector}\` sets an add_header ` +
+            'of its own, which in nginx REPLACES the inherited set, and does ' +
+            `not restore ${header}. Every response from that location is ` +
+            'served without it.',
+        );
+      }
+    }
+  }
+});
 
 test('no front-end config declares an nginx `types` block', () => {
   /*
