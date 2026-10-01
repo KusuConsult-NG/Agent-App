@@ -25,6 +25,7 @@
  */
 
 import { config } from '../../config';
+import { bestEffort } from '../../lib/best-effort';
 import { log } from '../../lib/logger';
 import { __testing } from '../../lib/logger';
 
@@ -157,7 +158,16 @@ export const errorReporter: ErrorReporter = select();
  * caller await a network round trip.
  */
 export function reportError(report: ErrorReport): void {
-  void Promise.resolve()
-    .then(() => errorReporter.report(report))
-    .catch(() => undefined);
+  /*
+   * Logged, and safe to log: `lib/logger` writes to stdout and imports only
+   * `config`, so a line about the reporter failing cannot re-enter the
+   * reporter. Without this, the one subsystem whose job is to make failures
+   * visible was the one that failed invisibly — and the throttle inside
+   * `bestEffort` keeps a dead reporter from producing a line per error.
+   */
+  void bestEffort(
+    'error_reporting.report',
+    Promise.resolve().then(() => errorReporter.report(report)),
+    { detail: { reporter: errorReporter.name } },
+  );
 }

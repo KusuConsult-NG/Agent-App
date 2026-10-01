@@ -155,7 +155,7 @@ describe('opening the application after a new version was deployed', () => {
     // The cached shell is what a handset has after any previous visit. It
     // must not be the answer while there is a connection, or a deploy never
     // reaches the agent.
-    sw.putInCache('psirs-agent-v2-shell', '/', 'old-shell');
+    sw.putInCache(`${sw.version}-shell`, '/', 'old-shell');
 
     const response = await sw.fetchEvent(navigation());
 
@@ -166,7 +166,7 @@ describe('opening the application after a new version was deployed', () => {
   it('stores what the network gave, so the next open offline is the new one', async () => {
     await sw.fetchEvent(navigation());
 
-    const shell = sw.cacheContents().get('psirs-agent-v2-shell');
+    const shell = sw.cacheContents().get(`${sw.version}-shell`);
     expect(shell?.has('/index.html')).toBe(true);
   });
 });
@@ -175,7 +175,7 @@ describe('what this must not have broken', () => {
   it('still opens from the cache when there is no connection', async () => {
     // The whole reason the shell is cached. An agent in a market with no
     // signal still needs the application to start.
-    sw.putInCache('psirs-agent-v2-shell', '/index.html', 'cached-shell');
+    sw.putInCache(`${sw.version}-shell`, '/index.html', 'cached-shell');
     sw.setOffline(true);
 
     const response = await sw.fetchEvent(navigation());
@@ -203,7 +203,7 @@ describe('what this must not have broken', () => {
 
   it('still serves reference data from the cache when the network is gone', async () => {
     sw.putInCache(
-      'psirs-agent-v2-reference',
+      `${sw.version}-reference`,
       'https://psirs.example/api/v1/reference/lgas',
       'cached-lgas',
     );
@@ -243,5 +243,77 @@ describe('the worker being able to replace itself', () => {
      * `activate` run and clear the caches it no longer owns.
      */
     expect(sw.version).not.toBe('psirs-agent-v1');
+  });
+});
+
+/*
+ * The cache names above are built from `sw.version` rather than written out.
+ * They used to be the literal 'psirs-agent-v2-shell', and bumping VERSION
+ * detached every one of them at a stroke: `putInCache` would seed a cache the
+ * worker no longer reads, and "still opens from the cache when there is no
+ * connection" would have gone green while proving nothing.
+ */
+
+describe('the officer portal sharing this origin', () => {
+  /*
+   * The portal is served from /portal/ on the same host, so its requests
+   * reach this worker. Every branch of it was written for an origin with one
+   * app on it, and two of them do real damage.
+   */
+  const portalNavigation = {
+    url: 'https://psirs.example/portal/',
+    method: 'GET',
+    mode: 'navigate',
+    destination: 'document',
+  };
+
+  it('does not answer a portal navigation at all', async () => {
+    const response = await sw.fetchEvent(portalNavigation);
+
+    // Not intercepted: no respondWith, so the browser goes to the network
+    // itself. The worker did not even ask on its behalf.
+    expect(response).toBeUndefined();
+    expect(sw.networkCalls).toHaveLength(0);
+  });
+
+  it('does not overwrite the agent shell with the portal page', async () => {
+    // The navigation branch caches whatever came back under the literal key
+    // '/index.html'. One officer opening the portal on a handset that also
+    // carries the agent app would have left the agent opening a government
+    // sign-in form the next time it lost signal.
+    sw.putInCache(`${sw.version}-shell`, '/index.html', 'agent-shell');
+
+    await sw.fetchEvent(portalNavigation);
+
+    const shell = sw.cacheContents().get(`${sw.version}-shell`);
+    expect(await shell!.get('/index.html')!.text()).toBe('agent-shell');
+  });
+
+  it('does not answer a portal asset with the agent shell when offline', async () => {
+    /*
+     * The quieter half. The static branch falls back to '/index.html' on any
+     * miss, so a portal script requested with no connection would come back
+     * 200, as HTML, and the portal would die parsing it — an error with no
+     * resemblance to its cause.
+     */
+    sw.putInCache(`${sw.version}-shell`, '/index.html', 'agent-shell');
+    sw.setOffline(true);
+
+    const response = await sw.fetchEvent({
+      url: 'https://psirs.example/portal/assets/index-abc123.js',
+      method: 'GET',
+      mode: 'cors',
+      destination: 'script',
+    });
+
+    expect(response).toBeUndefined();
+  });
+
+  it('still answers the agent shell it does own', async () => {
+    // The exclusion must be the portal's prefix and nothing else. A path
+    // merely starting with the same letters is the agent's.
+    const response = await sw.fetchEvent(navigation('https://psirs.example/portals-of-jos'));
+
+    expect(response).toBeDefined();
   });
 });

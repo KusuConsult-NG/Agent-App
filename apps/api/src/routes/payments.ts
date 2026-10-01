@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { serialiseKobo } from '@psirs/shared';
 import { pool, query, queryOne } from '../db/pool';
 import { signWebhookPayload } from '../lib/crypto';
+import { bestEffort } from '../lib/best-effort';
 import { config } from '../config';
 import {
   authenticate,
@@ -353,13 +354,25 @@ receiptRouter.get(
   '/:id',
   requirePermission('receipt:read:own', 'receipt:read:all'),
   asyncHandler(async (req, res) => {
-    // Typed as uuid so a malformed id is a clean 404 rather than a database
-    // cast error surfacing as a 500.
+    /*
+     * A malformed id is not a receipt, and saying so is a 404 rather than the
+     * 500 a `::uuid` cast error would produce. That much was already the
+     * intent; it was done by catching the query, which cannot tell a bad id
+     * from a database it could not reach and answered "That receipt does not
+     * exist" for both. An officer investigating a disputed payment was told
+     * the receipt was not there, whenever PostgreSQL was unavailable.
+     *
+     * Checked before the query instead, so a real failure stays a failure.
+     * Still a 404 rather than a 400: whether an id is well-formed is not
+     * something this endpoint owes a caller who has guessed one.
+     */
+    if (!uuidSchema.safeParse(req.params.id).success) throw notFound('That receipt');
+
     const receipt = await queryOne<{ document_id: string | null }>(
       pool,
       `${RECEIPT_DETAIL_SQL} WHERE r.id = $1::uuid`,
       [req.params.id],
-    ).catch(() => null);
+    );
     if (!receipt) throw notFound('That receipt');
     assertOwnRecord(
       req,
@@ -420,13 +433,17 @@ documentRouter.get(
 
       const bytes = await storage.get(document.storage_reference);
 
-      await pool
-        .query(
+      // Evidence: this is the record of who read the receipt book. Logged
+      // rather than silent, so it cannot stop being written unnoticed.
+      await bestEffort(
+        'document_access.record',
+        pool.query(
           `INSERT INTO document_access_logs (document_id, accessed_by, access_type, ip_address)
            VALUES ($1,$2,'DOWNLOAD',$3)`,
           [req.params.id, req.auth?.userId ?? null, req.clientIp],
-        )
-        .catch(() => undefined);
+        ),
+        { detail: { documentId: req.params.id, requestId: req.requestId } },
+      );
 
       res.setHeader('content-type', document.content_type);
       res.setHeader(

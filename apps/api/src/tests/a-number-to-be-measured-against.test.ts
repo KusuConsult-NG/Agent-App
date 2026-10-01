@@ -614,3 +614,209 @@ describe('resolvePeriod', () => {
     return [iso(period.start), iso(period.end)];
   }
 });
+
+// ===========================================================================
+/**
+ * The hour when Jos is already tomorrow.
+ *
+ * `resolvePeriod` reads its boundaries off Plateau's calendar and says why:
+ * "the period somebody means is the period they are standing in". The figures
+ * measured against those boundaries were bucketed by the database session's
+ * zone, which is UTC. Nigeria keeps West Africa Time all year, UTC+1 with no
+ * daylight saving, so between 23:00Z and midnight the two disagree about the
+ * day — and on the last day of a month, about the month.
+ *
+ * What that cost: money collected in the first hour of a Plateau month was
+ * credited to the month that had just ended. Every new month opened
+ * understated and every old one closed overstated, on the figures an
+ * officer's performance is measured against and a forecast is built from.
+ *
+ * WHY THESE TESTS EXIST SEPARATELY FROM THE ONES ABOVE
+ *
+ * The suite found this by accident, by being run at 23:36Z on 30 September:
+ * three tests above failed because "this month" in Plateau was already
+ * October while the collections they made bucketed as September. Run at any
+ * other hour they pass. A defect visible for one hour in twenty-four is one
+ * CI will report as a flake and somebody will re-run until it goes away.
+ *
+ * So these do not ask what time it is. They put a collection at a known
+ * instant that falls on one side of midnight in UTC and the other side in
+ * Plateau, against a target for a month long past, and assert which month
+ * gets it. They fail in both directions before the fix and are the same
+ * every hour of the day.
+ */
+describe('a collection in the hour when UTC and Plateau disagree', () => {
+  const APRIL_START = '2026-04-01';
+  const APRIL_END = '2026-04-30';
+
+  /** A settled collection stamped at an exact instant. */
+  async function collectionAt(instant: Date, amountKobo: bigint): Promise<void> {
+    await query(
+      pool,
+      `INSERT INTO transactions (
+         transaction_reference, taxpayer_id, invoice_id, assessment_id, revenue_item_id,
+         lga_id, amount_kobo, total_amount_kobo, status, created_by, created_at, territory_id
+       )
+       SELECT 'TXN-TZ-' || gen_random_uuid()::text, t.taxpayer_id, t.invoice_id,
+              t.assessment_id, t.revenue_item_id, t.lga_id, $1, $1,
+              'SETTLED', t.created_by, $2, t.territory_id
+         FROM transactions t
+        WHERE t.status = 'SETTLED' ORDER BY t.created_at LIMIT 1`,
+      [amountKobo.toString(), instant],
+    );
+  }
+
+  /** April's row, with whatever the query credits to it. */
+  async function aprilRow(): Promise<Record<string, string>> {
+    await post(
+      '/government/targets',
+      {
+        scope: 'STATE',
+        periodKind: 'MONTHLY',
+        periodStart: APRIL_START,
+        periodEnd: APRIL_END,
+        amountKobo: '10000000',
+      },
+      auth('revenue_officer'),
+    );
+    const rows = await get(
+      `/government/targets?from=${APRIL_START}&to=${APRIL_END}`,
+      auth('admin'),
+    );
+    const row = (rows.body as Record<string, string>[]).find(
+      (candidate) => candidate.period_start.slice(0, 10) === APRIL_START,
+    );
+    assert.ok(row, 'April is in the list');
+    return row!;
+  }
+
+  it('counts one taken at 00:30 in Jos towards the month that just began', async () => {
+    // 2026-03-31T23:30:00Z is 2026-04-01T00:30 in Jos. An agent at a motor
+    // park has taken money on the first of April. It is April's.
+    await collect('1');
+    const baseline = BigInt((await aprilRow()).collected_kobo);
+
+    await collectionAt(new Date('2026-03-31T23:30:00Z'), 7_000_00n);
+
+    assert.equal(
+      BigInt((await aprilRow()).collected_kobo) - baseline,
+      7_000_00n,
+      'a collection taken in the first half-hour of April in Jos was left ' +
+        "out of April's figure, because its UTC date was still 31 March",
+    );
+  });
+
+  it('keeps one taken at 00:30 on 1 May out of April', async () => {
+    /*
+     * The same error in the other direction, and the one that makes a month
+     * look better than it was. 2026-04-30T23:30:00Z is 1 May in Jos, so it
+     * belongs to May — but its UTC date is 30 April, and April's window
+     * claimed it.
+     */
+    await collect('1');
+    const baseline = BigInt((await aprilRow()).collected_kobo);
+
+    await collectionAt(new Date('2026-04-30T23:30:00Z'), 9_000_00n);
+
+    assert.equal(
+      BigInt((await aprilRow()).collected_kobo) - baseline,
+      0n,
+      "a collection taken on 1 May in Jos was counted in April's figure, " +
+        'because its UTC date was still 30 April',
+    );
+  });
+
+  it('is not confused by an instant that is the same day in both zones', async () => {
+    // Most of the day is unambiguous, and must stay that way: noon on 15
+    // April is 15 April on either clock.
+    await collect('1');
+    const baseline = BigInt((await aprilRow()).collected_kobo);
+
+    await collectionAt(new Date('2026-04-15T12:00:00Z'), 5_000_00n);
+
+    assert.equal(
+      BigInt((await aprilRow()).collected_kobo) - baseline,
+      5_000_00n,
+      'a collection in the middle of an April day is no longer counted in April',
+    );
+  });
+});
+
+// ===========================================================================
+/**
+ * The other half of the same question, asked forwards.
+ *
+ * `periodComplete` asks whether a period has ended in Plateau and explains
+ * itself at length. `daysElapsed`, thirty lines above it, subtracted
+ * `periodStart` — a Plateau calendar date stored as a UTC midnight — from
+ * `Date.now()`, an instant. In the hour before UTC midnight those disagree by
+ * a day, so a forecast asked for the period Plateau is standing in came back
+ * with the period not yet started: basis INSUFFICIENT_HISTORY, no projection,
+ * for a month that already had money in it.
+ *
+ * THESE PASS AN EXPLICIT `now`, AND THE FIRST DRAFT OF THEM DID NOT
+ *
+ * Written first against a period months in the past, they asserted
+ * `days_elapsed === 30` — which is what the clamp returns whichever clock the
+ * subtraction uses, so they went green against the bug. Restoring
+ * `Date.now()` did not fail them. `forecast` now takes `now` for the same
+ * reason `resolvePeriod` takes an anchor: an hour-wide window cannot be
+ * tested by waiting for it.
+ */
+describe('how far into a period a forecast thinks it is', () => {
+  const APRIL = { periodStart: new Date(Date.UTC(2026, 3, 1)), periodEnd: new Date(Date.UTC(2026, 3, 30)) };
+
+  it('is one day in, half an hour after the month began in Jos', async () => {
+    // 23:30Z on 31 March is 00:30 on 1 April in Jos. April has begun where
+    // the taxpayers and the officers are, and one day of it has started.
+    const result = await forecast(pool, { ...APRIL, now: new Date('2026-03-31T23:30:00Z') });
+
+    assert.equal(
+      result.days_elapsed,
+      1,
+      'the first half-hour of April in Jos was reported as 0 days elapsed, ' +
+        'which is what suppresses the projection entirely',
+    );
+    assert.notEqual(
+      result.basis,
+      'INSUFFICIENT_HISTORY',
+      'a month that has begun and has money in it is not "not started"',
+    );
+  });
+
+  it('is not started an hour earlier, when it has not begun in Jos either', async () => {
+    // 22:30Z on 31 March is 23:30 on 31 March in Jos. April has not begun on
+    // either clock, and saying so is correct.
+    const result = await forecast(pool, { ...APRIL, now: new Date('2026-03-31T22:30:00Z') });
+
+    assert.equal(result.days_elapsed, 0);
+    assert.equal(result.basis, 'INSUFFICIENT_HISTORY');
+  });
+
+  it('holds the month open through the whole of its last day in Jos', async () => {
+    /*
+     * 22:30Z on 30 April is 23:30 on 30 April in Jos: the last day of the
+     * month, on which its late payers settle. A figure reported as final
+     * here is reported final while it can still move.
+     */
+    const result = await forecast(pool, { ...APRIL, now: new Date('2026-04-30T22:30:00Z') });
+
+    assert.equal(result.days_elapsed, 30);
+    assert.notEqual(
+      result.confidence,
+      'HIGH',
+      "April was reported closed during its own last day, with the " +
+        'confidence reserved for a figure that can no longer change',
+    );
+  });
+
+  it('closes it once Jos has crossed into the next month', async () => {
+    // 23:30Z on 30 April is 1 May in Jos. April is over; its actual is its
+    // forecast, and HIGH is the honest confidence.
+    const result = await forecast(pool, { ...APRIL, now: new Date('2026-04-30T23:30:00Z') });
+
+    assert.equal(result.days_elapsed, 30);
+    assert.equal(result.confidence, 'HIGH');
+    assert.equal(result.projected_kobo, result.collected_kobo);
+  });
+});

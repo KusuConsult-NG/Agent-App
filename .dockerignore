@@ -13,7 +13,20 @@ storage
 docs
 *.md
 !README.md
-apps/agent
-apps/portal
+# apps/agent and apps/portal are NOT excluded here, though the API images
+# never copy them.
+#
+# Excluding them was correct for the API image and fatal for the other two,
+# whose entire source lives there. `Dockerfile.agent.dockerignore` and
+# `Dockerfile.portal.dockerignore` were added to override this file for those
+# builds — but `<dockerfile>.dockerignore` is a BuildKit convention, and a
+# builder that does not implement it falls back to this file and fails on
+# `COPY apps/agent ./apps/agent` with "not found". GitHub Actions honours the
+# convention; Railway's Metal builder is a different implementation and
+# correctness should not rest on whether it agrees.
+#
+# Leaving them in costs the API build a larger context and nothing in the
+# shipped image: no Dockerfile here does a bare `COPY .`, so every image takes
+# only the paths it names. Checked before removing these two lines.
 **/*.test.ts
 **/*.test.tsx

@@ -23,6 +23,7 @@ import {
   validateQuery,
 } from '../middleware/validate';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
+import { bestEffort } from '../lib/best-effort';
 import { recordAudit, verifyAuditChain } from '../services/audit';
 import * as auth from '../services/auth';
 import * as agents from '../services/agents';
@@ -2662,9 +2663,14 @@ governmentRouter.post(
         'The result appears against each taxpayer as it is worked through.',
       );
     }
-    await pool
-      .query('SELECT pg_advisory_unlock($1, hashtext($2))', [LOCK_NAMESPACE.WORKER, lockName])
-      .catch(() => undefined);
+    await bestEffort(
+      'incentive.evaluation_unlock',
+      pool.query('SELECT pg_advisory_unlock($1, hashtext($2))', [
+        LOCK_NAMESPACE.WORKER,
+        lockName,
+      ]),
+      { level: 'error', detail: { programmeId } },
+    );
 
     res.status(202).json({
       programme: programme.name,
@@ -2675,12 +2681,12 @@ governmentRouter.post(
     });
 
     /*
-     * Deliberately not awaited, and every failure swallowed into the audit
-     * record rather than thrown: the response has already gone, so an
+     * Deliberately not awaited: the response has already gone, and an
      * unhandled rejection here would take the process down rather than reach
-     * anybody who could act on it.
+     * anybody who could act on it. `bestEffort` below is what keeps it from
+     * being silent as well as non-fatal.
      */
-    void withJobLock(lockName, async () => {
+    const pass = withJobLock(lockName, async () => {
       const taxpayerIds = await query<{ id: string }>(
         pool,
         `SELECT id FROM taxpayers WHERE status = 'ACTIVE' AND tin IS NOT NULL`,
@@ -2709,7 +2715,20 @@ governmentRouter.post(
           newValue: { evaluated, failed, considered: taxpayerIds.length },
         });
       });
-    }).catch(() => undefined);
+    });
+
+    /*
+     * error, and it covers the pass rather than only its audit row.
+     *
+     * The 202 has already gone out, so there is no caller left to tell and no
+     * request to fail: an exception anywhere in the evaluation above — not
+     * just in the record of it — used to end here in silence, leaving a
+     * programme half-evaluated with nothing anywhere saying so.
+     */
+    void bestEffort('incentive.bulk_evaluate', pass, {
+      level: 'error',
+      detail: { programmeId },
+    });
   }),
 );
 

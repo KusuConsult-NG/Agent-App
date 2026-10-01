@@ -13,6 +13,7 @@
 import { Pool, types, type PoolClient, type QueryResultRow } from 'pg';
 import { config } from '../config';
 import { log } from '../lib/logger';
+import { bestEffort } from '../lib/best-effort';
 
 // int8/BIGINT -> string. Losing precision on money would be silent otherwise.
 types.setTypeParser(types.builtins.INT8, (value) => value);
@@ -200,9 +201,22 @@ export async function withJobLock<T>(name: string, fn: () => Promise<T>): Promis
     try {
       return { ran: true, value: await fn() };
     } finally {
-      await client
-        .query('SELECT pg_advisory_unlock($1, hashtext($2))', [LOCK_NAMESPACE.WORKER, name])
-        .catch(() => undefined);
+      /*
+       * error, not warn. `client.release()` below returns the connection to
+       * the pool rather than closing it, and a session-level advisory lock
+       * outlives that — so an unlock that failed leaves the lock held on a
+       * pooled connection and every later run of this job takes the
+       * `{ ran: false }` branch and does nothing, quietly, for as long as the
+       * process lives.
+       */
+      await bestEffort(
+        `job.unlock.${name}`,
+        client.query('SELECT pg_advisory_unlock($1, hashtext($2))', [
+          LOCK_NAMESPACE.WORKER,
+          name,
+        ]),
+        { level: 'error', detail: { job: name } },
+      );
     }
   } finally {
     client.release();

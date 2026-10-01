@@ -42,7 +42,7 @@ import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { REVENUE_STATES_SQL } from '../lib/revenue-states';
-import { currentYearInPlateau, plateauParts } from '../lib/calendar-day';
+import { currentYearInPlateau, plateauParts, todayInPlateau } from '../lib/calendar-day';
 import { recordAudit } from './audit';
 import {
   scopeParams,
@@ -300,7 +300,32 @@ export async function targetProgress(
                FROM transactions t
                JOIN revenue_items rti ON rti.id = t.revenue_item_id
               WHERE t.status IN ${REVENUE_STATES_SQL}
-                AND t.created_at::date BETWEEN rt.period_start AND rt.period_end
+                /*
+                 * The day the money arrived in Plateau, not in UTC.
+                 *
+                 * resolvePeriod sets these boundaries from Plateau's
+                 * calendar, and says why: "the period somebody means is the
+                 * period they are standing in". A plain created_at::date
+                 * answered on the database session's zone, which is UTC, so
+                 * for the hour after Plateau midnight the two disagreed
+                 * about the day -- and at a month boundary, about the month.
+                 * A collection taken at 00:30 on 1 October fell outside
+                 * October's window and was counted in September's, so
+                 * October opened understated and September closed
+                 * overstated, on the very figures an officer's performance
+                 * is measured against.
+                 *
+                 * AT TIME ZONE 'Africa/Lagos' is the spelling used wherever
+                 * else this platform asks what day it was for the person --
+                 * fraud.ts, officer-inbox.ts -- and lib/calendar-day.ts
+                 * states the rule: name the zone rather than hope the
+                 * process carries it.
+                 *
+                 * (No backticks in here: this comment is inside a template
+                 * literal, and one closes the string.)
+                 */
+                AND (t.created_at AT TIME ZONE 'Africa/Lagos')::date
+                      BETWEEN rt.period_start AND rt.period_end
                 AND (rt.lga_id IS NULL OR t.lga_id = rt.lga_id)
                 AND (rt.category_id IS NULL OR rti.category_id = rt.category_id)
                 AND (rt.revenue_item_id IS NULL OR t.revenue_item_id = rt.revenue_item_id)
@@ -312,7 +337,12 @@ export async function targetProgress(
             -- month is not presented the same way as one on day 30.
             GREATEST(0, LEAST(
               (rt.period_end - rt.period_start) + 1,
-              (CURRENT_DATE - rt.period_start) + 1
+              -- Plateau's today, for the same reason as above: against a
+              -- period that opened at Plateau midnight, CURRENT_DATE was
+              -- still yesterday's date for an hour, so the elapsed count
+              -- came back negative on the opening day and the clamp below
+              -- turned it into 0.
+              (((now() AT TIME ZONE 'Africa/Lagos')::date - rt.period_start) + 1)
             )) AS days_elapsed,
             (rt.period_end - rt.period_start) + 1 AS days_in_period
        FROM revenue_targets rt
@@ -439,6 +469,20 @@ export async function forecast(
     lgaId?: string | null;
     categoryId?: string | null;
     revenueItemId?: string | null;
+    /*
+     * The instant to treat as now.
+     *
+     * `resolvePeriod` takes an anchor for the same reason and the tests
+     * already use it: the two places this function asks what day it is —
+     * how far into the period we are, and whether the period has closed —
+     * behave differently for one hour in twenty-four, the hour when Plateau
+     * has crossed midnight and UTC has not. A defect with a one-hour window
+     * is one CI reports as a flake, and it was found here by the suite
+     * happening to run at 23:36Z.
+     *
+     * Production never passes it.
+     */
+    now?: Date;
   },
   scope: ReportScope = { kind: 'STATEWIDE' },
 ): Promise<Forecast> {
@@ -452,11 +496,41 @@ export async function forecast(
   const day = 86_400_000;
   const daysInPeriod =
     Math.round((params.periodEnd.getTime() - params.periodStart.getTime()) / day) + 1;
+  /*
+   * TWO CALENDAR DATES, SUBTRACTED. NOT AN INSTANT MINUS A DATE.
+   *
+   * `periodStart` is a calendar date that `resolvePeriod` read off Plateau's
+   * calendar and then stored as a UTC midnight. `Date.now()` is an instant.
+   * Subtracting one from the other mixed the two: for the hour between 23:00Z
+   * and midnight, Plateau is already on the next day — already inside a period
+   * that begins tomorrow in UTC — and the difference came out NEGATIVE. So
+   * `daysElapsed` was 0, `notStarted` was true, and a forecast requested at
+   * 00:30 on 1 October in Jos reported the October period as not yet begun:
+   * basis INSUFFICIENT_HISTORY, no projection, for a month that was half an
+   * hour old and already had money in it.
+   *
+   * `periodComplete` below already asks this question in Plateau and says why
+   * at length. This is the same question at the other end of the period, and
+   * it was left in UTC.
+   *
+   * Both sides are now exact UTC midnights standing for calendar dates, so
+   * the quotient is a whole number and `floor` is only there to make that
+   * explicit. It used to matter for a different reason, worth keeping: with
+   * `Date.now()` on the left, `round` turned a part-day into a whole one, so
+   * the count reached `daysInPeriod` at midday on the second-to-last day and
+   * tipped the branch below into reporting the period finished a day and a
+   * half early; and it made the day *before* a period began read as one day
+   * in, because `Math.round(-0.5)` is `-0`.
+   *
+   * An hour of the afternoon is not a day. Being partway through day N means
+   * N days have begun, which is what the `+ 1` says.
+   */
+  const todayInPeriodTerms = new Date(`${todayInPlateau(params.now)}T00:00:00Z`).getTime();
   const daysElapsed = Math.max(
     0,
     Math.min(
       daysInPeriod,
-      Math.round((Date.now() - params.periodStart.getTime()) / day) + 1,
+      Math.floor((todayInPeriodTerms - params.periodStart.getTime()) / day) + 1,
     ),
   );
 
@@ -473,11 +547,27 @@ export async function forecast(
    * elapsed days equal to the period says exactly that, and saves every caller
    * a special case.
    */
-  if (daysElapsed >= daysInPeriod || daysElapsed <= 0) {
+  /*
+   * WHETHER THE PERIOD IS OVER IS A QUESTION ABOUT THE CALENDAR.
+   *
+   * It used to be inferred from the day count reaching `daysInPeriod`, which
+   * is true from the first minute of the last day — and day 30 of 30 is *in*
+   * the period. The whole of a month's final day, on which its late payers
+   * settle, was reported as a closed month with the confidence reserved for a
+   * figure that can no longer move.
+   *
+   * Asked in Plateau, not in UTC and not in whatever the server is set to: the
+   * hour between 23:00Z and midnight is already tomorrow in Jos, where the
+   * taxpayers and the officers are, and it is their month that is ending.
+   */
+  const periodComplete = todayInPlateau(params.now) > iso(params.periodEnd);
+  const notStarted = daysElapsed <= 0;
+
+  if (periodComplete || notStarted) {
     return withTarget(db, params, {
       is_forecast: true,
-      basis: daysElapsed <= 0 ? 'INSUFFICIENT_HISTORY' : 'RUN_RATE',
-      confidence: daysElapsed >= daysInPeriod ? 'HIGH' : 'LOW',
+      basis: notStarted ? 'INSUFFICIENT_HISTORY' : 'RUN_RATE',
+      confidence: notStarted ? 'LOW' : 'HIGH',
       period_start: iso(params.periodStart),
       period_end: iso(params.periodEnd),
       days_elapsed: daysElapsed,
@@ -488,8 +578,7 @@ export async function forecast(
       comparable_periods: 0,
       target_kobo: null,
       projected_achievement_bp: null,
-      explanation_key:
-        daysElapsed <= 0 ? 'forecastNotStarted' : 'forecastPeriodComplete',
+      explanation_key: notStarted ? 'forecastNotStarted' : 'forecastPeriodComplete',
     });
   }
 
@@ -637,7 +726,9 @@ async function collectedBetween(
        FROM transactions t
        JOIN revenue_items ri ON ri.id = t.revenue_item_id
       WHERE t.status IN ${REVENUE_STATES_SQL}
-        AND t.created_at::date BETWEEN $1 AND $2
+        -- Plateau's day, as in the listing query above. The windows passed
+        -- in here come from resolvePeriod, which works in Plateau's calendar.
+        AND (t.created_at AT TIME ZONE 'Africa/Lagos')::date BETWEEN $1 AND $2
         AND ($3::uuid IS NULL OR t.lga_id = $3)
         AND ($4::uuid IS NULL OR ri.category_id = $4)
         AND ($5::uuid IS NULL OR t.revenue_item_id = $5)

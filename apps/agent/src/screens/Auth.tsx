@@ -21,6 +21,13 @@ export function LoginScreen({
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  /*
+   * On by default, because that is what this app has always done and why:
+   * an agent whose phone restarts with no signal must be able to keep
+   * collecting, and signing in again needs the connection that is missing.
+   * The box exists so a borrowed or shared handset can say otherwise.
+   */
+  const [remember, setRemember] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
 
   async function submit(event: FormEvent) {
@@ -28,7 +35,7 @@ export function LoginScreen({
     setBusy(true);
     setError(null);
     try {
-      const session = await login(phone, password);
+      const session = await login(phone, password, remember);
       onSignedIn(session.user);
     } catch (caught) {
       setError(
@@ -79,6 +86,16 @@ export function LoginScreen({
           onChange={setPassword}
           required
         />
+
+        <label className="checkbox" style={{ marginTop: 4 }}>
+          <input
+            type="checkbox"
+            checked={remember}
+            onChange={(event) => setRemember(event.target.checked)}
+          />
+          <span>{t.authRememberMe}</span>
+        </label>
+        <p className="card__hint" style={{ marginTop: 4 }}>{t.authRememberMeHint}</p>
 
         <button type="submit" disabled={busy}>
           {busy ? <Spinner /> : null}

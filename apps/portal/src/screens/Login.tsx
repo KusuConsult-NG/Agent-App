@@ -12,6 +12,13 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [wrongApp, setWrongApp] = useState(false);
+  /*
+   * Unticked, always, and never remembered between visits.
+   *
+   * Persisting the preference would defeat it: a shared desk would carry
+   * the last officer's choice to the next one, who did not make it.
+   */
+  const [remember, setRemember] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -19,7 +26,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
     setError(null);
     setWrongApp(false);
     try {
-      const session = await login(phone, password);
+      const session = await login(phone, password, remember);
 
       /*
        * A field agent has valid credentials and no business here.
@@ -122,6 +129,18 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
               {shown ? t.uiHide : t.uiShow}
             </button>
           </div>
+        </div>
+
+        <div className="field">
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(event) => setRemember(event.target.checked)}
+            />
+            <span>{t.ofcLoginRememberMe}</span>
+          </label>
+          <p className="muted">{t.ofcLoginRememberMeHint}</p>
         </div>
 
         <button type="submit" disabled={busy} style={{ width: '100%', justifyContent: 'center' }}>

@@ -2523,6 +2523,8 @@ export interface TranslationDictionary {
   ofcLoginPhone: string;
   ofcLoginPassword: string;
   ofcLoginMonitored: string;
+  ofcLoginRememberMe: string;
+  ofcLoginRememberMeHint: string;
   ofcLoginWrongPlace: string;
   ofcLoginSignInWorked: string;
   ofcLoginUseAgentApp: string;
@@ -3144,6 +3146,8 @@ export interface TranslationDictionary {
   grpNoAssessment: string;
   authSignInTitle: string;
   authSignIn: string;
+  authRememberMe: string;
+  authRememberMeHint: string;
   authPhoneHint: string;
   authPassword: string;
   authApply: string;
@@ -6159,6 +6163,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLoginPhone: "Phone number",
     ofcLoginPassword: "Password",
     ofcLoginMonitored: "Access is monitored. Every action you take is recorded in the audit log.",
+    ofcLoginRememberMe: "Stay signed in on this computer",
+    ofcLoginRememberMeHint: "Only on a computer that is yours. On a shared desk, leave this off so closing the browser signs you out.",
     ofcLoginWrongPlace: "Your account belongs to the agent app",
     ofcLoginSignInWorked: "Your sign-in worked — you are simply in the wrong place.",
     ofcLoginUseAgentApp: "Field agents collect revenue in the PSIRS agent app, which works offline and holds your taxpayers, assessments and commission. This portal is for revenue, finance and oversight officers.",
@@ -6713,6 +6719,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     grpNoAssessment: "This does not assess anybody",
     authSignInTitle: "Sign in to continue",
     authSignIn: "Sign in",
+    authRememberMe: "Stay signed in on this phone",
+    authRememberMeHint: "Keeps you signed in when the app is closed, so you can keep collecting where there is no signal. Turn it off on a phone you share.",
     authPhoneHint: "Use the phone number you registered with PSIRS.",
     authPassword: "Password",
     authApply: "Apply to become an agent",
@@ -9632,6 +9640,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLoginPhone: "Lambar waya",
     ofcLoginPassword: "Kalmar sirri",
     ofcLoginMonitored: "Ana sa ido kan shiga. Ana rubuta duk abin da ka yi a rajistar bincike.",
+    ofcLoginRememberMe: "Ka ci gaba da kasancewa a shiga a wannan kwamfuta",
+    ofcLoginRememberMeHint: "Sai a kwamfutar da ke naka. A teburin da ake raba shi, ka bar wannan a kashe don rufe burauza ya fitar da kai.",
     ofcLoginWrongPlace: "Asusunka na manhajar wakilai ne",
     ofcLoginSignInWorked: "Shigarka ta yi aiki — kawai ba wurin da ya dace ba ne.",
     ofcLoginUseAgentApp: "Wakilan filin aiki suna karbar haraji a manhajar wakilai ta PSIRS, wadda ke aiki ba tare da layi ba kuma tana rike da masu biyan harajinka, kimarka da kwamishan dinka. Wannan shafin na jami’an haraji, kudi da sa ido ne.",
@@ -10186,6 +10196,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     grpNoAssessment: "Wannan ba ya sanya wa kowa haraji",
     authSignInTitle: "Shiga domin ci gaba",
     authSignIn: "Shiga",
+    authRememberMe: "Ka ci gaba da kasancewa a shiga a wannan waya",
+    authRememberMeHint: "Yana sa ka ci gaba da kasancewa a shiga idan an rufe manhajar, don ka ci gaba da aiki inda babu sigina. Ka kashe shi a wayar da kake rabawa.",
     authPhoneHint: "Ka yi amfani da lambar wayar da ka yi rajista da ita a PSIRS.",
     authPassword: "Kalmar sirri",
     authApply: "Nemi zama wakili",

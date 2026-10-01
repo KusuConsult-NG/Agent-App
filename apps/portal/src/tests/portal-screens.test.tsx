@@ -58,7 +58,12 @@ describe('1. Government Portal Authentication UI', () => {
     fireEvent.change(passInput, { target: { value: 'Password123' } });
     fireEvent.click(submitBtn);
 
-    expect(loginSpy).toHaveBeenCalledWith('08000000001', 'Password123');
+    // The third argument is the "stay signed in" choice, and it must be false
+    // unless an officer ticked the box. A shared government workstation is the
+    // case this has to be safe for, so the default is asserted here as well as
+    // in the client: a screen that quietly passed true would leave a durable
+    // credential on a desk anyone can sit at.
+    expect(loginSpy).toHaveBeenCalledWith('08000000001', 'Password123', false);
   });
 });
 

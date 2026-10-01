@@ -19,6 +19,7 @@ import { tinService } from '../integrations';
 import { recordAudit } from './audit';
 import { scopeParams, type ReportScope } from './report-scope';
 import { likeContains } from '../lib/like';
+import { phoneLookupForms } from '../lib/phone';
 import { queueNotification } from './notifications';
 
 export interface TaxpayerInput {
@@ -805,7 +806,7 @@ export async function searchTaxpayers(
   };
 
   if (params.tin) add('t.tin = $$', params.tin.trim());
-  if (params.phone) add('t.phone = $$', params.phone.trim());
+  if (params.phone) add('t.phone = ANY($$::text[])', phoneLookupForms(params.phone));
   if (params.lgaId) add('t.lga_id = $$', params.lgaId);
 
   if (params.vehicleRegistration) {

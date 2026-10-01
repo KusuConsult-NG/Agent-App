@@ -5,8 +5,19 @@ How this platform is built, shipped, migrated and rolled back.
 ## The artefact
 
 One image, built by the root `Dockerfile`, containing the API and nothing else.
-The agent PWA and the government portal are static builds served from a CDN or
-any static host; they are excluded from the image by `.dockerignore`.
+The agent PWA and the government portal are static builds; they are excluded
+from that image by `.dockerignore`, and each has its own image that serves its
+`dist` from nginx — `Dockerfile.agent` and `Dockerfile.portal`. Any static host
+or CDN will serve them equally well, and the nginx images exist so that a
+platform which deploys containers has something to deploy. See **Railway**
+below for the shape currently in use.
+
+There is a fourth Dockerfile, `Dockerfile.api`, which builds the API too and is
+**not** what is deployed. It is a different image from the root one — alpine
+rather than bookworm-slim, a different `WORKDIR`, its own `ENV PORT` and
+`STORAGE_PATH`, and no `backup.sh`/`restore.sh` — so the two are not
+interchangeable, whatever the file names suggest. If you are pointing a service
+at an API Dockerfile, the answer is `Dockerfile`.
 
 The image is multi-stage: the shipped layer carries no compiler, no test suite
 and no dev dependencies. It runs as the `node` user, never root, and writes
@@ -193,11 +204,354 @@ Recommended shape:
         object storage (documents, backups, versioned)
 ```
 
+## Railway
+
+Three services off one repository, which is the part that is not obvious from
+the repository itself:
+
+| Service | Dockerfile | Serves | Port |
+|---|---|---|---|
+| `agent-app` | `Dockerfile` | the API | as the image sets it |
+| `agent-pwa` | `Dockerfile.agent` | the agent PWA, via nginx | 80 |
+| `portal` | `Dockerfile.portal` | the officer and verification portal, via nginx | 80 |
+
+Or **two**, with both front ends on one hostname — see *One URL for both
+apps* below. That is the arrangement to prefer for a demo or a pilot, because
+it is one address to publish rather than two.
+
+**Each service's Dockerfile path has to be set explicitly, and a new service
+will not work until it is.** Railway looks for a file named exactly
+`Dockerfile`; finding none it falls back to Railpack, which tries to infer a
+build from the root `package.json`, and on a workspace root with no build of
+its own that fails at prepare:
+
+```
+using build driver railpack-v0.40.1
+railpack prepare exited with an error
+```
+
+That error names the builder and not the cause, so it reads like a broken
+monorepo. It means only that the service is still on the default builder. Per
+service: **Settings → Build → Build Method `Dockerfile`**, then **Dockerfile
+Path** set to the file from the table above. The API service works without this
+step for one reason — its Dockerfile is the one already called `Dockerfile`.
+
+A service also needs a repository connected before it can deploy at all
+(**Settings → Source**); one created as an empty placeholder has no code to
+snapshot, and says so as `Failed to create code snapshot`, which is the same
+sentence Railway uses for a half-finished upload. The two causes are worth
+telling apart: no source, or a failed `railway up` being retried. For the
+second, deploy from the repository rather than re-running the failed upload.
+
+### The front-ends assume they share an origin with the API
+
+Both clients hardcode their API base and it is a **relative** path:
+
+```ts
+const API_BASE = '/api/v1';    // apps/agent/src/lib/api.ts, apps/portal/src/lib/api.ts
+```
+
+That is deliberate, and `apps/agent/vite.config.ts` says why beside the dev
+proxy that makes it work locally: *"The PWA and API share an origin in
+production; the dev proxy keeps cookies, CSP and CORS behaviour the same in
+development."* The refresh-token cookie, the CSP and the absence of any CORS
+preflight all rest on it.
+
+**Deploying the three as separate services breaks that assumption, and neither
+nginx config restores it.** `Dockerfile.agent` and `Dockerfile.portal` define
+`location /assets/`, `location /` and (in the agent) `location = /sw.js` — and
+no `location /api/` with a `proxy_pass`. A request for `/api/v1/auth/login`
+therefore falls through to `try_files $uri $uri/ /index.html` and is answered
+with `index.html`: HTTP 200, `Content-Type: text/html`. Every call fails at
+`response.json()`, so both front-ends load their shell and nothing in them
+works, sign-in included.
+
+`VITE_API_URL` does not help, because nothing reads it. The only build-time
+variable either client consults is `VITE_VERIFICATION_BASE_URL`
+(`apps/agent/src/lib/verification-url.ts`), which is the host printed on a
+receipt, not the host the app calls. Setting `VITE_API_URL` on a service is
+inert.
+
+### How it is closed: both nginx images proxy `/api`
+
+Each front-end image now serves `/api/` by proxying to the API, so the origin
+the client assumes is the origin it gets. Nothing in either client changed, and
+neither did CORS, the CSP or the cookie — which is the point of fixing it on
+this side rather than the other.
+
+Set **`API_ORIGIN`** on each front-end service to the API's `host:port` on the
+private network:
+
+```
+API_ORIGIN=agent-app.railway.internal:4000
+```
+
+It is read at **container start**, not at build time, so changing it needs a
+restart rather than a rebuild — the opposite of `VITE_VERIFICATION_BASE_URL`,
+which Vite bakes into the bundle. The config ships as
+`/etc/nginx/templates/<app>.conf.template` and the nginx image's own
+`20-envsubst-on-templates.sh` substitutes it. `NGINX_ENVSUBST_FILTER=API_ORIGIN`
+limits that substitution to the one name, because every nginx variable in the
+file — `$uri`, `$host`, `$proxy_add_x_forwarded_for` — is `$name`-shaped and
+envsubst cannot otherwise tell them apart from its own.
+
+**There is no default, and the container refuses to start without it.**
+`/docker-entrypoint.d/05-require-api-origin.sh` exits 1 with a sentence saying
+what to set. Left to nginx, an empty value becomes `proxy_pass http://;` and
+the error is `no host in upstream ""` against a line number; any default value
+would be a wrong host serving a shell where nothing works, which is the failure
+this section exists to end.
+
+Two details in the proxy that are load-bearing:
+
+- **No trailing slash on `proxy_pass`.** The API mounts its own routes at
+  `/api/v1` (`app.use('/api/v1', api)`), so the URI has to pass through
+  unchanged rather than be rewritten.
+- **`client_max_body_size 12m`.** A KYC document is a photograph of an ID card
+  and the API accepts up to 8 MB of one (`MAX_DOCUMENT_BYTES`). nginx defaults
+  to 1 MB and refuses a 2 MB upload with its own 413 before the API sees it —
+  measured, and it would have been a new bug introduced by adding the proxy.
+  The limit sits above the API's own so that an oversized document is refused
+  by the API, in the sentence it wrote for the agent holding the phone.
+
+Verified against real nginx rather than reasoned about, using the template text
+extracted from the Dockerfiles and the image's own envsubst step:
+
+| | `GET /api/v1/ping` | SPA deep route | 2 MB POST |
+|---|---|---|---|
+| without the proxy block | `200 text/html`, body is the shell | `200 text/html` | — |
+| as shipped | `200 application/json` | `200 text/html` | not 413 |
+
+### The config is rendered as `default.conf`, and that is the point
+
+Each image writes `/etc/nginx/templates/default.conf.template`, so the
+image's own `20-envsubst-on-templates.sh` renders it to
+`/etc/nginx/conf.d/default.conf` — **overwriting** the stock file nginx ships.
+
+It used to render as `<app>.conf` beside that stock file, with a build-time
+`rm -rf /etc/nginx/conf.d/default.conf` expected to have removed it. On the
+deployed container it had not been: the image's own
+`10-listen-on-ipv6-by-default.sh` found and edited that path at startup, which
+it only does when the file exists. Why the `rm` did not take is unexplained;
+rendering as `default.conf` makes it irrelevant, because envsubst overwrites
+whatever is at that path.
+
+What it cost while there were two files is worth stating plainly, because it
+was silent. Both server blocks listened on the same port with
+`server_name localhost`, so nginx logged
+
+```
+conflicting server name "localhost" on 0.0.0.0:80, ignored
+```
+
+kept the first — the stock one, which has no `/api/` proxy — and answered
+every API call with a static file lookup:
+
+```
+open() "/usr/share/nginx/html/api/v1/health" failed (2: No such file or directory)
+"HEAD /api/v1/health HTTP/1.1" 404
+```
+
+So the proxy the image exists to provide was not in effect, while the
+container started cleanly, the deployment reported success, and the SPA shell
+loaded. Reproduced against real nginx byte for byte, before the rename and
+after: two blocks give `404 text/html`, one gives `200 application/json`.
+
+`server_name _` rather than `localhost` for the same reason — the Host header
+is the platform's public hostname, so `localhost` matched nothing and worked
+only by being the sole block — and `listen ${PORT} default_server` says so
+explicitly rather than leaving it to file ordering.
+
+### The port is the platform's to choose
+
+Both nginx images take their listen port from **`PORT`**, defaulting to 80.
+
+`listen 80` was hardcoded, which works only where the platform is told to
+route to 80. Railway's convention is to inject `PORT` and expect the process
+to honour it, and an image listening elsewhere is reached by nothing: the
+deployment succeeds, the service is marked healthy, and the edge answers
+**"Application failed to respond"** to every request. That failure looks like
+a broken application and is a disagreement about a number.
+
+The default lives in `/docker-entrypoint.d/10-default-port.envsh`, and the
+extension matters: the nginx entrypoint **sources** files ending `.envsh` and
+**executes** files ending `.sh` in a subshell, so an `export` from a `.sh`
+would not survive to `20-envsubst-on-templates.sh`, which is what needs to
+see it. `NGINX_ENVSUBST_FILTER` admits both `API_ORIGIN` and `PORT`.
+
+Verified against real nginx using the image's own envsubst semantics: with
+`PORT=8085` the config binds 8085, serves the SPA, still proxies `/api/v1`,
+and leaves nothing on 80; with `PORT` unset it binds 80.
+
+### One thing still to confirm on the deployed chain
+
+`TRUST_PROXY` makes the API `app.set('trust proxy', 1)` — one trusted hop.
+Routing API calls through the front-end nginx adds a hop, so `req.clientIp`
+may now resolve to the proxy rather than the citizen. That matters more than it
+sounds: it is the key for every `keyBy: 'ip'` rate limit, including the two
+deliberate enumeration thresholds on the public citizen lookup, and it is what
+the audit log records as the address a lookup came from.
+
+This cannot be checked from a laptop, because it depends on how many hops the
+platform's own edge adds. Check it in one request after deploying — hit the
+public citizen lookup, then read the row it writes:
+
+```sql
+SELECT lookup_type, result, ip_address, created_at
+  FROM verification_attempts
+ ORDER BY created_at DESC
+ LIMIT 1;
+```
+
+If `ip_address` is an internal address rather than the caller's, the hop count
+is wrong and `TRUST_PROXY` needs to match the real chain.
+
+`.railwayignore` keeps the CLI upload to about 10 MB of the 43 MB tracked tree,
+by leaving out `docs/` — several hundred UAT screenshots that no image copies.
+Without it the upload can time out, and the retry reports the snapshot error
+above. It has no effect on a deploy triggered from GitHub, which clones.
+
+## One URL for both apps
+
+`Dockerfile.web` builds both front ends and serves them from one origin:
+
+| Path | Serves |
+|---|---|
+| `/` | the agent PWA |
+| `/portal/` | the officer portal, and with it `/verify`, `/referee`, `/group-attestation` and `/citizen` |
+| `/api/` | proxied to the API service, exactly as the single-app images do |
+
+**"Verify" is not a separate application.** It is a route the portal resolves
+before authentication, along with the referee, group-attestation and citizen
+screens — see the public routes at the top of `apps/portal/src/App.tsx`. All
+four ship inside the portal bundle. There is no fourth thing to deploy.
+
+### Switching to it
+
+One service instead of two:
+
+1. On the `agent-pwa` service, set **Settings → Build → Dockerfile Path** to
+   `Dockerfile.web`.
+2. Leave `API_ORIGIN` as it is. The image refuses to start without it, for the
+   same reason the single-app images do.
+3. **Set `VERIFICATION_BASE_URL` on the API service to the new portal path.**
+   This is the step with consequences, and the next section is about it.
+4. Delete the `portal` service, or leave it running on its own hostname. Both
+   work; nothing in the combined image depends on it being gone.
+
+`Dockerfile.agent` and `Dockerfile.portal` are unchanged and still build. This
+is opted into, not migrated to.
+
+### `VERIFICATION_BASE_URL`, which is the one that bites
+
+```
+VERIFICATION_BASE_URL=https://<your-host>/portal
+```
+
+Everything the platform ever hands to someone outside government is derived
+from this one setting, through `apps/api/src/lib/public-urls.ts`: the QR code
+and printed code on every receipt and certificate, a referee's invitation, a
+cooperative chairman's attestation link, and the SMS telling a taxpayer what
+they owe. Leave it pointing at the bare host and all four land on the agent
+app's sign-in form — which renders perfectly, so nothing looks like an error.
+A citizen scanning the QR on their receipt is simply shown a staff login.
+
+Receipts already printed carry the old URL on them and cannot be corrected, so
+this is worth getting right before anything is issued.
+
+`portalOrigin()` strips a trailing slash and a trailing `/verify`, so
+`.../portal`, `.../portal/` and `.../portal/verify` all resolve the same way.
+`PUBLIC_PORTAL_URL`, if it is set at all, needs the same subpath.
+
+### Why the portal is built differently in this image
+
+Vite writes absolute asset URLs into `index.html`. Built normally the portal's
+names `/assets/index-<hash>.js` and `/icon.svg`; served under `/portal/` every
+one of those is a 404 at the root, answered by the agent's SPA fallback with
+the agent's shell — 200, `text/html` — so the page is blank and the console
+says only that a module had the wrong MIME type. The image therefore builds it
+with `--base=/portal/`, on the command line rather than in `vite.config.ts`, so
+the same source still builds for `/` in `Dockerfile.portal` and in
+`npm run dev`.
+
+Two things that cost nothing, and are worth knowing why:
+
+- The portal is a **hash router** by deliberate choice
+  (`apps/portal/src/router.tsx`: "so a static host serves every route from one
+  file with no rewrite rules to get wrong"). The part after `#` never reaches
+  nginx, so `/portal/#/verify/ABC` is one request for `/portal/` and there are
+  no per-route rewrite rules to write.
+- The two apps' **storage keys do not collide**, which matters now that they
+  share an origin. The agent owns `psirs.refresh`, `psirs.user`,
+  `psirs.session.expires` and `psirs.device.id`; the portal namespaces its own
+  as `psirs.portal.*` and `psirs.filters.*`. Signing into one does not disturb
+  the other.
+
+### The agent's service worker, which does not leave the portal alone by itself
+
+The worker registers with scope `/` because the agent is the root app, so
+every portal request passes through it, and every branch of it was written for
+an origin with one application on it:
+
+- the navigation branch caches whatever HTML came back under the literal key
+  `/index.html`, so one officer opening the portal on a handset that also
+  carries the agent app replaces the agent's offline shell with a government
+  sign-in page — which the agent then opens, next time it loses signal, with
+  no way out;
+- the static branch falls back to that same key on any miss, so a portal asset
+  fetched with no connection comes back 200 as HTML and the portal dies
+  parsing it.
+
+`sw.js` excludes `/portal/` for both reasons, and `VERSION` is bumped so a
+handset carrying the old worker installs the new one and `activate` clears the
+caches it no longer owns. `apps/agent/src/tests/an-application-that-could-not-update.test.ts`
+runs the real file against a mocked worker global and holds it to this.
+
+### One thing this does not solve
+
+The agent's manifest declares `"scope": "/"`, and there is no exclusion in the
+manifest format. Where the agent PWA is installed and the browser is
+configured to capture links for it, a `/portal/` link can open inside the
+agent's standalone window — chromeless, no address bar. Officers work in a
+desktop browser and will not normally have the PWA installed, so the overlap
+is narrow, but it is real and there is no fix short of moving the agent off
+the root, which would orphan every handset that already installed it from `/`.
+
+### Verified
+
+Measured against real nginx with both apps' real build output in place, rather
+than inferred from nginx's matching rules:
+
+| Request | Answer |
+|---|---|
+| `/`, `/nonexistent-route` | the agent shell |
+| `/portal/`, `/portal/nonexistent-route` | the portal shell |
+| `/portal` | 301 to `/portal/` |
+| `/portals-of-jos` | the agent shell — the prefix is precise |
+| `/api/v1/health` | `200 application/json`, from the API |
+| `/api/v1/documents/abc.png` | `200 application/json` — see below |
+
+Both apps then booted in Chromium from that one origin with zero failed
+requests and zero console errors, and the public verify screen rendered at
+`/portal/#/verify/<code>`. Chromium reported no manifest errors and every
+install criterion met, so the agent app is still installable from the shared
+origin.
+
+That `.png` row is a fault found while measuring this, and fixed in all three
+images. `location /api/` was written without `^~`. nginx tries regex locations
+before a prefix match unless the prefix carries `^~`, so any API path ending
+in an image extension matched the icon block instead and was looked up on
+disk: `GET /api/v1/documents/abc.png` returned `404 text/html`. No such route
+exists today, which is why nothing had broken — it was a trap, not a fault,
+and the first signed document URL or QR endpoint carrying an extension would
+have fallen into it with the cause three locations away from the symptom.
+
 ## Going live
 
 - [ ] Secrets provisioned in the secret manager, none of them a development value
 - [ ] Every integration pointed at a real provider **and its mapping confirmed against that provider's sandbox** — see `docs/INTEGRATION-VERIFICATION.md`
 - [ ] `VERIFICATION_BASE_URL` set to the real portal, over HTTPS — this is printed onto every receipt and cannot be corrected afterwards
+- [ ] If both front ends share one origin (`Dockerfile.web`), `VERIFICATION_BASE_URL` carries the `/portal` subpath — see *One URL for both apps*. Without it every receipt QR code points at the agent app's sign-in form, and a printed receipt cannot be recalled
 - [ ] DNS and TLS certificates for the API, the portal and the agent PWA
 - [ ] `CORS_ORIGINS` set to the real portal and PWA origins
 - [ ] Webhook URL registered with Remita, and its source addresses allowlisted

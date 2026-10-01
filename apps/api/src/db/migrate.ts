@@ -9,6 +9,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { bestEffort } from '../lib/best-effort';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from '../config';
@@ -58,9 +59,13 @@ export async function runMigrations(options: { silent?: boolean } = {}): Promise
     await client.query('SELECT pg_advisory_lock($1, $2)', [LOCK_NAMESPACE.MIGRATION, 0]);
     return await applyMigrations(options);
   } finally {
-    await client
-      .query('SELECT pg_advisory_unlock($1, $2)', [LOCK_NAMESPACE.MIGRATION, 0])
-      .catch(() => undefined);
+    // error: the same stuck-lock hazard as `withJobLock`, on the lock every
+    // boot queues behind. A later instance would wait on it rather than start.
+    await bestEffort(
+      'migration.unlock',
+      client.query('SELECT pg_advisory_unlock($1, $2)', [LOCK_NAMESPACE.MIGRATION, 0]),
+      { level: 'error' },
+    );
     client.release();
   }
 }
