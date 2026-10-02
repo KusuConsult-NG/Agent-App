@@ -1136,7 +1136,14 @@ export function BankChangesCard() {
                         ? t.ofcAgTheAgent
                         : t.ofcAgAnOfficer.replace(
                             '{{role}}',
-                            change.requestedByRole ?? t.ofcAgUnknownRole,
+                            // Roles are stored as `finance_officer` and have had
+                            // dictionary entries all along, so a Hausa reader was
+                            // getting "Wani jami'i (finance_officer)". Found by
+                            // the guard, not by me: my own grep for this missed
+                            // it because the substitution is spread over lines.
+                            change.requestedByRole
+                              ? enumLabel(change.requestedByRole, t)
+                              : t.ofcAgUnknownRole,
                           ),
                     ],
                     [t.ofcRhRequested, formatDateTime(change.requestedAt)],
@@ -1177,9 +1184,22 @@ export function BankChangesCard() {
                           );
                           return result.verified
                             ? t.ofcAgTheBankConfirmedThe
-                            : t.ofcAgBankStillNotConfirmed.replace(
+                            : /*
+                               * The provider's verdict, through the dictionary.
+                               *
+                               * It was `result.outcome.toLowerCase()`, so a
+                               * Hausa-reading officer read "Banki bai tabbatar
+                               * da shi ba har yanzu (mismatch)." The three
+                               * verdicts this branch can show are MISMATCH,
+                               * NOT_FOUND and UNAVAILABLE; two had labels and
+                               * MISMATCH had none, because the outcome is a
+                               * TypeScript union inside the API rather than a
+                               * CHECK constraint or a shared list — so neither
+                               * half of `every-state-has-a-name` could see it.
+                               */
+                              t.ofcAgBankStillNotConfirmed.replace(
                                 '{{outcome}}',
-                                result.outcome.toLowerCase(),
+                                enumLabel(result.outcome, t),
                               );
                         })
                       }

@@ -255,6 +255,7 @@ export const ENUM_LABELS: Record<string, keyof TranslationDictionary> = {
   "MICRO": 'enumMicro',
   "MIGRATION": 'enumMigration',
   "MINING": 'enumMining',
+  "MISMATCH": 'enumMismatch',
   "MISSING_PAYMENT": 'enumMissingPayment',
   "MISSING_PLATFORM_TRANSACTION": 'enumMissingPlatformTransaction',
   "MONTHLY": 'enumMonthly',

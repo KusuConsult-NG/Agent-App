@@ -446,7 +446,21 @@ export function GroupScreen({ groupId }: { groupId: string }) {
       {!active && (
         <Alert kind="info" title={t.grpWaitingOfficer}>
           <p style={{ margin: 0 }}>
-            {t.grpNotActiveYet.replace('{{status}}', group.status.toLowerCase())}
+            {/*
+              * `readable`, not `.toLowerCase()`.
+              *
+              * This sentence is translated and the state inside it was not, so
+              * a Hausa-reading agent read "Wannan kungiya tana pending." —
+              * an English word, lowercased so it was not even the token, in
+              * the middle of a Hausa sentence. The block only renders when the
+              * group is PENDING or SUSPENDED, both of which have had Hausa in
+              * the dictionary all along, so it was never once right.
+              *
+              * `readable` is three lines up this file and is a wrapper around
+              * `enumLabel` that exists for exactly this. It is used elsewhere
+              * on this screen; this call site walked past it.
+              */}
+            {t.grpNotActiveYet.replace('{{status}}', readable(group.status, t))}
           </p>
         </Alert>
       )}

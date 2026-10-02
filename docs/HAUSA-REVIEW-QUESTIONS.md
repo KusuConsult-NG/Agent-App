@@ -1,6 +1,6 @@
 # Hausa review: everything still waiting on a decision
 
-`HAUSA-REVIEW.md` carries all 3,430 dictionary strings, and most of its length
+`HAUSA-REVIEW.md` carries all 3,431 dictionary strings, and most of its length
 is those tables. The open questions are scattered through seven sections of the
 prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
@@ -34,7 +34,7 @@ about field staff. Counting says otherwise:
 | The agent app | 243 |
 | The officer portal | 147 |
 | Citizens, referees and group leaders | 43 |
-| **Total** | **433** of 3,430 |
+| **Total** | **433** of 3,431 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
@@ -411,7 +411,7 @@ roll. If any correction you make runs long, that test will say so rather than
 the receipt.
 
 **And `scanHelp` was not the only dead string in this table.** Checking it
-raised the obvious next question, so it was measured: **43 of the 3,430 keys
+raised the obvious next question, so it was measured: **43 of the 3,431 keys
 are never named anywhere outside the dictionary**, and four of them are in the
 table above — `statusOffline`, `offlineMessage`, `statusFailed`, and
 `civicDutyThanks`, the one the `Mungode` typo was in. Three of the four
@@ -475,6 +475,15 @@ saita`**, which is a draft and wants your eye.
 `2026-09-08 – 2027-09-08` rather than spelling the months, because a period is
 a span, it sits beside a window line already written that way, and two spelt-out
 months is more than the row can carry. Say if you would rather see them.
+
+**4.7 — `Bai dace ba` for a bank verdict that does not match.** The bank
+verification provider answers VERIFIED, MISMATCH, NOT_FOUND or UNAVAILABLE.
+Three had Hausa; MISMATCH had no entry at all, because it is a TypeScript union
+inside the API rather than a database constraint, so the check that reads states
+out of the schema could not see it. An officer reading Hausa was told "Banki bai
+tabbatar da shi ba har yanzu (mismatch)". It now reads `Bai dace ba`, following
+the `bai dace ba` already in three strings. If a verdict about a *name* should
+say so — the account name is what did not match — that is a reading decision.
 
 **4.6 — Five labels for who read a taxpayer's record.** The platform now
 records who opened a person's record and what they were shown, and the auditor's

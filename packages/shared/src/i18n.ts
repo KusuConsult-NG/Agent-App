@@ -334,6 +334,7 @@ export interface TranslationDictionary {
   monNov: string;
   monDec: string;
   enumAssigned: string;
+  enumMismatch: string;
   enumTinAssigned: string;
   enumAttested: string;
   enumAuditor: string;
@@ -4272,6 +4273,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumMatched: "Matched",
     enumMedium: "Medium",
     enumMerged: "Merged",
+    enumMismatch: "Does not match",
     enumMigration: "Migration",
     enumMining: "Mining",
     enumMissingPayment: "Payment missing",
@@ -7781,6 +7783,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumMatched: "Ya dace",
     enumMedium: "Matsakaici",
     enumMerged: "An hade",
+    enumMismatch: "Bai dace ba",
     enumMigration: "Canja bayanai",
     enumMining: "Hakar ma’adinai",
     enumMissingPayment: "Babu biyan kudi",
