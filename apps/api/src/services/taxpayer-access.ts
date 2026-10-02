@@ -96,10 +96,21 @@ export function recordTaxpayerAccess(params: {
       ],
     ),
     {
-      // `error`, not `warn`. A missing row in an access log is not recoverable
-      // later and not detectable from anywhere else: the evidence is simply
-      // absent, and the question it answers is asked months afterwards.
-      level: 'error',
+      // `warn`, the module default, and this is a correction: these two sites
+      // were the only `bestEffort` calls in the service that reported a lost
+      // record at `error`. The reason given was that a missing row in an
+      // access log is not recoverable later and not detectable from anywhere
+      // else, which is true — and is true of every record in this module's
+      // care. `document_access.record`, the log of who read the receipt book,
+      // is one insert of the same kind and reports at `warn`.
+      //
+      // The line `best-effort.ts` draws is whether the failure *compounds*,
+      // not how much the record matters: `error` is for a held advisory lock
+      // that stops every later run of a job, and a background pass with no
+      // caller left to tell. Neither of these is that. Levelling an audit
+      // insert at `error` instead buys nothing and costs the alerting: an
+      // unreachable database pages somebody once a minute per surface, and
+      // that is how the next real error gets scrolled past.
       detail: {
         taxpayerId: params.taxpayerId,
         surface: params.surface,
@@ -129,10 +140,10 @@ export type SearchFilters = Record<string, string | number | boolean>;
  * discloses more than the record read that was logged: per match it answers
  * TIN, name, business name, phone, email, address, community, LGA and ward.
  *
- * Best-effort at `error` level, like the record log. A search that could not be
- * logged still answers, because refusing to let an officer look somebody up
- * because a log is down helps nobody — but a missing row here is not
- * recoverable later and not detectable from anywhere else.
+ * Best-effort, like the record log. A search that could not be logged still
+ * answers, because refusing to let an officer look somebody up because a log
+ * is down helps nobody. It reports at `warn`: the row is lost and nothing
+ * downstream of it is blocked, which is the line `best-effort.ts` draws.
  */
 export function recordTaxpayerSearch(params: {
   searchedBy: string | null;
@@ -159,7 +170,6 @@ export function recordTaxpayerSearch(params: {
       ],
     ),
     {
-      level: 'error',
       detail: {
         matched: params.matched,
         fields: Object.keys(params.filters).join(','),

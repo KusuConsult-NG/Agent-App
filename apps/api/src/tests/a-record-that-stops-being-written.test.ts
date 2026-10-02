@@ -25,7 +25,7 @@
  * was "no rows", which cannot distinguish no traffic from a write that has
  * been failing since deploy.
  *
- * THREE SITES GOT `error` RATHER THAN `warn`, because their failure compounds
+ * FOUR SITES GOT `error` RATHER THAN `warn`, because their failure compounds
  * rather than merely losing a record:
  *
  *   - `withJobLock`'s unlock. `client.release()` returns the connection to the
@@ -34,9 +34,14 @@
  *     every later run of that job takes the `{ ran: false }` branch and does
  *     nothing for as long as the process lives.
  *   - The migration lock, which every boot queues behind.
+ *   - The incentive evaluation unlock, which is the same held worker lock for
+ *     one programme: every later evaluation of it is skipped, silently.
  *   - The incentive bulk evaluation, where the swallow covered the whole pass
  *     and not just its audit row: the 202 has gone, so an exception left a
  *     programme half-evaluated with nothing saying so.
+ *
+ * The sentence above said THREE and listed three, in the same commit that
+ * wrote all four. `LEVELS` below is the count that recomputes itself.
  *
  * AND ONE OF THE ELEVEN WAS NOT THIS CLASS AT ALL. `GET /receipts/:id` read
  * with `.catch(() => null)` and then `throw notFound('That receipt')`. Its
@@ -281,6 +286,223 @@ describe('nothing swallows a failure without a word', () => {
           'pattern any more — remove the entry',
       );
     }
+  });
+});
+
+// ===========================================================================
+
+/**
+ * Which failures reach `error`, and the rule that decides.
+ *
+ * `BestEffortOptions.level` states the line exactly: `warn` for a record that
+ * was lost, `error` where the failure *compounds* — a held advisory lock that
+ * stops every later run of a job, a background pass with no caller left to
+ * tell. The line is not how much the record matters. Every row in this
+ * module's care matters; that is the reason any of it is logged at all.
+ *
+ * Two sites had it the other way and reported a lost record at `error`: the
+ * taxpayer record-access and search logs, on the stated reasoning that a
+ * missing row in an access log is not recoverable later and not detectable
+ * from anywhere else. Both halves of that are true — and both are equally
+ * true of `document_access.record`, the log of who read the receipt book,
+ * which is one insert of the same kind at `warn` a few files away. The
+ * outlier bought nothing and cost the alerting: an unreachable database then
+ * pages somebody once a minute per surface, which is how the next real error
+ * comes to be scrolled past.
+ *
+ * So this table holds the *class* and derives the level, rather than pinning
+ * the levels as they are. A new call site has to say which half of the rule it
+ * falls in, and then cannot pick a level that contradicts its own answer.
+ */
+type Loss = 'the record is lost' | 'the failure compounds';
+
+function levelFor(loss: Loss): 'warn' | 'error' {
+  return loss === 'the failure compounds' ? 'error' : 'warn';
+}
+
+/** Every `bestEffort` operation in the API source, and what its failure costs. */
+const LEVELS: Record<string, { loss: Loss; because: string }> = {
+  'session.touch': {
+    loss: 'the record is lost',
+    because: "a session's last-used stamp; the next request writes another",
+  },
+  'audit.access_denied': {
+    loss: 'the record is lost',
+    because: 'who was refused, and for what',
+  },
+  'device.touch': {
+    loss: 'the record is lost',
+    because: "when an agent's device was last seen",
+  },
+  'taxpayer_access.record': {
+    loss: 'the record is lost',
+    because: "who opened one citizen's record",
+  },
+  'taxpayer_search.record': {
+    loss: 'the record is lost',
+    because: 'who searched the register, and what was typed into it',
+  },
+  'document_access.record': {
+    loss: 'the record is lost',
+    because: 'who read the receipt book',
+  },
+  'verification_attempt.record': {
+    loss: 'the record is lost',
+    because: 'who searched the public register',
+  },
+  'error_reporting.report': {
+    loss: 'the record is lost',
+    because:
+      'one report the external reporter would not take. The log line is then ' +
+      'the report, which is why it must not be silent — and why it is not ' +
+      'worth more than the report it stands in for',
+  },
+  'job.unlock.${name}': {
+    loss: 'the failure compounds',
+    because:
+      'a session-level lock left held on a pooled connection, so every later ' +
+      'run of that job does nothing for as long as the process lives',
+  },
+  'migration.unlock': {
+    loss: 'the failure compounds',
+    because: 'every boot queues behind it',
+  },
+  'incentive.evaluation_unlock': {
+    loss: 'the failure compounds',
+    because: 'the same held worker lock, for one programme: every later evaluation is skipped',
+  },
+  'incentive.bulk_evaluate': {
+    loss: 'the failure compounds',
+    because:
+      'the swallow covers the whole pass, not an audit row. The 202 has gone, ' +
+      'so a half-evaluated programme has no caller left to tell',
+  },
+};
+
+/**
+ * Lines that are nothing but comment, dropped.
+ *
+ * The same filter the swallow sweep above uses, and for the same reason: a
+ * comment quoting `level: 'error'` must not read as one. Line numbers do not
+ * survive it, so a failure names the file and the operation instead — which
+ * is what somebody would act on anyway.
+ */
+function codeOnly(source: string): string {
+  return source
+    .split('\n')
+    .filter((line) => {
+      const t = line.trim();
+      return !t.startsWith('*') && !t.startsWith('//') && !t.startsWith('/*');
+    })
+    .join('\n');
+}
+
+/**
+ * The slice of source from one `bestEffort(` to its matching `)`.
+ *
+ * Balanced rather than a fixed window, because a window is exactly the
+ * heuristic that has already failed once in this repository: a comment grew
+ * and pushed the thing being counted out the far end of it.
+ */
+function callExtent(code: string, open: number): string {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = open; i < code.length; i += 1) {
+    const ch = code[i]!;
+    if (quote) {
+      if (ch === '\\') i += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === "'" || ch === '"' || ch === '`') quote = ch;
+    else if (ch === '(') depth += 1;
+    else if (ch === ')') {
+      depth -= 1;
+      if (depth === 0) return code.slice(open, i + 1);
+    }
+  }
+  throw new Error(`unbalanced bestEffort( call at offset ${open}`);
+}
+
+interface Site {
+  file: string;
+  operation: string;
+  level: 'warn' | 'error';
+}
+
+/** Every `bestEffort(...)` call in the non-test API source. */
+function callSites(): Site[] {
+  const found: Site[] = [];
+  for (const path of sourceFiles(join(process.cwd(), 'src'))) {
+    const relative = path.slice(path.indexOf(`src${sep}`));
+    if (relative === join('src', 'lib', 'best-effort.ts')) continue;
+    const code = codeOnly(readFileSync(path, 'utf8'));
+    for (let at = code.indexOf('bestEffort('); at >= 0; at = code.indexOf('bestEffort(', at + 1)) {
+      const extent = callExtent(code, at + 'bestEffort'.length);
+      const operation = /^\(\s*(['"`])([^'"`]*)\1/.exec(extent);
+      assert.ok(
+        operation,
+        `the first argument of a bestEffort call in ${relative} is not a ` +
+          `literal, so nothing can check its level: ${extent.slice(0, 80)}`,
+      );
+      found.push({
+        file: relative,
+        operation: operation[2]!,
+        level: /\blevel:\s*'error'/.test(extent) ? 'error' : 'warn',
+      });
+    }
+  }
+  return found;
+}
+
+describe('the level says whether a failure compounds, not how much it mattered', () => {
+  it('has every call site in the table', () => {
+    const undeclared = callSites()
+      .filter((site) => !(site.operation in LEVELS))
+      .map((site) => `${site.operation} (${site.file})`);
+    assert.deepEqual(
+      undeclared,
+      [],
+      'these bestEffort calls do not say which half of the rule they are in. ' +
+        'Add an entry to LEVELS giving the class and what the failure costs: ' +
+        `${undeclared.join(', ')}`,
+    );
+  });
+
+  it('reports at the level its class requires', () => {
+    const wrong: string[] = [];
+    for (const site of callSites()) {
+      const declared = LEVELS[site.operation];
+      if (!declared) continue; // the test above owns this.
+      const wanted = levelFor(declared.loss);
+      if (site.level !== wanted) {
+        wrong.push(
+          `${site.operation} in ${site.file} reports at ${site.level}, but ` +
+            `LEVELS says ${declared.loss} (${declared.because}), which is ${wanted}`,
+        );
+      }
+    }
+    assert.deepEqual(wrong, [], wrong.join('; '));
+  });
+
+  it('has no idle entry in LEVELS', () => {
+    // An entry for an operation nothing calls any more is the stale count
+    // this file's own header carried for as long as it existed.
+    const live = new Set(callSites().map((site) => site.operation));
+    const stale = Object.keys(LEVELS).filter((operation) => !live.has(operation));
+    assert.deepEqual(stale, [], `LEVELS names operations nothing calls: ${stale.join(', ')}`);
+  });
+
+  it('still describes the rule the table applies', () => {
+    /*
+     * The table derives `error` from "the failure compounds" and nothing else.
+     * If the helper's own documented line moves, that derivation is no longer
+     * the rule and every entry above wants rereading — so this fails rather
+     * than letting the two drift apart quietly.
+     */
+    const helper = readFileSync(join(process.cwd(), 'src/lib/best-effort.ts'), 'utf8');
+    assert.match(helper, /`warn` for a record that was lost/);
+    assert.match(helper, /`error` where the failure compounds/);
   });
 });
 
