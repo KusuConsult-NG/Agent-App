@@ -72,10 +72,10 @@ export const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
    * line instead of the one that says what to do about it. The constraint is
    * where the rule actually holds, so the words belong here too.
    *
-   * Twelve other named constraints still fall back, deliberately. They are
-   * configuration paths where the generic sentence is adequate — a rate version
-   * number reused, a current-settings row — and reaching them means an officer
-   * writing reference data rather than a person filling in a form.
+   * Every other named constraint in the schema is now classified too, either
+   * with a message below or in `UNIQUE_CONSTRAINT_NOT_SHOWN` with the reason it
+   * has none. This paragraph used to say there were twelve of them. There were
+   * seventy-one.
    *
    * One thing this does not fix: the agent application translates a refusal by
    * its code, and DUPLICATE_RECORD is not in its map, so for the two bank
@@ -94,6 +94,84 @@ export const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
     'A change to this account is already waiting for a decision. It has to be approved or ' +
     'refused before another can be proposed.',
   obligation_unique: 'This taxpayer already has that tax or levy on their record.',
+
+  /*
+   * A SECOND PASS, AFTER COUNTING WHAT WAS LEFT.
+   *
+   * The comment below this block used to say "twelve other named constraints
+   * still fall back, deliberately". Counted against the live schema there are
+   * seventy-one, which is wrong by a factor of six — the same mistake, on the
+   * same kind of figure, as the "twenty-six refusals" this branch had to
+   * correct in `71e4c7d`. Both came from reading rather than counting.
+   *
+   * So all seventy-one were classified, each against its own definition and
+   * the code that writes the table. The ones a person can collide with by
+   * doing their work are here; the rest are in
+   * `UNIQUE_CONSTRAINT_NOT_SHOWN` with the reason each one is not. A new
+   * unique index has to be in one or the other: `a-message-nobody-would-ever-
+   * see.test.ts` reads the schema and refuses an unclassified one, which is
+   * what would have stopped the figure above being written down wrong.
+   */
+
+  // Reference data an officer creates and names. The clash is always the code
+  // or the label they typed, and the generic sentence names neither.
+  departments_code_key: 'A department already uses that code. Give this one a different one.',
+  revenue_items_code_key:
+    'A revenue item already uses that code. Codes appear on receipts and in reports, so ' +
+    'each one has to belong to a single charge.',
+  revenue_offices_code_key: 'A revenue office already uses that code.',
+  incentive_programmes_code_key: 'A programme already uses that code.',
+  financial_periods_label_key:
+    'A financial period is already called that. Period labels appear on every report, ' +
+    'so two periods cannot share one.',
+
+  /*
+   * Doing the same thing twice. Each of these is a rule rather than an
+   * accident of naming, and the sentence says what the rule is.
+   */
+  audit_sample_items_sample_id_transaction_id_key:
+    'That transaction is already in this sample. A sample counts each one once.',
+  audit_sample_items_sample_id_position_key:
+    'That position in the sample is already taken.',
+  incentive_awards_round_id_taxpayer_id_key:
+    'This taxpayer has already been awarded in this round. A round pays each person once.',
+  programme_eligibility_programme_id_taxpayer_id_key:
+    'This taxpayer is already recorded against that programme.',
+  officer_devices_user_id_fingerprint_key:
+    'That computer is already registered to this officer.',
+
+  /*
+   * ONE LIVE THING AT A TIME.
+   *
+   * Partial unique indexes, each enforcing that a record has one current
+   * version. The generic sentence is actively unhelpful here, because it
+   * reassures the officer that nothing was duplicated and does not tell them
+   * the thing to do: end the current one first.
+   */
+  idx_rates_current:
+    'This revenue item already has a rate in force for that Local Government Area. ' +
+    'Give the current rate an end date first, then publish the new one.',
+  revenue_item_rates_item_lga_version_key:
+    'That rate version number has already been used for this item. Somebody may have ' +
+    'published a rate at the same moment — read the rate history before publishing again.',
+  idx_settings_current:
+    'That setting already has a current value. The existing one has to be superseded ' +
+    'rather than added to.',
+  idx_agent_kyc_current:
+    "This agent already has a current identity check. Supersede it before recording another.",
+  revenue_targets_one_live_per_scope:
+    'A target is already running for that scope and period. Close it before setting another, ' +
+    'or two figures will claim to be the target for the same work.',
+  idx_connections_live:
+    'That connection is already recorded against this taxpayer from the same source.',
+  idx_one_assessment_per_observation:
+    'That observation already has a presumptive assessment. Withdraw it before raising another.',
+  documents_one_acknowledgement_per_transaction:
+    'An acknowledgement has already been issued for this transaction.',
+  idx_commissions_recovered_once:
+    'That commission has already been recovered. It cannot be recovered twice.',
+  receipts_payment_id_key:
+    'A receipt has already been issued for this payment. No duplicate has been created.',
 };
 
 /**
@@ -121,6 +199,101 @@ export const OVERLAP_CONSTRAINT_MESSAGES: Record<string, string> = {
     'policy an end date first, then adopt the new one.',
   presumptive_no_overlap:
     'This taxpayer already has a presumptive assessment covering part of that period.',
+};
+
+/**
+ * Unique constraints whose violation no person is shown, and why each one.
+ *
+ * The companion to the map above, and the reason a figure in this file can no
+ * longer be guessed. Seventy-one constraints had no message; these are the ones
+ * that should not have one, each checked against its own definition and against
+ * the code that writes its table rather than against an impression.
+ *
+ * Four kinds, and the difference between them matters more than the list:
+ *
+ *   ABSORBED       the write is an upsert, so the constraint never raises.
+ *   SEEDED         nothing inserts into the table outside `db/seed.ts`, so no
+ *                  request can reach the constraint at all.
+ *   GENERATED      the column is a reference the platform composes. A clash is
+ *                  a fault in a generator, not something the person did, and
+ *                  the generic sentence is wrong about whose mistake it is —
+ *                  recorded here rather than fixed, because making these
+ *                  internal errors is a change to what the caller is told and
+ *                  belongs in its own commit.
+ *   INTERNAL       the row belongs to the platform talking to itself.
+ */
+export const UNIQUE_CONSTRAINT_NOT_SHOWN: Record<string, string> = {
+  // ABSORBED — `ON CONFLICT ... DO NOTHING` or `DO UPDATE` on every writer.
+  agent_devices_agent_id_device_identifier_key:
+    'ABSORBED. `registerDevice` upserts on exactly this key; the 500 that used to come ' +
+    'from two simultaneous taps was fixed in 9cdc684 by making the insert an upsert.',
+  agent_clearance_agent_id_key: 'ABSORBED. Every writer upserts on the agent.',
+  taxpayer_compliance_taxpayer_id_key: 'ABSORBED. The compliance sweep upserts.',
+  agent_training_progress_agent_id_module_id_key: 'ABSORBED. An attempt upserts.',
+  agent_agreements_agent_id_agreement_version_id_key: 'ABSORBED. Acceptance upserts.',
+  taxpayer_group_members_group_id_taxpayer_id_key: 'ABSORBED. Recording a member upserts.',
+  officer_notifications_one_unread_per_subject:
+    'ABSORBED. The point of the index is to collapse repeat notifications, and the insert ' +
+    'upserts on it rather than raising.',
+  idempotency_keys_scope_idempotency_key_key:
+    'ABSORBED. The middleware upserts on it; that is how a replay is recognised.',
+  offline_drafts_agent_id_client_reference_key:
+    'ABSORBED. `/drafts/sync` upserts and answers DUPLICATE per draft, which is a ' +
+    'per-draft status in the batch response rather than a refusal of the request.',
+
+  // SEEDED — no insert outside `db/seed.ts`, so no request reaches these.
+  lgas_code_key: 'SEEDED. Geography is reference data; no endpoint creates an LGA.',
+  lgas_name_key: 'SEEDED. Same.',
+  wards_lga_id_name_key: 'SEEDED. Wards are seeded with their LGA.',
+  mdas_code_key: 'SEEDED. The ministry list is reference data.',
+  mdas_authority_id_name_key: 'SEEDED. Same.',
+  revenue_authorities_code_key: 'SEEDED. The authority tree is reference data.',
+  revenue_authorities_name_key: 'SEEDED. Same.',
+  revenue_categories_code_key: 'SEEDED. Categories are seeded with the catalogue.',
+  revenue_categories_authority_id_name_key: 'SEEDED. Same.',
+  training_modules_code_key: 'SEEDED. The modules are reference data.',
+  notification_templates_code_key: 'SEEDED. The templates are reference data.',
+  notification_templates_event_channel_language_key: 'SEEDED. Same.',
+  commission_policies_code_key: 'SEEDED. The policy is reference data.',
+  agreement_versions_version_key: 'SEEDED. Agreement versions are seeded active.',
+  territories_code_key:
+    'SEEDED. A territory is reassigned between agents by UPDATE; nothing inserts one ' +
+    'outside the seed.',
+
+  // GENERATED — a clash is a generator fault, not the person's.
+  agents_agent_code_key: 'GENERATED. `AGT-00042`, composed on clearance.',
+  agents_application_number_key: 'GENERATED. Composed on application.',
+  assessments_assessment_number_key: 'GENERATED.',
+  audit_reports_report_number_key: 'GENERATED.',
+  audit_samples_sample_number_key: 'GENERATED.',
+  cases_case_number_key: 'GENERATED.',
+  commission_payouts_payout_reference_key: 'GENERATED.',
+  documents_document_number_key: 'GENERATED.',
+  documents_verification_code_key: 'GENERATED. A public verification code.',
+  invoices_verification_code_key: 'GENERATED. Same.',
+  receipts_verification_code_key: 'GENERATED. Same.',
+  payments_payment_reference_key: 'GENERATED.',
+  refunds_refund_reference_key: 'GENERATED.',
+  settlements_settlement_reference_key: 'GENERATED.',
+  support_tickets_ticket_number_key: 'GENERATED.',
+  vehicle_renewals_document_number_key: 'GENERATED.',
+  taxpayer_groups_code_key: 'GENERATED. `GRP/2026/000001`.',
+  referees_reference_code_key: 'GENERATED.',
+  incentive_awards_collection_code_key: 'GENERATED. The code a winner collects against.',
+
+  // INTERNAL — the platform talking to itself.
+  audit_logs_sequence_no_key: 'INTERNAL. The audit chain numbers its own entries.',
+  schema_migrations_filename_key: 'INTERNAL. The migration runner.',
+  sessions_refresh_token_hash_key: 'INTERNAL. A token hash; a clash is a generator fault.',
+  push_subscriptions_endpoint_key:
+    'INTERNAL. Re-subscribing the same browser endpoint is handled where it is stored.',
+  mock_gateway_transactions_gateway_reference_key: 'INTERNAL. The demonstration gateway.',
+  gateway_statement_lines_gateway_gateway_reference_key:
+    'INTERNAL. A statement line the reconciliation sweep reads; a redelivered statement ' +
+    'is the sweep\u2019s business and not a caller\u2019s.',
+  group_attestation_invitations_invitation_token_hash_key:
+    'INTERNAL. A token hash, generated.',
+  referee_invitations_invitation_token_hash_key: 'INTERNAL. Same.',
 };
 
 export function errorHandler(

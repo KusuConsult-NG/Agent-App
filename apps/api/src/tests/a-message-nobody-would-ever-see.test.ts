@@ -44,11 +44,12 @@ import {
   startTestServer,
   stopTestServer,
 } from './helpers';
-import { query } from '../db/pool';
+import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import {
   OVERLAP_CONSTRAINT_MESSAGES,
   UNIQUE_CONSTRAINT_MESSAGES,
+  UNIQUE_CONSTRAINT_NOT_SHOWN,
 } from '../middleware/error-handler';
 
 before(async () => {
@@ -182,5 +183,162 @@ describe('two officers, one staff number', () => {
       );
       assert.equal(moved.status, 200, JSON.stringify(moved.body));
     }
+  });
+});
+
+/**
+ * Every unique index the live schema declares, excluding primary keys.
+ *
+ * Primary keys are left out, and it is worth saying why rather than leaving it
+ * to be inferred: every one of them is a `uuid` with a `gen_random_uuid()`
+ * default, so a violation is a collision in a random number and not something
+ * anybody did. A message for it would be a message about an impossibility.
+ */
+async function liveUniqueIndexes(): Promise<string[]> {
+  const rows = await query<{ relname: string }>(
+    pool,
+    `SELECT c.relname
+       FROM pg_class c
+       JOIN pg_index i ON i.indexrelid = c.oid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE i.indisunique AND n.nspname = 'public'
+        AND NOT i.indisprimary
+      ORDER BY 1`,
+  );
+  return rows.map((row) => row.relname);
+}
+
+describe('a constraint nobody classified', () => {
+  /*
+   * The check that makes the figures in `error-handler.ts` countable.
+   *
+   * That file carried a sentence saying twelve named constraints fell back to
+   * the generic duplicate message. There were seventy-one. It was wrong by a
+   * factor of six for the same reason the "twenty-six refusals" figure in the
+   * Hausa review was wrong by a factor of six: both were read off the code
+   * rather than counted against the schema, and nothing could tell.
+   *
+   * So every unique index now has to be in one of two places — a message a
+   * person can act on, or a written reason it will never be shown to one. A
+   * new index is in neither until somebody decides, and this says so by name.
+   */
+  it('has a message or a written reason for every unique index in the schema', async () => {
+    const live = await liveUniqueIndexes();
+    assert.ok(
+      live.length > 70,
+      `only ${live.length} unique indexes found; the schema query is not working`,
+    );
+
+    const unclassified = live.filter(
+      (name) => !(name in UNIQUE_CONSTRAINT_MESSAGES) && !(name in UNIQUE_CONSTRAINT_NOT_SHOWN),
+    );
+    assert.deepEqual(
+      unclassified,
+      [],
+      'these unique indexes are in neither map, so a person colliding with one is told ' +
+        '"that record already exists" and nothing more. Give each a message, or a reason ' +
+        'in UNIQUE_CONSTRAINT_NOT_SHOWN saying who it is not shown to and why',
+    );
+  });
+
+  it('does not both answer for a constraint and excuse it', async () => {
+    const both = Object.keys(UNIQUE_CONSTRAINT_MESSAGES)
+      .filter((name) => name in UNIQUE_CONSTRAINT_NOT_SHOWN)
+      .sort();
+    assert.deepEqual(
+      both,
+      [],
+      'these have a message and a reason for having none. One of the two is wrong, and ' +
+        'which one is a decision somebody has to make rather than a thing to leave ambiguous',
+    );
+  });
+
+  it('keeps no reason for a constraint the schema does not have', async () => {
+    const live = new Set(await liveUniqueIndexes());
+    assert.deepEqual(
+      Object.keys(UNIQUE_CONSTRAINT_NOT_SHOWN)
+        .filter((name) => !live.has(name))
+        .sort(),
+      [],
+      'these are excused and do not exist. A reason outliving its constraint is a reason ' +
+        'for nothing, and it misleads the next person about what the schema enforces',
+    );
+  });
+
+  /*
+   * And that every reason says which kind it is.
+   *
+   * The four words carry the whole argument: ABSORBED means the constraint
+   * cannot raise, SEEDED means no request reaches the table, GENERATED means a
+   * clash is the platform's fault rather than the person's, and INTERNAL means
+   * no person is involved. A reason with none of them is prose nobody can
+   * check, and the GENERATED group in particular is a recorded decision to
+   * leave something imperfect — the caller is told "that record already
+   * exists" about a fault in a reference generator — which has to stay
+   * visible rather than dissolve into a paragraph.
+   */
+  it('says which kind of reason each one is', () => {
+    const KINDS = ['ABSORBED', 'SEEDED', 'GENERATED', 'INTERNAL'];
+    const vague = Object.entries(UNIQUE_CONSTRAINT_NOT_SHOWN)
+      .filter(([, reason]) => !KINDS.some((kind) => reason.startsWith(kind)))
+      .map(([name]) => name)
+      .sort();
+    assert.deepEqual(vague, [], `each reason has to begin with one of ${KINDS.join(', ')}`);
+  });
+});
+
+/*
+ * One of the new messages, end to end, through the route an officer uses.
+ *
+ * The spelling checks above hold the keys against the schema and the schema
+ * against the keys, which is the cheap half. This is the expensive half for one
+ * of them: a revenue item created with a code that already belongs to a charge.
+ * It is worth being the one chosen because the code appears on receipts and in
+ * reports, so the clash is the single field the officer has to change — and the
+ * generic sentence named none of the eleven fields on that form.
+ */
+describe('an officer naming a levy that already exists', () => {
+  const ADMIN = { fullName: 'Catalogue Admin', phone: '+2348078300001', role: 'admin' } as const;
+  let token = '';
+  let categoryId = '';
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await seedReferenceData();
+    await createGovernmentUser(ADMIN);
+    token = (await loginAs(ADMIN.phone)).accessToken;
+    const category = await queryOne<{ id: string }>(
+      pool,
+      'SELECT id FROM revenue_categories ORDER BY code LIMIT 1',
+    );
+    categoryId = category!.id;
+  });
+
+  it('says which field clashed, not that a record exists', async () => {
+    const body = (code: string) => ({
+      categoryId,
+      code,
+      name: 'A levy for the test',
+    });
+
+    const first = await post('/revenue/items', body('TEST-LEVY-01'), { token });
+    assert.equal(first.status, 201, JSON.stringify(first.body));
+
+    const second = await post('/revenue/items', body('TEST-LEVY-01'), { token });
+    assert.equal(second.status, 409, JSON.stringify(second.body));
+    assert.equal(second.body.error.code, 'DUPLICATE_RECORD');
+    assert.match(
+      second.body.error.message,
+      /already uses that code/,
+      'the officer has eleven fields in front of them and is entitled to know it is the code',
+    );
+    assert.equal(second.body.error.moneyStatus, 'NOT_DEBITED');
+
+    // And the first item is still the only one with that code.
+    const rows = await query<{ n: string }>(
+      pool,
+      "SELECT count(*)::text AS n FROM revenue_items WHERE code = 'TEST-LEVY-01'",
+    );
+    assert.equal(rows[0]!.n, '1', 'no duplicate was created, which the message also says');
   });
 });
