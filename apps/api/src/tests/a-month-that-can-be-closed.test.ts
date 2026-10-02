@@ -503,4 +503,73 @@ describe('reopening, and who may do it', () => {
     assert.equal(begun.status, 200, JSON.stringify(begun.body));
     await assert.rejects(() => backdatedCollection(bounds.start), /is closed/);
   });
+
+  /*
+   * THE MONTH AS A FIELD, so an officer reading Hausa is told which one.
+   *
+   * These three refusals are the row `HAUSA-REVIEW-QUESTIONS.md` §7 calls the
+   * tier: closing a revenue month is an act an officer's name goes on, and
+   * "already closed" read as "closed now" is an officer believing they have
+   * done something they have not. The portal translates by code, so the month
+   * has to travel beside the sentence rather than be parsed back out of it —
+   * which would break the moment somebody improved an English sentence,
+   * silently, in the language nobody testing it reads.
+   *
+   * This is the half only the server can get wrong. The portal's own test
+   * supplies its details, so it would pass with none of these sent.
+   */
+  it('names the month a second closing was refused for', async () => {
+    const bounds = lastMonth();
+    const period = await openPeriod(bounds);
+    assert.equal((await close(period.id)).status, 200);
+
+    const again = await close(period.id);
+    assert.equal(again.status, 409, JSON.stringify(again.body));
+    assert.equal(again.body.error.code, 'PERIOD_CLOSED');
+    assert.deepEqual(
+      again.body.error.details,
+      [{ field: 'period', issue: period.label }],
+      'the month the refusal is about has to travel with it',
+    );
+  });
+
+  it('names the month a second reopening was refused for', async () => {
+    const period = await openPeriod();
+
+    await grantStepUp(tokens.admin, PHONES.admin, 'financial.period.reopen');
+    const reopened = await post(
+      `/government/periods/${period.id}/reopen`,
+      { reason: 'A correction the Accountant-General asked for.' },
+      auth('admin'),
+    );
+    assert.equal(reopened.status, 409, JSON.stringify(reopened.body));
+    assert.equal(reopened.body.error.code, 'PERIOD_OPEN');
+    assert.deepEqual(reopened.body.error.details, [{ field: 'period', issue: period.label }]);
+  });
+
+  it('names the state a month is in when closing cannot begin', async () => {
+    const bounds = lastMonth();
+    const period = await openPeriod(bounds);
+    assert.equal(
+      (await post(`/government/periods/${period.id}/begin-closing`, {}, auth('finance'))).status,
+      200,
+    );
+
+    const again = await post(
+      `/government/periods/${period.id}/begin-closing`,
+      {},
+      auth('finance'),
+    );
+    assert.equal(again.status, 409, JSON.stringify(again.body));
+    assert.equal(again.body.error.code, 'PERIOD_NOT_OPEN');
+    /*
+     * The state as the schema holds it, not the lowercased word the English
+     * prints. The portal reads it through the shared enum table, which has a
+     * name for CLOSING in both languages and none for "closing".
+     */
+    assert.deepEqual(again.body.error.details, [
+      { field: 'period', issue: period.label },
+      { field: 'state', issue: 'CLOSING', code: 'STATE' },
+    ]);
+  });
 });

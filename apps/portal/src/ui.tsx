@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import {
+  ENUM_LABELS,
   enumLabel,
   formatDateIn,
   formatDateTimeIn,
@@ -222,6 +223,25 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   UPLOAD_FAILED: 'errUploadFailed',
   DOCUMENT_FAILED: 'errUploadFailed',
   STEP_UP_ABANDONED: 'stepUpCodeRequired',
+
+  /*
+   * THE FIRST SERVER REFUSALS THIS MAP HOLDS THAT NAME A SUBJECT.
+   *
+   * Everything above it either names nothing or is raised by the browser
+   * rather than by PSIRS — a request that never arrived, an upload that
+   * failed, a step-up the officer walked away from. `STEP_UP_REQUIRED` was the
+   * one the platform composed, and `HAUSA-REVIEW-QUESTIONS.md` §7 counts it as
+   * one refusal of the platform's 172.
+   *
+   * These three are the row that document calls the tier. Closing a revenue
+   * month is an act an officer's name goes on, and "already closed" read as
+   * "closed now" is an officer believing they have done something they have
+   * not. They are also what required `errorText` above to substitute at all:
+   * each names the month, and the portal had no mechanism for putting it in.
+   */
+  PERIOD_CLOSED: 'ofcErrPeriodClosed',
+  PERIOD_OPEN: 'ofcErrPeriodOpen',
+  PERIOD_NOT_OPEN: 'ofcErrPeriodNotOpen',
 };
 
 /**
@@ -271,12 +291,67 @@ export function nextStepText(
   return error.nextStep ?? null;
 }
 
+/**
+ * What a detail puts into the hole.
+ *
+ * A state travels as the value the schema holds — CLOSING, not "closing" — so
+ * that it can be looked up in the shared enum table and read in the officer's
+ * own language. Anything else is passed through as the server composed it: a
+ * month's label is already a label.
+ *
+ * Only `code === 'STATE'`, and only when the table has a name for the value.
+ * An unknown state printed raw is a state somebody can report; one quietly
+ * turned into prose by this function would be a state nobody could trace.
+ */
+function substituted(
+  detail: { field?: string; issue: string; code?: string },
+  t: TranslationDictionary,
+): string {
+  if (detail.code !== 'STATE') return detail.issue;
+  return detail.issue in ENUM_LABELS ? enumLabel(detail.issue, t) : detail.issue;
+}
+
+/**
+ * What a refusal says, in the officer's language.
+ *
+ * THE PORTAL HAD NO SUBSTITUTION AT ALL. `ErrorAlert` read `t[translated]` and
+ * rendered it as-is, so a translation naming its subject — the month that is
+ * already closed, the report already signed — would have printed
+ * `{{period}}` to the officer. The agent application has had this since its
+ * refusals started carrying figures; this side simply never needed it, because
+ * the only server-raised code it translated named nothing.
+ *
+ * It is needed now, and writing the three period refusals without it would
+ * have put the hole on the screen that closes a financial month. Same rule as
+ * the agent's: figures come out of `details`, never out of parsing the
+ * server's prose, which would break the moment somebody improved an English
+ * sentence — silently, in the language nobody testing it reads.
+ *
+ * A placeholder the server did not send is left alone rather than blanked.
+ * `ErrorAlert` lists `details` underneath, so the value is on the screen even
+ * when the sentence has a gap in it; a sentence silently missing the month an
+ * officer came for reads as finished and is not reportable.
+ */
+export function errorText(
+  error: { code: string; message: string; details?: { field?: string; issue: string; code?: string }[] },
+  t: TranslationDictionary,
+): string {
+  const translated = TRANSLATED_ERRORS[error.code];
+  if (!translated) return error.message;
+  const sentence = t[translated] as string;
+  if (!error.details?.length || !sentence.includes('{{')) return sentence;
+  return error.details.reduce(
+    (text, detail) =>
+      detail.field ? text.replace(`{{${detail.field}}}`, substituted(detail, t)) : text,
+    sentence,
+  );
+}
+
 export function ErrorAlert({ error }: { error: ApiError | null }) {
   const { t } = usePortalI18n();
   if (!error) return null;
-  const translated = TRANSLATED_ERRORS[error.code];
   return (
-    <Alert kind="error" title={{ text: translated ? t[translated] : error.message }}>
+    <Alert kind="error" title={{ text: errorText(error, t) }}>
       {nextStepText(error, t) && (
         <p style={{ margin: '4px 0 0' }}>{nextStepText(error, t)}</p>
       )}

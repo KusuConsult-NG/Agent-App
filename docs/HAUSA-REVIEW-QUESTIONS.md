@@ -1,6 +1,6 @@
 # Hausa review: everything still waiting on a decision
 
-`HAUSA-REVIEW.md` carries all 3,448 dictionary strings, and most of its length
+`HAUSA-REVIEW.md` carries all 3,451 dictionary strings, and most of its length
 is those tables. The open questions are scattered through seven sections of the
 prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
@@ -34,7 +34,7 @@ about field staff. Counting says otherwise:
 | The agent app | 252 |
 | The officer portal | 148 |
 | Citizens, referees and group leaders | 43 |
-| **Total** | **443** of 3,448 |
+| **Total** | **443** of 3,451 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
@@ -411,7 +411,7 @@ roll. If any correction you make runs long, that test will say so rather than
 the receipt.
 
 **And `scanHelp` was not the only dead string in this table.** Checking it
-raised the obvious next question, so it was measured: **43 of the 3,448 keys
+raised the obvious next question, so it was measured: **43 of the 3,451 keys
 are never named anywhere outside the dictionary**, and four of them are in the
 table above — `statusOffline`, `offlineMessage`, `statusFailed`, and
 `civicDutyThanks`, the one the `Mungode` typo was in. Three of the four
@@ -675,7 +675,7 @@ added, because it guards every consequential money action in the portal and its
 instruction was already in Hausa under an English heading.
 
 **The scale, counted rather than estimated.** The platform raises **172
-distinct error codes**; the officer portal says 1 of them in Hausa, and the
+distinct error codes**; the officer portal says 4 of them in Hausa, and the
 agent application says 33. The first version of this section said twenty-six,
 from a search that matched `conflict('CODE'` on a single line and missed every
 multi-line call and every `new AppError({ code: … })` literal — which is most
@@ -716,6 +716,48 @@ closed" read as "closed now" is an officer believing they have done something
 they have not. The last row is mostly administrative and can stay in English.
 But that is a judgement about how PSIRS works, not about Hausa, and it is
 yours.
+
+### 7.1 — The revenue period row, done, and what it needed first
+
+The first of those two rows is now translated, which is why this section says
+the portal speaks 4 of the 172 rather than 1. It is an increment on purpose:
+three sentences composed from this dictionary's own words, with the questions
+they raise written down here, rather than a page of Hausa written in one pass.
+
+| Key | Hausa | Borrowed from |
+|---|---|---|
+| `ofcErrPeriodClosed` | An riga an rufe {{period}}. | `An riga an …` (13), `rufe` (56) |
+| `ofcErrPeriodOpen` | An riga an bude {{period}}. | same, `bude` (89) |
+| `ofcErrPeriodNotOpen` | Ba a bude {{period}} ba. Matsayinsa shi ne: {{state}}. | `Ba a … ba`, `enumClosing`, `enumClosed` |
+
+**The portal had no way to put a value into a sentence.** Its error component
+read the translation and rendered it as it stood, so any translation naming its
+subject would have printed `{{period}}` to the officer. That had never shown,
+because the one refusal PSIRS composed that the portal translated —
+`STEP_UP_REQUIRED` — names nothing. The agent application has had substitution
+since its refusals started carrying figures; this side simply never needed it.
+Writing these three without building it first would have put the hole on the
+screen that closes a financial month.
+
+**Three readings are wanted.**
+
+`Matsayinsa shi ne:` — "its status is:" — is a construction chosen to avoid a
+concord decision. `{{state}}` is filled from the shared enum table, whose names
+for these are full clauses (`An rufe`, `Ana rufewa`), so "{{period}} tana
+{{state}}" would read "January 2026 is it-has-been-closed". A colon sidesteps
+that. If a Hausa reader would rather the sentence read as one clause — *an rufe
+{{period}}* — that changes the sentence and is worth saying now.
+
+`-nsa` in `Matsayinsa` treats a period as masculine. A month (`wata`) is
+feminine and would want `Matsayinta`. The label is a month today but the column
+holds any period a finance officer opens, so the masculine was chosen as the
+less wrong default rather than the right one. This is the clearest single
+question on this page.
+
+The impersonal `Ba a bude … ba` and `An riga an …` were used throughout rather
+than addressing the officer, because none of the three asks them to do
+anything — they say what the month already is. The `ka` count is unchanged at
+443 for that reason.
 
 > `apps/portal/src/ui.tsx` § *TRANSLATED_ERRORS*
 

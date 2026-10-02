@@ -26,7 +26,7 @@
 
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
-import { badRequest, conflict, notFound } from '../lib/errors';
+import { AppError, badRequest, conflict, notFound } from '../lib/errors';
 import { REVENUE_STATES_SQL } from '../lib/revenue-states';
 import { outstandingExceptionSql } from './reconciliation';
 import { recordAudit } from './audit';
@@ -279,7 +279,22 @@ export async function closePeriod(
     );
     if (!period) throw notFound('That period');
     if (period.status === 'CLOSED') {
-      throw conflict('PERIOD_CLOSED', `${period.label} is already closed.`);
+      /*
+       * The month as a field, not only inside the English.
+       *
+       * The officer portal translates a refusal by its code, and its Hausa
+       * reads "An riga an rufe {{period}}" — so the month has to travel beside
+       * the sentence rather than be parsed back out of it. Closing a month is
+       * an act an officer's name goes on, and "already closed" read as "closed
+       * now" is an officer believing they have done something they have not,
+       * which is why `HAUSA-REVIEW-QUESTIONS.md` §7 puts this row in the tier.
+       */
+      throw new AppError({
+        statusCode: 409,
+        code: 'PERIOD_CLOSED',
+        message: `${period.label} is already closed.`,
+        details: [{ field: 'period', issue: period.label }],
+      });
     }
 
     const figures = await periodFigures(client, period.period_start, period.period_end);
@@ -360,7 +375,12 @@ export async function reopenPeriod(
     );
     if (!period) throw notFound('That period');
     if (period.status === 'OPEN') {
-      throw conflict('PERIOD_OPEN', `${period.label} is already open.`);
+      throw new AppError({
+        statusCode: 409,
+        code: 'PERIOD_OPEN',
+        message: `${period.label} is already open.`,
+        details: [{ field: 'period', issue: period.label }],
+      });
     }
 
     await client.query(
@@ -399,7 +419,23 @@ export async function beginClosing(
     );
     if (!period) throw notFound('That period');
     if (period.status !== 'OPEN') {
-      throw conflict('PERIOD_NOT_OPEN', `${period.label} is ${period.status.toLowerCase()}.`);
+      /*
+       * Two fields, because the sentence names two things.
+       *
+       * The state goes as the value the schema holds rather than the lowercased
+       * form the English prints: the portal reads it through the shared enum
+       * table, which has a name for CLOSING and CLOSED in both languages, and
+       * `closing` is not a word that table can look up.
+       */
+      throw new AppError({
+        statusCode: 409,
+        code: 'PERIOD_NOT_OPEN',
+        message: `${period.label} is ${period.status.toLowerCase()}.`,
+        details: [
+          { field: 'period', issue: period.label },
+          { field: 'state', issue: period.status, code: 'STATE' },
+        ],
+      });
     }
 
     await client.query(

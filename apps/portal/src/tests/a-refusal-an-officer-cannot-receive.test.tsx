@@ -127,21 +127,151 @@ describe('the refusal every money action in this portal can produce', () => {
 
   it('keeps the server’s words for a refusal nobody has translated', async () => {
     /*
-     * The policy this must not break, and the reason the other twenty-six are
+     * The policy this must not break, and the reason most of the rest are
      * left: a guessed Hausa sentence for a message nobody has seen is worse
      * than the English, because the reader cannot tell a guess from a
      * translation. Until somebody reviews them, the English stands.
+     *
+     * This used to use PERIOD_CLOSED, which is now translated — it is in the
+     * row `HAUSA-REVIEW-QUESTIONS.md` §7 calls the tier. `ALREADY_SIGNED` is
+     * in the row below it, the audit workbench, and is next rather than done.
      */
     render(
       <ErrorAlert
         error={{
-          code: 'PERIOD_CLOSED',
-          message: 'That period is closed and cannot be edited.',
+          code: 'ALREADY_SIGNED',
+          message: 'AR-2026-000014 has already been signed.',
           moneyStatus: 'NOT_APPLICABLE',
         }}
       />,
     );
 
-    expect(screen.getByText('That period is closed and cannot be edited.')).toBeTruthy();
+    expect(screen.getByText('AR-2026-000014 has already been signed.')).toBeTruthy();
+  });
+});
+
+/*
+ * CLOSING A FINANCIAL MONTH, IN THE LANGUAGE THE OFFICER READS.
+ *
+ * Three refusals, and the first ones in this map that name a subject. The
+ * portal had no substitution at all — `ErrorAlert` rendered `t[translated]`
+ * as it stood — so writing these without building it would have put
+ * `{{period}}` on the screen that closes a revenue month.
+ *
+ * Both languages are asserted, because the English is what a reviewer reads
+ * when checking the Hausa, and a hole would have been in both.
+ */
+describe('a revenue month an officer cannot close twice', () => {
+  const refusal = (
+    code: string,
+    message: string,
+    details: { field?: string; issue: string; code?: string }[],
+  ) => ({ code, message, moneyStatus: 'NOT_APPLICABLE' as const, details });
+
+  /*
+   * The headline, not the whole alert.
+   *
+   * `ErrorAlert` lists `details` underneath, so "January 2026" and "CLOSING"
+   * are on screen whether or not the sentence was filled in — asserting on the
+   * alert's full text would pass with every placeholder still showing, which
+   * is the mistake the agent's own Hausa test records having made. The
+   * sentence is in the `<strong>`.
+   */
+  const said = () => document.querySelector('.alert strong')?.textContent ?? '';
+
+  for (const lang of ['ha', 'en'] as const) {
+    it(`names the month it will not close again, in ${lang}`, async () => {
+      setPortalLanguage(lang);
+      /*
+       * A server sentence deliberately unlike the dictionary's.
+       *
+       * The English translation of this code is word for word what the API
+       * composes — "{{period}} is already closed." — so a test that sends the
+       * API's own wording cannot tell whether the map was consulted at all.
+       * Removing the map entry left the English half of this passing, which is
+       * a test that cannot fail. Sending something else makes the two
+       * distinguishable in both languages.
+       */
+      render(
+        <ErrorAlert
+          error={refusal('PERIOD_CLOSED', 'Untranslated server wording.', [
+            { field: 'period', issue: 'January 2026' },
+          ])}
+        />,
+      );
+
+      const text = said();
+      expect(text, 'the placeholder reached the officer').not.toMatch(/\{\{\w+\}\}/);
+      expect(text, 'the month is what the officer is looking for').toContain('January 2026');
+      expect(text, 'the dictionary did not decide the sentence').not.toContain(
+        'Untranslated server wording',
+      );
+      if (lang === 'ha') expect(text).toContain('An riga an rufe');
+    });
+
+    it(`names the month it will not open again, in ${lang}`, async () => {
+      setPortalLanguage(lang);
+      render(
+        <ErrorAlert
+          error={refusal('PERIOD_OPEN', 'Untranslated server wording.', [
+            { field: 'period', issue: 'January 2026' },
+          ])}
+        />,
+      );
+
+      const text = said();
+      expect(text).not.toMatch(/\{\{\w+\}\}/);
+      expect(text).toContain('January 2026');
+      expect(text).not.toContain('Untranslated server wording');
+    });
+
+    /*
+     * The one that names a state as well. It arrives as the value the schema
+     * holds — CLOSING — and is read through the shared enum table, which has
+     * a name for it in both languages. The server's English lowercases it,
+     * and "closing" is not something that table can look up, which is why the
+     * field carries the schema's value rather than the printed word.
+     */
+    it(`names the state the month is actually in, in ${lang}`, async () => {
+      setPortalLanguage(lang);
+      render(
+        <ErrorAlert
+          error={refusal('PERIOD_NOT_OPEN', 'Untranslated server wording.', [
+            { field: 'period', issue: 'January 2026' },
+            { field: 'state', issue: 'CLOSING', code: 'STATE' },
+          ])}
+        />,
+      );
+
+      const text = said();
+      expect(text).not.toMatch(/\{\{\w+\}\}/);
+      expect(text).toContain('January 2026');
+      expect(
+        text,
+        'the state has to be the enum table\'s name for it, not the raw value',
+      ).toContain(translations[lang].enumClosing);
+      expect(text).not.toContain('CLOSING');
+    });
+  }
+
+  /*
+   * And a state the enum table has no name for is printed as it arrived.
+   *
+   * A state quietly turned into prose by the substitution would be a state
+   * nobody could trace back to the schema; a raw value on the screen is one
+   * somebody reports.
+   */
+  it('passes through a state nothing has a name for', async () => {
+    setPortalLanguage('ha');
+    render(
+      <ErrorAlert
+        error={refusal('PERIOD_NOT_OPEN', 'January 2026 is frozen.', [
+          { field: 'period', issue: 'January 2026' },
+          { field: 'state', issue: 'NOT_A_STATE_ANYTHING_DECLARES', code: 'STATE' },
+        ])}
+      />,
+    );
+
+    expect(said()).toContain('NOT_A_STATE_ANYTHING_DECLARES');
   });
 });

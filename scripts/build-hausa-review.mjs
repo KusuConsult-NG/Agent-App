@@ -126,6 +126,24 @@ function apiErrorCodes() {
           codes.add(match[1]);
         }
         for (const match of source.matchAll(/code:\s*'([A-Z_][A-Z_0-9]*)'/g)) {
+          /*
+           * `code: 'STATE'` on an `ErrorDetail` is a field name, not a
+           * refusal — it tells a client that this detail carries a state it
+           * may translate. The agent's own guard skips it for the same reason.
+           *
+           * It stayed invisible here by luck. Every earlier use sits inside
+           * `paymentRefused({ … })`, a helper whose body is elsewhere, so
+           * neither `AppError` nor `statusCode` fell within the window below
+           * and the value was never reached. The first `code: 'STATE'` written
+           * inside a literal `new AppError({ statusCode: … })` put it in, and
+           * the API's count went from 172 to 173 with no refusal added.
+           *
+           * It is the only detail code written as a literal in this codebase —
+           * the agent blockers in `notCleared` are a mapped variable, which
+           * this pattern cannot see — so one name is enough rather than a
+           * general rule nobody can check.
+           */
+          if (match[1] === 'STATE') continue;
           // An `AppError` literal, not a catalogue row that happens to have a
           // `code` column.
           const window = source.slice(Math.max(0, match.index - 400), match.index + 400);

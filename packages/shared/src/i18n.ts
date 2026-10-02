@@ -3651,6 +3651,24 @@ export interface TranslationDictionary {
   /** The officer portal's heading over `nsStepUpRequired`. */
   ofcStepUpNeeded: string;
   /*
+   * CLOSING A FINANCIAL MONTH, WHICH AN OFFICER'S NAME GOES ON.
+   *
+   * `HAUSA-REVIEW-QUESTIONS.md` §7 counts the gap and names the tier: of the
+   * platform's refusals the officer portal says one in Hausa, and the row it
+   * calls the tier is the revenue period, because "already closed" read as
+   * "closed now" is an officer believing they have done something they have
+   * not. These are that row.
+   *
+   * All three name the month, and the third names its state as well, so both
+   * arrive as fields rather than being parsed back out of the server's
+   * English. The state is the value the schema holds — CLOSED, CLOSING — read
+   * through the shared enum table, which already has a name for each in both
+   * languages.
+   */
+  ofcErrPeriodClosed: string;
+  ofcErrPeriodOpen: string;
+  ofcErrPeriodNotOpen: string;
+  /*
    * What the job monitor says about a job, and how often it runs.
    *
    * Both were English on a screen that offers Hausa, and both are composed
@@ -7222,6 +7240,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     nsNoEffectiveRate:
       'Government has to approve a rate before this can be collected. A PSIRS officer can have it looked at.',
     ofcStepUpNeeded: 'This action needs a one-time code before it can go through.',
+    ofcErrPeriodClosed: '{{period}} is already closed.',
+    ofcErrPeriodOpen: '{{period}} is already open.',
+    ofcErrPeriodNotOpen: '{{period}} is not open. Its status is: {{state}}.',
     ofcOvJobHealthy: 'Running on schedule.',
     ofcOvJobRunning: 'Running now.',
     ofcOvJobOverdue: 'Has not started when it should have. The schedule itself may have stopped.',
@@ -10763,6 +10784,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     nsNoEffectiveRate:
       'Dole Gwamnati ta amince da kudi kafin a iya karba kan wannan. Jami’in PSIRS zai iya sa a duba shi.',
     ofcStepUpNeeded: 'Wannan aikin yana bukatar lamba ta lokaci daya kafin ya wuce.',
+    ofcErrPeriodClosed: 'An riga an rufe {{period}}.',
+    ofcErrPeriodOpen: 'An riga an bude {{period}}.',
+    ofcErrPeriodNotOpen: 'Ba a bude {{period}} ba. Matsayinsa shi ne: {{state}}.',
     ofcOvJobHealthy: 'Yana gudana bisa tsarin lokaci.',
     ofcOvJobRunning: 'Yana gudana yanzu.',
     ofcOvJobOverdue:
