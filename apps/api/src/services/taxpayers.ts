@@ -184,6 +184,41 @@ export interface RegistrationResult {
  * who may proceed with `acknowledgeDuplicates` — and that decision is recorded,
  * because a pattern of overriding warnings is itself a fraud signal (PRD §32).
  */
+/**
+ * The refusal a second record for one person gets, in one place.
+ *
+ * Raised from two sites now — the duplicate check that sees the existing
+ * record, and the unique index that catches the pair the check could not see —
+ * and the whole point of the second site is that the agent is told the same
+ * thing either way. Two copies of this sentence would drift, and the one that
+ * drifted would be the rarer one nobody reads.
+ *
+ * THE SUBJECT IS A FIELD, composed here rather than left inside the English.
+ * The agent application translates by code and its Hausa reads "An riga an yi
+ * rajistar wannan mutumin a matsayin {{subject}}", so it needs the name — and
+ * the TIN when there is one — as something it can substitute. Composed as one
+ * value rather than two because the TIN is conditional: a translation carrying
+ * "(TIN {{tin}})" separately would print that literally for everybody who has
+ * not got one, since `errorText` leaves a placeholder the server did not send
+ * alone on purpose.
+ */
+function alreadyRegistered(match: DuplicateMatch): AppError {
+  const subject = `${match.displayName}${match.tin ? ` (TIN ${match.tin})` : ''}`;
+  return new AppError({
+    statusCode: 409,
+    code: 'TAXPAYER_ALREADY_EXISTS',
+    message: `This person is already registered as ${subject}. A second record would be a duplicate.`,
+    nextStep: 'Open the existing taxpayer record and continue from there.',
+    details: [{ field: 'subject', issue: subject }],
+  });
+}
+
+/** The index that says one identity number belongs to one live record (086). */
+function brokeTheIdentityIndex(error: unknown): boolean {
+  const failure = error as { code?: string; constraint?: string } | null;
+  return failure?.code === '23505' && failure.constraint === 'idx_taxpayers_identity_live';
+}
+
 export async function registerTaxpayer(params: {
   input: TaxpayerInput;
   actorId: string;
@@ -228,27 +263,7 @@ export async function registerTaxpayer(params: {
       }),
     );
 
-    if (decisive) {
-      /*
-       * The subject as a field, composed here rather than in the sentence.
-       *
-       * The agent application translates by code and its Hausa reads "An riga
-       * an yi rajistar wannan mutumin a matsayin {{subject}}" — so it needs
-       * the name, and the TIN when there is one, as something it can
-       * substitute. Composed as one value rather than two because the TIN is
-       * conditional: a translation carrying "(TIN {{tin}})" would print that
-       * literally for everybody who has not got one, since `errorText` leaves
-       * a placeholder the server did not send alone on purpose.
-       */
-      const subject = `${decisive.displayName}${decisive.tin ? ` (TIN ${decisive.tin})` : ''}`;
-      throw new AppError({
-        statusCode: 409,
-        code: 'TAXPAYER_ALREADY_EXISTS',
-        message: `This person is already registered as ${subject}. A second record would be a duplicate.`,
-        nextStep: 'Open the existing taxpayer record and continue from there.',
-        details: [{ field: 'subject', issue: subject }],
-      });
-    }
+    if (decisive) throw alreadyRegistered(decisive);
 
     throw conflict(
       'POSSIBLE_DUPLICATE_TAXPAYER',
@@ -445,105 +460,174 @@ export async function registerTaxpayer(params: {
     }
   }
 
-  return withTransaction(async (client) => {
-    const taxpayer = await queryOne<{ id: string }>(
-      client,
-      `INSERT INTO taxpayers (
-         taxpayer_type, tin, tin_status, tin_requested_at, tin_assigned_at, tin_reference,
-         first_name, middle_name, last_name, date_of_birth, gender,
-         business_name, business_type, registration_number, nature_of_business,
-         phone, alternate_phone, email, address, lga_id, ward_id, community,
-         occupation, business_activity, identity_type, identity_hash, identity_masked,
-         consent_given, consent_at, declaration_accepted,
-         registered_by_agent_id, source, tin_reason, tin_attempts, preferred_language
-       ) VALUES (
-         $1,$2,$3, now(), $4, $5,
-         $6,$7,$8,$9,$10,
-         $11,$12,$13,$14,
-         $15,$16,$17,$18,$19,$20,$21,
-         $22,$23,$24,$25,$26,
-         $27, now(), $28,
-         $29,$30,$31,$32,$33
-       ) RETURNING id`,
-      [
-        input.taxpayerType,
+  /**
+   * The row, and everything that has to be true in the same transaction as it.
+   *
+   * Lifted into its own function only so the identity collision below can be
+   * caught around it. Nothing else changed: it still runs after the TIN call
+   * rather than around it, which is the whole reason the window it is wrapped
+   * for exists.
+   */
+  function insertTaxpayer() {
+    return withTransaction(async (client) => {
+      const taxpayer = await queryOne<{ id: string }>(
+        client,
+        `INSERT INTO taxpayers (
+           taxpayer_type, tin, tin_status, tin_requested_at, tin_assigned_at, tin_reference,
+           first_name, middle_name, last_name, date_of_birth, gender,
+           business_name, business_type, registration_number, nature_of_business,
+           phone, alternate_phone, email, address, lga_id, ward_id, community,
+           occupation, business_activity, identity_type, identity_hash, identity_masked,
+           consent_given, consent_at, declaration_accepted,
+           registered_by_agent_id, source, tin_reason, tin_attempts, preferred_language
+         ) VALUES (
+           $1,$2,$3, now(), $4, $5,
+           $6,$7,$8,$9,$10,
+           $11,$12,$13,$14,
+           $15,$16,$17,$18,$19,$20,$21,
+           $22,$23,$24,$25,$26,
+           $27, now(), $28,
+           $29,$30,$31,$32,$33
+         ) RETURNING id`,
+        [
+          input.taxpayerType,
+          tin,
+          tinStatus,
+          tinStatus === 'ASSIGNED' || tinStatus === 'EXISTING' ? new Date() : null,
+          tinReference,
+          input.firstName ?? null,
+          input.middleName ?? null,
+          input.lastName ?? null,
+          input.dateOfBirth ?? null,
+          input.gender ?? null,
+          input.businessName ?? null,
+          input.businessType ?? null,
+          input.registrationNumber ?? null,
+          input.natureOfBusiness ?? null,
+          input.phone,
+          input.alternatePhone ?? null,
+          input.email ?? null,
+          input.address,
+          input.lgaId,
+          input.wardId ?? null,
+          input.community ?? null,
+          input.occupation ?? null,
+          input.businessActivity ?? null,
+          input.identityType ?? null,
+          identityHash,
+          identityMasked,
+          input.consentGiven,
+          input.declarationAccepted,
+          params.agentId ?? null,
+          params.source ?? 'AGENT',
+          tinReason,
+          tinStatus === 'NOT_REQUESTED' || tinStatus === 'EXISTING' ? 0 : 1,
+          // English when the agent did not ask, which is also the column default.
+          input.preferredLanguage ?? 'en',
+        ],
+      );
+
+      if (duplicates.length > 0) {
+        await recordDuplicateCheck(client, {
+          input,
+          duplicates,
+          decision: 'PROCEEDED',
+          actorId: params.actorId,
+          createdTaxpayerId: taxpayer!.id,
+        });
+      }
+
+      await client.query(
+        `INSERT INTO taxpayer_compliance (taxpayer_id, has_valid_tin)
+         VALUES ($1, $2) ON CONFLICT (taxpayer_id) DO NOTHING`,
+        [taxpayer!.id, tin !== null],
+      );
+
+      await recordAudit(client, {
+        actorId: params.actorId,
+        actorRole: params.actorRole,
+        action: 'taxpayer.registered',
+        entityType: 'taxpayer',
+        entityId: taxpayer!.id,
+        newValue: {
+          taxpayerType: input.taxpayerType,
+          tin,
+          tinStatus,
+          lgaId: input.lgaId,
+          agentId: params.agentId ?? null,
+          duplicateWarnings: duplicates.length,
+        },
+        ipAddress: params.ipAddress ?? null,
+        deviceId: params.deviceId ?? null,
+      });
+
+      return {
+        taxpayerId: taxpayer!.id,
         tin,
         tinStatus,
-        tinStatus === 'ASSIGNED' || tinStatus === 'EXISTING' ? new Date() : null,
-        tinReference,
-        input.firstName ?? null,
-        input.middleName ?? null,
-        input.lastName ?? null,
-        input.dateOfBirth ?? null,
-        input.gender ?? null,
-        input.businessName ?? null,
-        input.businessType ?? null,
-        input.registrationNumber ?? null,
-        input.natureOfBusiness ?? null,
-        input.phone,
-        input.alternatePhone ?? null,
-        input.email ?? null,
-        input.address,
-        input.lgaId,
-        input.wardId ?? null,
-        input.community ?? null,
-        input.occupation ?? null,
-        input.businessActivity ?? null,
-        input.identityType ?? null,
-        identityHash,
-        identityMasked,
-        input.consentGiven,
-        input.declarationAccepted,
-        params.agentId ?? null,
-        params.source ?? 'AGENT',
-        tinReason,
-        tinStatus === 'NOT_REQUESTED' || tinStatus === 'EXISTING' ? 0 : 1,
-        // English when the agent did not ask, which is also the column default.
-        input.preferredLanguage ?? 'en',
-      ],
-    );
+        duplicatesConsidered: duplicates,
+      };
+    });
+  }
 
-    if (duplicates.length > 0) {
-      await recordDuplicateCheck(client, {
-        input,
-        duplicates,
-        decision: 'PROCEEDED',
-        actorId: params.actorId,
-        createdTaxpayerId: taxpayer!.id,
-      });
+  /*
+   * THE PAIR THE DUPLICATE CHECK CANNOT SEE.
+   *
+   * Everything above ran outside a transaction and took no lock, which is
+   * deliberate — the comment on the duplicate check says why, and the TIN
+   * service call sits between the check and this insert, so a lock spanning
+   * the two would hold a pooled connection across a third party's latency.
+   * That is the fault that moved the ward check and the TIN call out here in
+   * the first place.
+   *
+   * What it leaves is a window. Two agents registering one person both find
+   * nothing, both reach here, and before 086 both inserted: two records, two
+   * TINs, `duplicatesConsidered: []` on each. PRD §68 names that outcome —
+   * "Create duplicate taxpayers for commission purposes" — and the control
+   * against it was defeated by pressing Register at the same moment.
+   *
+   * `idx_taxpayers_identity_live` closes the window. This closes the message:
+   * a unique violation reaches an agent as DUPLICATE_RECORD and "that record
+   * already exists", which names nobody and is the one sentence of the two the
+   * agent application cannot say in Hausa. The loser gets the refusal the
+   * sequential path gives, about the record that actually won.
+   *
+   * And it is journalled as BLOCKED, because that is what it is. The fraud
+   * review that reads `taxpayer_duplicate_checks` is looking for repeated
+   * attempts on one identity, and an attempt that lost a race is an attempt.
+   */
+  try {
+    return await insertTaxpayer();
+  } catch (error) {
+    if (!brokeTheIdentityIndex(error)) throw error;
+
+    // The row exists now, so the check that found nothing a moment ago finds
+    // it. Re-read rather than guessed: the winner is the record the agent has
+    // to be sent to, and this is the only way to learn which it was.
+    const settled = await findPotentialDuplicates(pool, input);
+    const winner = settled.find((match) => match.reasons.includes('IDENTITY_NUMBER'));
+    if (!winner) {
+      /*
+       * The index fired and the identity is not there to be named — a further
+       * race, or a status change between the two. Inventing a sentence about a
+       * record this cannot find would be worse than the generic refusal, so
+       * the original error goes on to the duplicate handler.
+       */
+      throw error;
     }
 
-    await client.query(
-      `INSERT INTO taxpayer_compliance (taxpayer_id, has_valid_tin)
-       VALUES ($1, $2) ON CONFLICT (taxpayer_id) DO NOTHING`,
-      [taxpayer!.id, tin !== null],
+    await withTransaction((client) =>
+      recordDuplicateCheck(client, {
+        input,
+        duplicates: settled,
+        decision: 'BLOCKED',
+        actorId: params.actorId,
+        createdTaxpayerId: null,
+      }),
     );
 
-    await recordAudit(client, {
-      actorId: params.actorId,
-      actorRole: params.actorRole,
-      action: 'taxpayer.registered',
-      entityType: 'taxpayer',
-      entityId: taxpayer!.id,
-      newValue: {
-        taxpayerType: input.taxpayerType,
-        tin,
-        tinStatus,
-        lgaId: input.lgaId,
-        agentId: params.agentId ?? null,
-        duplicateWarnings: duplicates.length,
-      },
-      ipAddress: params.ipAddress ?? null,
-      deviceId: params.deviceId ?? null,
-    });
-
-    return {
-      taxpayerId: taxpayer!.id,
-      tin,
-      tinStatus,
-      duplicatesConsidered: duplicates,
-    };
-  });
+    throw alreadyRegistered(winner);
+  }
 }
 
 async function recordDuplicateCheck(
@@ -1164,15 +1248,36 @@ export async function changeTaxpayerIdentity(input: IdentityChangeInput): Promis
     const identityHash = input.identityNumber ? hashIdentityNumber(input.identityNumber) : null;
     const identityMasked = input.identityNumber ? maskIdentityNumber(input.identityNumber) : null;
 
-    // The identity hash is what duplicate detection blocks on, so a change to
-    // it must not walk this record onto somebody else's identity. Checked
-    // before anything is written, and inside the transaction so a concurrent
-    // registration cannot slip in behind it.
+    /*
+     * The identity hash is what duplicate detection blocks on, so a change to
+     * it must not walk this record onto somebody else's identity. Checked
+     * before anything is written, and inside the transaction so a concurrent
+     * registration cannot slip in behind it.
+     *
+     * ACTIVE AND DRAFT, matching 086's index and `findPotentialDuplicates`.
+     * This read used to say `status = 'ACTIVE'` alone, which was the narrower
+     * of the two rules the platform holds: registration treats a DRAFT record
+     * as somebody's identity and this did not. With the index enforcing the
+     * wider predicate, a change onto a DRAFT record's identity would be
+     * refused by the index rather than by the named refusal below, and the
+     * officer would get "that record already exists" in place of a sentence
+     * telling them what to do about it.
+     *
+     * NOT A FIXED DEFECT, AND NOT TESTABLE. `taxpayers.status: DRAFT` is
+     * declared unreachable in `enum-coverage.ts` — "Registration is a single
+     * act; an unsent capture waits in offline_drafts, not as a partial
+     * record" — so no row is ever DRAFT and neither predicate can see one.
+     * A test for this would have to write the state itself, which proves a
+     * fixture ran and is what the enum checker exists to refuse; it caught
+     * exactly that attempt here. The two predicates agree instead of
+     * disagreeing in a way that would matter the day DRAFT starts being
+     * written, and that is the whole claim.
+     */
     if (identityHash && identityHash !== current.identity_hash) {
       const clash = await queryOne<{ id: string; tin: string | null }>(
         client,
         `SELECT id, tin FROM taxpayers
-          WHERE identity_hash = $1 AND id <> $2 AND status = 'ACTIVE'`,
+          WHERE identity_hash = $1 AND id <> $2 AND status IN ('ACTIVE', 'DRAFT')`,
         [identityHash, input.taxpayerId],
       );
       if (clash) {

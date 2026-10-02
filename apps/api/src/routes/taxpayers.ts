@@ -1308,6 +1308,114 @@ draftRouter.post(
             continue;
           }
 
+          /*
+           * A collision means one of two things, and they need opposite
+           * answers.
+           *
+           * A draft is briefly reachable here with a sibling mid-flight: it
+           * has inserted the taxpayer but not yet recorded the outcome on the
+           * draft row, so the check above does not see it settled. But a
+           * collision equally means the record belongs to a DIFFERENT
+           * registration — a second capture of the same person, which is the
+           * duplicate the control exists to stop — and that is permanent.
+           *
+           * Two earlier attempts at this got it wrong, and the mutation checks
+           * are what said so. Staying silent so the phone would retry could
+           * not be reached by any test; working out why exposed that it would
+           * retry a permanent conflict for ever and never tell the agent
+           * anything. Letting it fall through to DRAFT_NOT_PROCESSED made the
+           * eight-way race intermittently report a refusal for work that had
+           * just succeeded.
+           *
+           * So ask which it is. The duplicate control found nobody moments
+           * ago, so a taxpayer carrying this capture's phone number now is the
+           * sibling's work, and the honest answer is the one a settled draft
+           * gets: already synchronised, not duplicated, with the record's id.
+           * If there is no such taxpayer, the record belongs to a different
+           * capture and the agent has to be told.
+           *
+           * IT ASKS ONLY ABOUT `23505`, AND THAT IS A MEASURED CHOICE.
+           *
+           * Since 086 a same-draft sibling can collide on two indexes:
+           * `taxpayers_tin_key`, because two syncs of one draft derive the
+           * same TIN from the same details, and `idx_taxpayers_identity_live`,
+           * which `registerTaxpayer` catches and re-raises as
+           * TAXPAYER_ALREADY_EXISTS. The second is an `AppError`, so it takes
+           * the branch below and the draft is REJECTED for work that just
+           * succeeded.
+           *
+           * Widening this to accept that code too was tried and is wrong. It
+           * cannot distinguish a sibling from the ordinary case — a draft for
+           * somebody who was ALREADY on the register, which the duplicate
+           * check refuses before any index is reached. Probing it returned
+           * "This draft was already synchronised. It has not been duplicated."
+           * for a capture that had been refused as a duplicate: a false
+           * reassurance about the one thing the sync path exists to be honest
+           * about, and no test in the suite objected.
+           *
+           * So this stays narrow, and what keeps the sibling case on the
+           * `23505` side is index check order: Postgres checks unique indexes
+           * by OID, `taxpayers_tin_key` is created in migration 002 and the
+           * identity index in 086, so the TIN key is always the lower of the
+           * two on a database built by these migrations. That is an
+           * implementation detail rather than a documented guarantee, and it
+           * is written down here rather than relied on quietly. If it ever
+           * changes, the symptom is a REJECTED draft carrying
+           * TAXPAYER_ALREADY_EXISTS where a DUPLICATE was due, and the fix is
+           * for `registerTaxpayer` to mark the collision it absorbed so this
+           * can tell the two apart — not to widen the test here.
+           *
+           * SCOPED TO A REGISTRATION, which it was not — and this half is a
+           * tightening rather than a fixed defect, stated as such because
+           * nothing covers it. The lookup reads `taxpayers` by phone, and
+           * `payload` is `z.record(z.unknown())`, so a vehicle or business
+           * capture carrying a `phone` key would have been reported as an
+           * already-synchronised TAXPAYER, with a taxpayer's id against a
+           * draft that registered nobody.
+           *
+           * It is unreachable today: the only unique index on `vehicles` is on
+           * the registration number, `upsertVehicle` merges on that number
+           * under an advisory lock rather than inserting twice, and an
+           * observation capture has no unique constraint to violate. So no
+           * non-registration draft can reach here with a `23505` at all, which
+           * is also why removing this condition fails nothing. It stays so
+           * that the next unique constraint added to either table does not
+           * inherit a reply about the wrong table.
+           *
+           * HOW WELL EITHER HALF IS COVERED, measured rather than claimed.
+           * Removing this branch fails the eight-way race about one run in
+           * five: the window is real and the signal is intermittent, which is
+           * the same thing the flakiness showed from the other side before the
+           * branch existed. The guard on WHICH collision it is remains thinly
+           * covered — the tests that reach here with a permanent conflict
+           * produce one of the two codes — and it stays because any other
+           * failure coinciding with a taxpayer on this phone would otherwise
+           * be reported as a duplicate, which it is not.
+           */
+          const phone =
+            typeof draft.payload.phone === 'string' ? draft.payload.phone.trim() : null;
+          const registeredMeanwhile =
+            (error as { code?: string } | null)?.code === '23505' &&
+            phone &&
+            draft.draftType === 'TAXPAYER_REGISTRATION'
+              ? await queryOne<{ id: string }>(
+                  pool,
+                  'SELECT id FROM taxpayers WHERE phone = $1 LIMIT 1',
+                  [phone],
+                )
+              : null;
+
+          if (registeredMeanwhile) {
+            results.push({
+              clientReference: draft.clientReference,
+              status: 'DUPLICATE',
+              entityType: 'taxpayer',
+              entityId: registeredMeanwhile.id,
+              message: 'This draft was already synchronised. It has not been duplicated.',
+            });
+            continue;
+          }
+
           if (error instanceof AppError) {
             /*
              * Its own code, not one of ours.
@@ -1320,66 +1428,6 @@ draftRouter.post(
              */
             await reject(error.code, error.message);
           } else {
-            /*
-             * A unique violation means one of two things, and they need
-             * opposite answers.
-             *
-             * A draft is briefly reachable here with a sibling mid-flight: it
-             * has inserted the taxpayer but not yet recorded the outcome on
-             * the draft row, so the check above does not see it settled. But
-             * `23505` equally means the number already belongs to a DIFFERENT
-             * taxpayer — the mock TIN service derives a TIN from the person's
-             * own details and the real register is authoritative — and that is
-             * permanent.
-             *
-             * Two earlier attempts at this got it wrong, and the mutation
-             * checks are what said so. Staying silent so the phone would retry
-             * could not be reached by any test; working out why exposed that
-             * it would retry a permanent conflict for ever and never tell the
-             * agent anything. Letting it fall through to DRAFT_NOT_PROCESSED
-             * made the eight-way race intermittently report a refusal for work
-             * that had just succeeded.
-             *
-             * So ask which it is. The duplicate control found nobody moments
-             * ago, so a taxpayer carrying this capture's phone number now is
-             * the sibling's work, and the honest answer is the one a settled
-             * draft gets: already synchronised, not duplicated, with the
-             * record's id. If there is no such taxpayer, the number belongs to
-             * somebody else and the agent has to be told.
-             *
-             * HOW WELL EITHER HALF IS COVERED, measured rather than claimed.
-             * Removing this branch fails the eight-way race about one run in
-             * five: the window is real and the signal is intermittent, which
-             * is the same thing the flakiness showed from the other side
-             * before the branch existed. The `23505` guard on it is not
-             * covered at all — the only test that reaches here with a
-             * permanent conflict produces that very code, so dropping the
-             * guard changes nothing it can see. It stays because any other
-             * failure that happened to coincide with a taxpayer on this phone
-             * would otherwise be reported as a duplicate, which it is not.
-             */
-            const phone =
-              typeof draft.payload.phone === 'string' ? draft.payload.phone.trim() : null;
-            const registeredMeanwhile =
-              (error as { code?: string } | null)?.code === '23505' && phone
-                ? await queryOne<{ id: string }>(
-                    pool,
-                    'SELECT id FROM taxpayers WHERE phone = $1 LIMIT 1',
-                    [phone],
-                  )
-                : null;
-
-            if (registeredMeanwhile) {
-              results.push({
-                clientReference: draft.clientReference,
-                status: 'DUPLICATE',
-                entityType: 'taxpayer',
-                entityId: registeredMeanwhile.id,
-                message: 'This draft was already synchronised. It has not been duplicated.',
-              });
-              continue;
-            }
-
             log.error('offline draft could not be processed', {
               component: 'drafts',
               draftId: storedId,

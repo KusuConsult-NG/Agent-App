@@ -37,6 +37,19 @@ function isPostgresError(error: unknown): error is PostgresError {
  */
 export const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
   taxpayers_tin_key: 'A taxpayer with this TIN already exists.',
+  /*
+   * 086. Registration absorbs this one — `registerTaxpayer` catches it by name
+   * and raises TAXPAYER_ALREADY_EXISTS, which names the record and is said in
+   * Hausa — so the path that reaches this message is the other one: putting a
+   * closed record back on the register while a live record carries the same
+   * identification number. That is two live records for one person, which is
+   * what the index exists to prevent, and the officer doing it is the person
+   * who can resolve which record should be the live one.
+   */
+  idx_taxpayers_identity_live:
+    'Another taxpayer on the register already has that identification number. Two live ' +
+    'records for one person cannot both stand — resolve the duplicate before putting this ' +
+    'record back on the register.',
   users_phone_key: 'This phone number is already registered.',
   users_email_key: 'This email address is already registered.',
   receipts_receipt_number_key: 'That receipt number has already been issued.',
