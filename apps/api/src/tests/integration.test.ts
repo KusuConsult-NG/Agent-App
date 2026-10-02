@@ -1256,13 +1256,37 @@ describe('Access control and audit integrity (PRD §36, §45, §67)', () => {
     );
   });
 
-  it('records who accessed a taxpayer record', async () => {
+  /*
+   * Renamed to what it tests.
+   *
+   * It was called "records who accessed a taxpayer record" and asserted that
+   * the endpoint returned at least one row. It passed — because registering the
+   * fixture taxpayer wrote an `audit_logs` row, and until migration 083 those
+   * change rows were the only thing this endpoint could return. So a test whose
+   * name asserted that reads are logged was satisfied by a write, on a platform
+   * where no read was recorded anywhere.
+   *
+   * That reads are now logged, and that this endpoint returns them, is held by
+   * `who-opened-this-persons-record.test.ts`, which looks at a record and then
+   * looks for the look. What is left here is the narrower thing this test
+   * actually did: the auditor's query answers.
+   */
+  it('answers an auditor asking what has happened to a taxpayer record', async () => {
     const response = await get(
       `/government/audit/queries/taxpayer-access?taxpayerId=${ctx.taxpayerId}`,
       { token: ctx.auditorToken },
     );
     assert.equal(response.status, 200);
     assert.ok(response.body.length >= 1);
+    // Every row says whether it is a look or a change. Without this the two
+    // halves are indistinguishable once merged, which is the defect the union
+    // would otherwise have introduced while fixing another.
+    for (const row of response.body) {
+      assert.ok(
+        row.kind === 'READ' || row.kind === 'CHANGE',
+        `a row of neither kind: ${JSON.stringify(row)}`,
+      );
+    }
   });
 });
 

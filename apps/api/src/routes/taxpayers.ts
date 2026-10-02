@@ -33,6 +33,7 @@ import { observationCaptureSchema } from './government';
 import { recordObservation } from '../services/enumeration';
 import { evaluateRegistrationRisk } from '../services/fraud';
 import { getTaxpayerIncentives, syncTaxpayerComplianceAndIncentives } from '../services/incentives';
+import { recordTaxpayerAccess } from '../services/taxpayer-access';
 import { queueNotification } from '../services/notifications';
 
 /** What a citizen can hand an agent, once the search box has recognised it. */
@@ -523,12 +524,30 @@ taxpayerRouter.get(
           )?.id ?? null)
         : null;
 
-    res.json(
-      await taxpayers.getTaxpayerProfile(pool, req.params.id, {
-        role: req.auth!.role,
-        agentId,
-      }),
-    );
+    const profile = await taxpayers.getTaxpayerProfile(pool, req.params.id, {
+      role: req.auth!.role,
+      agentId,
+    });
+
+    /*
+     * Logged after the read, not before.
+     *
+     * `getTaxpayerProfile` throws if there is no such taxpayer, and the log
+     * carries a foreign key to `taxpayers` — so a row can only exist for a
+     * record that exists, and a probe at an id that is not a taxpayer cannot
+     * leave an entry on somebody else's access log.
+     */
+    await recordTaxpayerAccess({
+      taxpayerId: req.params.id!,
+      accessedBy: req.auth!.userId,
+      actorRole: req.auth!.role,
+      surface: 'TAXPAYER_RECORD',
+      ipAddress: req.clientIp,
+      deviceId: req.auth!.deviceId,
+      requestId: req.requestId,
+    });
+
+    res.json(profile);
   }),
 );
 
@@ -536,7 +555,17 @@ taxpayerRouter.get(
   '/:id/incentives',
   requirePermission('incentive:read:all'),
   asyncHandler(async (req, res) => {
-    res.json(await getTaxpayerIncentives(pool, req.params.id));
+    const standing = await getTaxpayerIncentives(pool, req.params.id);
+    await recordTaxpayerAccess({
+      taxpayerId: req.params.id!,
+      accessedBy: req.auth!.userId,
+      actorRole: req.auth!.role,
+      surface: 'INCENTIVE_STANDING',
+      ipAddress: req.clientIp,
+      deviceId: req.auth!.deviceId,
+      requestId: req.requestId,
+    });
+    res.json(standing);
   }),
 );
 
@@ -552,7 +581,17 @@ taxpayerRouter.get(
   '/:id/obligations',
   requirePermission('taxpayer:read:assigned', 'taxpayer:read:all'),
   asyncHandler(async (req, res) => {
-    res.json(await obligations.getObligationsForTaxpayer(pool, req.params.id));
+    const held = await obligations.getObligationsForTaxpayer(pool, req.params.id);
+    await recordTaxpayerAccess({
+      taxpayerId: req.params.id!,
+      accessedBy: req.auth!.userId,
+      actorRole: req.auth!.role,
+      surface: 'TAX_OBLIGATIONS',
+      ipAddress: req.clientIp,
+      deviceId: req.auth!.deviceId,
+      requestId: req.requestId,
+    });
+    res.json(held);
   }),
 );
 

@@ -151,7 +151,7 @@ are all Complete and each is covered by a test that fails if it stops being.
 | Refund approvals | Complete | `approvals` |
 | Reconciliation actions | Complete | `reconciliation_records.reconciled_by` |
 | Reports generated | Complete | `report.export` records what left; `report.view` records that a stored audit report was read, which was the half that was missing |
-| Sensitive data accessed | Complete | `document_access_logs`, `kyc_document_access_logs`, `GET /government/audit/queries/taxpayer-access` |
+| Sensitive data accessed | Complete | `document_access_logs` (receipts), `kyc_document_access_logs` (identity documents), `taxpayer_connection_access_logs` (coverage queries, with a declared purpose), and `taxpayer_record_access_logs` (the record itself: the register entry, the payment history, the obligations and the incentive standing, each logged as itself). This row read Complete before migration 083 on the strength of an endpoint that could only return changes — an officer who opened a record and read all of it left no trace. Not covered: `GET /taxpayers/search`, which discloses several people at once and is keyed to a query rather than a taxpayer, so recording it here would mean a row per result and would put one officer's typo on twenty citizens' access logs |
 
 ---
 

@@ -31,6 +31,7 @@ import * as reconciliation from '../services/reconciliation';
 import * as reports from '../services/reports';
 import { arrearsWorklist } from '../services/arrears';
 import { paymentHistory } from '../services/payment-history';
+import { recordTaxpayerAccess } from '../services/taxpayer-access';
 import {
   assessFromObservation,
   attestObservation,
@@ -435,14 +436,30 @@ governmentRouter.get(
           );
         }
       }
-      res.json(
-        await paymentHistory(pool, {
-          taxpayerId: req.params.id!,
-          from: data.from,
-          to: data.to,
-          limit: data.limit,
-        }),
-      );
+      const history = await paymentHistory(pool, {
+        taxpayerId: req.params.id!,
+        from: data.from,
+        to: data.to,
+        limit: data.limit,
+      });
+
+      /*
+       * This is the officer portal's route to a named person's affairs. It
+       * never calls `GET /taxpayers/:id` — it searches, then opens this tab —
+       * so logging only the profile read would have left every officer's look
+       * unrecorded while recording every field agent's.
+       */
+      await recordTaxpayerAccess({
+        taxpayerId: req.params.id!,
+        accessedBy: req.auth!.userId,
+        actorRole: req.auth!.role,
+        surface: 'PAYMENT_HISTORY',
+        ipAddress: req.clientIp,
+        deviceId: req.auth!.deviceId,
+        requestId: req.requestId,
+      });
+
+      res.json(history);
     },
   ),
 );

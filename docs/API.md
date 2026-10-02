@@ -478,7 +478,7 @@ reconciliation sweep operated is an audit fact.
 | Every transaction by agent X between two dates | `/government/audit/queries/agent-transactions` |
 | All transactions reversed after successful payment | `/government/audit/queries/reversed-after-success` |
 | All changes made to revenue rates | `/government/audit/queries/rate-changes` |
-| All users who accessed taxpayer record X | `/government/audit/queries/taxpayer-access` |
+| Who has read taxpayer record X, and who has changed it | `/government/audit/queries/taxpayer-access` — reads come from `taxpayer_record_access_logs`, changes from `audit_logs`; every row says which it is. A search (`/taxpayers/search`) is not recorded — see the readiness assessment's "Sensitive data accessed" row for why |
 | All receipts generated for a revenue item | `/government/audit/queries/receipts-by-item` |
 | All payments from LGA X | `/government/transactions?lgaId=` |
 | All commission paid to agent X | `/government/commissions/payouts` |

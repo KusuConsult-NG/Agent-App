@@ -6,7 +6,7 @@ import { Alert, Badge, BeforeAfter, ErrorAlert, ExportButtons, Loading, Money, R
 import { withJustification } from '../lib/justify';
 import { usePortalI18n } from '../lib/i18n';
 import { useFilters } from '../lib/filters';
-import { CHAIN_TEXT, enumLabel, localName, todayIsoLocal } from '@psirs/shared';
+import { CHAIN_TEXT, ENUM_LABELS, enumLabel, localName, todayIsoLocal } from '@psirs/shared';
 import type { ChainVerdict, TranslationDictionary } from '@psirs/shared';
 
 /**
@@ -409,6 +409,20 @@ interface AuditQuery {
   };
   /** Whether the query also wants a period. */
   period?: boolean;
+}
+
+/**
+ * Whether a cell of an audit answer is a state the dictionary can name.
+ *
+ * Narrow on purpose, in both directions — the comment at the call site gives
+ * the two reasons. `ENUM_LABELS` is consulted directly rather than through
+ * `enumLabel`, because `enumLabel` always returns something: its fallback is
+ * what mangles an action identifier, so the question "does the dictionary
+ * know this" has to be asked before it is called.
+ */
+function isTranslatedState(column: string, value: unknown): value is string {
+  if (column !== 'kind' && column !== 'action') return false;
+  return typeof value === 'string' && value in ENUM_LABELS;
 }
 
 const AUDIT_QUERIES: AuditQuery[] = [
@@ -896,7 +910,40 @@ export function AuditScreen() {
                 typeof row[key] === 'object' && row[key] !== null ? (
                   <span className="mono">{JSON.stringify(row[key])}</span>
                 ) : (
-                  String(row[key] ?? '—')
+                  /*
+                   * Two columns go through the dictionary, and only values it
+                   * actually holds.
+                   *
+                   * `kind` and `action` are the only columns in any of these
+                   * answers that carry a state rather than a datum: READ or
+                   * CHANGE, and — on a read — which of the four things the
+                   * officer was shown. Rendered raw they reached a Hausa
+                   * auditor as `PAYMENT_HISTORY`.
+                   *
+                   * The second condition is load-bearing and tested:
+                   * `enumLabel` falls back to taking the underscores out and
+                   * lowercasing, which turned `taxpayer.status_changed` —
+                   * an audit action identifier, not a state — into
+                   * "taxpayer.status changed". An action has to stay the
+                   * string it is, so an auditor can match it against the log.
+                   *
+                   * The column restriction is conservatism rather than a
+                   * demonstrated hazard, and is worth being straight about:
+                   * widening this to every cell would translate anything that
+                   * matched a dictionary key, which for the states in these
+                   * five answers (`status`, `result`, `rate_type`) would
+                   * probably be an improvement. It is not done here because
+                   * `ENUM_LABELS` is keyed by bare value and these answers are
+                   * arbitrary SQL projections: a future column holding `A` as
+                   * a datum would read "Class A", on the one screen where a
+                   * wrong label is a wrong fact. No test here discriminates
+                   * the two, so the narrower rule is the one that ships.
+                   */
+                  isTranslatedState(key, row[key]) ? (
+                    enumLabel(row[key] as string, t)
+                  ) : (
+                    String(row[key] ?? '—')
+                  )
                 ),
             }))}
             rows={queryResult.rows}

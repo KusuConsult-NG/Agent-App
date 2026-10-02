@@ -800,13 +800,60 @@ export async function rateChangeHistory(db: Db, params: { revenueItemId?: string
   );
 }
 
+/**
+ * Who has looked at one taxpayer's record, and who has changed it.
+ *
+ * This is the endpoint behind the oversight screen's "Who has looked at one
+ * taxpayer's record" and API.md's "All users who accessed taxpayer record X".
+ * It used to read `audit_logs` alone — and every one of the nine writers of a
+ * row with `entity_type = 'taxpayer'` writes it when the record is CHANGED.
+ * A read wrote nothing anywhere, so the answer to "who looked" was a list of
+ * changes, and an officer who opened a record, read the whole of it and closed
+ * it appeared in it not at all.
+ *
+ * `taxpayer_record_access_logs` (migration 083) is the missing half. Both are
+ * returned, each row saying which it is, because an auditor's question is
+ * almost never one or the other: "who has touched this record" wants both, and
+ * separating them into two endpoints would mean two queries to answer it and a
+ * silent assumption about which one the asker meant.
+ *
+ * The `kind` column is first so it reads first — the oversight table takes its
+ * columns from the keys of the first row, in order.
+ */
 export async function taxpayerAccessLog(db: Db, taxpayerId: string) {
   return query(
     db,
-    `SELECT a.created_at, a.action, a.result, u.full_name, u.role, a.ip_address, a.device_id
+    /*
+     * Two things about the SQL.
+     *
+     * UNION ALL rather than UNION, because there is nothing to deduplicate and
+     * asking for it would cost a sort over both halves. It is not what keeps
+     * two looks from becoming one row: `created_at` carries microseconds, so
+     * UNION would keep both anyway. What keeps them separate is that each read
+     * inserts.
+     *
+     * And `$1::text::uuid` on one side with `$1::text` on the other.
+     *
+     * `taxpayer_record_access_logs.taxpayer_id` is a UUID with a foreign key;
+     * `audit_logs.entity_id` is TEXT, because it holds the id of whatever kind
+     * of thing the entry is about and not all of them are UUIDs. One parameter
+     * cannot be both types, and leaving it to inference resolved it as uuid
+     * from whichever branch came first and then failed the other with
+     * "operator does not exist: text = uuid". Pinning it to text and casting
+     * where a uuid is wanted says which is which.
+     */
+    `SELECT 'READ' AS kind, l.created_at, l.surface AS action, 'SUCCESS' AS result,
+            u.full_name, COALESCE(l.actor_role, u.role) AS role, l.ip_address,
+            l.device_id
+       FROM taxpayer_record_access_logs l
+       LEFT JOIN users u ON u.id = l.accessed_by
+      WHERE l.taxpayer_id = $1::text::uuid
+     UNION ALL
+     SELECT 'CHANGE' AS kind, a.created_at, a.action, a.result,
+            u.full_name, u.role, a.ip_address, a.device_id
        FROM audit_logs a LEFT JOIN users u ON u.id = a.actor_id
-      WHERE a.entity_type = 'taxpayer' AND a.entity_id = $1
-      ORDER BY a.created_at DESC LIMIT 500`,
+      WHERE a.entity_type = 'taxpayer' AND a.entity_id = $1::text
+      ORDER BY created_at DESC LIMIT 500`,
     [taxpayerId],
   );
 }

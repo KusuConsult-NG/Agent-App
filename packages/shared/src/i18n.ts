@@ -624,6 +624,21 @@ export interface TranslationDictionary {
   enumWhatsapp: string;
   enumWholesaleTrade: string;
 
+  /*
+   * Who read a taxpayer's record, and what they were shown.
+   *
+   * `taxpayer_record_access_logs.surface` (migration 083) and the `kind` the
+   * audit query puts beside it. Grouped rather than filed alphabetically
+   * above, because the five only make sense together: four things an officer
+   * can be shown about one person, and whether the row is a reading of the
+   * record or a change to it. `READ` was already here.
+   */
+  enumChange: string;
+  enumIncentiveStanding: string;
+  enumPaymentHistory: string;
+  enumTaxObligations: string;
+  enumTaxpayerRecord: string;
+
   /**
    * The sentence a referee reads once, with a subject.
    *
@@ -4317,6 +4332,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumQuarterly: "Quarterly",
     enumQueued: "Queued",
     enumRead: "Read",
+    enumChange: "Changed",
+    enumIncentiveStanding: "Incentive standing",
+    enumPaymentHistory: "Payment history",
+    enumTaxObligations: "Tax obligations",
+    enumTaxpayerRecord: "Taxpayer record",
     enumReadyForReview: "Ready for review",
     enumRealProperty: "Land and buildings",
     enumReceipt: "Receipt",
@@ -7821,6 +7841,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumQuarterly: "Kowane wata uku",
     enumQueued: "Yana layi",
     enumRead: "An karanta",
+    enumChange: "An canza",
+    enumIncentiveStanding: "Matsayin tallafi",
+    enumPaymentHistory: "Tarihin biyayya",
+    enumTaxObligations: "Wajiban haraji",
+    enumTaxpayerRecord: "Rikodin mai biyan haraji",
     enumReadyForReview: "A shirye don dubawa",
     enumRealProperty: "Filaye da gine-gine",
     enumReceipt: "Rasit",
