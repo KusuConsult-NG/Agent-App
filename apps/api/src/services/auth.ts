@@ -194,7 +194,32 @@ export async function login(params: {
 
   if (!valid) {
     await withTransaction(async (client) => {
-      const attempts = user.failed_login_count + 1;
+      /*
+       * THE COUNT IS RE-READ UNDER A LOCK, not carried from the read above.
+       *
+       * The read at the top of this function takes no lock and is not even in
+       * this transaction, so `user.failed_login_count + 1` was computed from a
+       * value that any number of simultaneous attempts shared. Five wrong
+       * passwords sent together all read 0, all computed 1, and all wrote 1:
+       * the counter advanced by one however many guesses were made, and
+       * `maxFailedLogins` was never reached.
+       *
+       * `/auth` is rate limited at ten requests a minute, so this was not
+       * unlimited guessing. It was the difference between two controls — five
+       * wrong passwords EVER before the account locks, against ten a minute
+       * for as long as somebody cares to keep going. A rate limit paces an
+       * attacker; the lockout is what stops them, and it is also what makes a
+       * weak password survivable.
+       *
+       * The password hash is verified above this, outside the transaction, so
+       * the lock is held across two statements and not across a KDF.
+       */
+      const current = await queryOne<{ failed_login_count: number }>(
+        client,
+        'SELECT failed_login_count FROM users WHERE id = $1 FOR UPDATE',
+        [user.id],
+      );
+      const attempts = (current?.failed_login_count ?? user.failed_login_count) + 1;
       const locked = attempts >= config.auth.maxFailedLogins;
       await client.query(
         `UPDATE users SET failed_login_count = $2,
