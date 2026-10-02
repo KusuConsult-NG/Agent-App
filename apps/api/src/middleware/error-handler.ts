@@ -77,11 +77,26 @@ export const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
    * has none. This paragraph used to say there were twelve of them. There were
    * seventy-one.
    *
-   * One thing this does not fix: the agent application translates a refusal by
-   * its code, and DUPLICATE_RECORD is not in its map, so for the two bank
-   * account rules a Hausa-reading agent still reads English. The right answer
-   * there is a specific code raised by the service, as `/drafts/sync` does with
-   * its own unique violation; that is a larger change than a message and is
+   * AND A CLAIM FROM THE SAME PARAGRAPH THAT WAS ALSO WRONG.
+   *
+   * It said that because DUPLICATE_RECORD is not in the agent application's
+   * translation map, "for the two bank account rules a Hausa-reading agent
+   * still reads English". An agent does not reach either rule.
+   * `requestBankAccountChange` opens its transaction with
+   * `SELECT ... FROM agents ... FOR UPDATE OF a` and then looks for a PROPOSED
+   * row, so two simultaneous requests are ordered by the lock and the second
+   * one's pre-check refuses with `BANK_CHANGE_ALREADY_PENDING` — which the
+   * agent application does translate.
+   *
+   * Measured rather than reasoned, in `concurrency/bank-change-race.test.ts`:
+   * the agent's own route and an officer's route driven at once leave one
+   * proposal, and the loser is refused by name. Remove the lock and the loser
+   * gets the raw 23505 instead, which is how the claim above would have become
+   * true. Both messages stay — a backstop that fires should still be legible —
+   * but they are backstops, and saying an agent reads them was wrong.
+   *
+   * DUPLICATE_RECORD remains untranslated in the agent application, and that
+   * remains worth fixing for the constraints an agent CAN reach. It is
    * recorded in `docs/HAUSA-REVIEW-QUESTIONS.md` with the rest of question 7.
    */
   users_staff_number_key: 'That staff number already belongs to another officer.',
