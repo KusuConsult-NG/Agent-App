@@ -254,12 +254,18 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
    * rewriting, for an officer who signed a report that was unsigned when they
    * looked, in a code this map does not hold.
    *
-   * `SAMPLE_COMPLETED` is the third row and is deliberately absent: it is
-   * raised from two sites with two different sentences, and `audit-workbench.ts`
-   * says so where it happens.
+   * The third row was one code with two sentences, and the note here used to
+   * say they wanted consolidating. They did not: they are two refusals about
+   * one state, told apart by what the auditor was trying to do — examine a
+   * transaction in a closed sample, where "draw a new sample" is the answer,
+   * or close a sample that is already closed, where it is not. Split, each
+   * means one fixed thing, which is this map's own test for what may be
+   * translated at all.
    */
   ALREADY_SIGNED: 'ofcErrAlreadySigned',
   ALREADY_WITHDRAWN: 'ofcErrAlreadyWithdrawn',
+  SAMPLE_COMPLETED: 'ofcErrSampleCompleted',
+  SAMPLE_ALREADY_COMPLETE: 'ofcErrSampleAlreadyComplete',
 };
 
 /**
@@ -297,6 +303,13 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
  */
 const TRANSLATED_NEXT_STEPS: Record<string, keyof TranslationDictionary> = {
   STEP_UP_REQUIRED: 'nsStepUpRequired',
+  /*
+   * The one audit-workbench refusal whose advice is the point of it: the
+   * findings are final, and looking again means a new sample.
+   * SAMPLE_ALREADY_COMPLETE deliberately has none — there is nothing left for
+   * that auditor to do, and inventing a step would be worse than silence.
+   */
+  SAMPLE_COMPLETED: 'ofcNsSampleCompleted',
 };
 
 /** The next step for an error, or the server's own words when it has none. */

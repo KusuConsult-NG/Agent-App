@@ -3680,6 +3680,21 @@ export interface TranslationDictionary {
   ofcErrAlreadySigned: string;
   ofcErrAlreadyWithdrawn: string;
   /*
+   * The third row of that tier, which turned out to be two refusals.
+   *
+   * `SAMPLE_COMPLETED` was raised from two sites with two different sentences
+   * and recorded as a code whose sentences wanted consolidating. Reading both
+   * call sites says otherwise: one is an auditor trying to EXAMINE a
+   * transaction in a closed sample, where "draw a new sample" is what they
+   * need, and the other is an auditor trying to CLOSE a sample that is already
+   * closed, where that advice is wrong and there is nothing to do. Two
+   * refusals about one state. Splitting the codes is what let either be said
+   * in Hausa, because the map's test is that a code means one fixed thing.
+   */
+  ofcErrSampleCompleted: string;
+  ofcErrSampleAlreadyComplete: string;
+  ofcNsSampleCompleted: string;
+  /*
    * What the job monitor says about a job, and how often it runs.
    *
    * Both were English on a screen that offers Hausa, and both are composed
@@ -7256,6 +7271,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcErrPeriodNotOpen: '{{period}} is not open. Its status is: {{state}}.',
     ofcErrAlreadySigned: '{{report}} has already been signed.',
     ofcErrAlreadyWithdrawn: '{{report}} is already withdrawn.',
+    ofcErrSampleCompleted: 'This sample has been completed and its findings are final.',
+    ofcErrSampleAlreadyComplete: 'This sample is already complete.',
+    ofcNsSampleCompleted: 'Draw a new sample to examine these transactions again.',
     ofcOvJobHealthy: 'Running on schedule.',
     ofcOvJobRunning: 'Running now.',
     ofcOvJobOverdue: 'Has not started when it should have. The schedule itself may have stopped.',
@@ -10802,6 +10820,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcErrPeriodNotOpen: 'Ba a bude {{period}} ba. Matsayinsa shi ne: {{state}}.',
     ofcErrAlreadySigned: 'An riga an sa hannu kan {{report}}.',
     ofcErrAlreadyWithdrawn: 'An riga an janye {{report}}.',
+    ofcErrSampleCompleted: 'An kammala wannan samfurin, kuma binciken sa na karshe ne.',
+    ofcErrSampleAlreadyComplete: 'An riga an kammala wannan samfurin.',
+    ofcNsSampleCompleted: 'Ka zana sabon samfuri domin ka sake duba wadannan ma’amaloli.',
     ofcOvJobHealthy: 'Yana gudana bisa tsarin lokaci.',
     ofcOvJobRunning: 'Yana gudana yanzu.',
     ofcOvJobOverdue:

@@ -309,6 +309,13 @@ export async function recordFinding(
     );
     if (!item) throw notFound('Sample item');
     if (item.sample_status === 'COMPLETED') {
+      /*
+       * Examining a transaction in a sample that is closed. The advice is the
+       * point of this refusal: the findings are final, and looking again means
+       * a new sample. `completeSample` raises `SAMPLE_ALREADY_COMPLETE` for
+       * the same state reached with a different intent, where this advice
+       * would be wrong.
+       */
       throw conflict(
         'SAMPLE_COMPLETED',
         'This sample has been completed and its findings are final.',
@@ -380,23 +387,26 @@ export async function completeSample(
     if (!sample) throw notFound('Sample');
     if (sample.status === 'COMPLETED') {
       /*
-       * ONE CODE, TWO SENTENCES — which is why this row is not translated with
-       * the two above it.
+       * ITS OWN CODE, because it is its own refusal.
        *
-       * `recordFinding` raises SAMPLE_COMPLETED as "This sample has been
-       * completed and its findings are final", with "Draw a new sample to
-       * examine these transactions again" under it. This site raises the same
-       * code as "This sample is already complete", with no next step. They
-       * mean the same thing and say it differently, and the translation map's
-       * own test is that a code means one fixed thing — so one Hausa sentence
-       * would have to be vaguer than the longer of the two, or would attach
-       * advice to a site that deliberately gives none.
+       * This shared `SAMPLE_COMPLETED` with `recordFinding`, and the two were
+       * recorded as one code with two sentences that ought to be consolidated.
+       * Reading both call sites says otherwise: they are two refusals about
+       * one state, and the difference is what the auditor was trying to do.
        *
-       * Consolidating them is the right fix and it is a decision about what an
-       * auditor is told on two different screens, not a translation. Left as
-       * it is, named here, rather than translated around.
+       * `recordFinding` is somebody trying to EXAMINE a transaction in a
+       * closed sample, and "Draw a new sample to examine these transactions
+       * again" is what they need. This is somebody trying to CLOSE a sample
+       * that is already closed, and that advice is wrong for them: they did
+       * not want to examine anything, and there is nothing left for them to
+       * do. Consolidating the sentences would have attached false advice to
+       * one screen or stripped true advice from the other.
+       *
+       * So the codes are split, and each now means one fixed thing — which is
+       * the test the translation map sets, and the reason neither could be
+       * said in Hausa before.
        */
-      throw conflict('SAMPLE_COMPLETED', 'This sample is already complete.');
+      throw conflict('SAMPLE_ALREADY_COMPLETE', 'This sample is already complete.');
     }
     if (Number.parseInt(sample.pending, 10) > 0) {
       throw conflict(

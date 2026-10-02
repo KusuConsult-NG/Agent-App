@@ -392,6 +392,36 @@ describe('what was drawn is what was drawn', () => {
       auth('auditor'),
     );
     assert.equal(late.status, 409, JSON.stringify(late.body));
+    /*
+     * TWO REFUSALS ABOUT ONE STATE, and they are not the same refusal.
+     *
+     * Examining a transaction in a closed sample is answered with
+     * `SAMPLE_COMPLETED` and the advice that makes it actionable: the findings
+     * are final, so draw a new sample. They were trying to look at something,
+     * and that is how they look again.
+     */
+    assert.equal(late.body.error.code, 'SAMPLE_COMPLETED');
+    assert.match(late.body.error.nextStep, /draw a new sample/i);
+
+    /*
+     * Closing a sample that is already closed is answered with
+     * `SAMPLE_ALREADY_COMPLETE` and no advice, because there is none to give.
+     * Both shared one code until the two sentences were read side by side; a
+     * single translation would have carried "draw a new sample" onto this
+     * screen, telling an auditor who has finished to go and start again.
+     */
+    const twice = await post(
+      `/government/audit/samples/${sampleId}/complete`,
+      { note: 'Completing it a second time.' },
+      auth('auditor'),
+    );
+    assert.equal(twice.status, 409, JSON.stringify(twice.body));
+    assert.equal(twice.body.error.code, 'SAMPLE_ALREADY_COMPLETE');
+    assert.equal(
+      twice.body.error.nextStep,
+      undefined,
+      'an auditor who closed a closed sample has nothing left to do',
+    );
   });
 });
 

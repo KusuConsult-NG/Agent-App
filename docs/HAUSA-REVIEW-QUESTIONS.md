@@ -1,6 +1,6 @@
 # Hausa review: everything still waiting on a decision
 
-`HAUSA-REVIEW.md` carries all 3,453 dictionary strings, and most of its length
+`HAUSA-REVIEW.md` carries all 3,456 dictionary strings, and most of its length
 is those tables. The open questions are scattered through seven sections of the
 prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
@@ -18,7 +18,7 @@ new strings and none of review.
 
 ## 1. Not a translation question — PSIRS decides
 
-**443 strings address the reader as `ka`: masculine singular.** A woman
+**444 strings address the reader as `ka`: masculine singular.** A woman
 collecting revenue in Bokkos is addressed as a man by the application she uses
 all day.
 
@@ -32,9 +32,9 @@ about field staff. Counting says otherwise:
 | Who reads it | Strings |
 |---|---|
 | The agent app | 252 |
-| The officer portal | 148 |
+| The officer portal | 149 |
 | Citizens, referees and group leaders | 43 |
-| **Total** | **443** of 3,453 |
+| **Total** | **444** of 3,456 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
@@ -411,7 +411,7 @@ roll. If any correction you make runs long, that test will say so rather than
 the receipt.
 
 **And `scanHelp` was not the only dead string in this table.** Checking it
-raised the obvious next question, so it was measured: **43 of the 3,453 keys
+raised the obvious next question, so it was measured: **43 of the 3,456 keys
 are never named anywhere outside the dictionary**, and four of them are in the
 table above — `statusOffline`, `offlineMessage`, `statusFailed`, and
 `civicDutyThanks`, the one the `Mungode` typo was in. Three of the four
@@ -674,8 +674,8 @@ failed, a step-up the officer walked away from. `STEP_UP_REQUIRED` has now been
 added, because it guards every consequential money action in the portal and its
 instruction was already in Hausa under an English heading.
 
-**The scale, counted rather than estimated.** The platform raises **172
-distinct error codes**; the officer portal says 6 of them in Hausa, and the
+**The scale, counted rather than estimated.** The platform raises **173
+distinct error codes**; the officer portal says 8 of them in Hausa, and the
 agent application says 33. The first version of this section said twenty-six,
 from a search that matched `conflict('CODE'` on a single line and missed every
 multi-line call and every `new AppError({ code: … })` literal — which is most
@@ -694,7 +694,7 @@ of its own and naming one fixed state, which is the test the map in
 | Where an officer meets it | Refusals |
 |---|---|
 | Revenue periods | `PERIOD_CLOSED`, `PERIOD_NOT_OPEN`, `PERIOD_OPEN` |
-| The audit workbench | `ALREADY_SIGNED`, `ALREADY_WITHDRAWN`, `SAMPLE_COMPLETED` |
+| The audit workbench | `ALREADY_SIGNED`, `ALREADY_WITHDRAWN`, `SAMPLE_COMPLETED`, `SAMPLE_ALREADY_COMPLETE` |
 | Roles and departments | `ROLE_EXISTS`, `ROLE_RETIRED`, `ROLE_NOT_RETIRED`, `ALREADY_GRANTED`, `DEPARTMENT_EXISTS` |
 | Officer devices and sessions | `DEVICE_ALREADY_BLOCKED`, `DEVICE_NOT_BLOCKED`, `SESSION_ALREADY_ENDED`, `DEVICE_ALREADY_SUSPENDED` |
 | Enumeration and objections | `ASSESSMENT_WITHDRAWN`, `OBJECTION_DECIDED` |
@@ -751,13 +751,38 @@ happened and is not a code this map holds. `withdrawReport` had the same shape.
 So the Hausa was the second half of that fix, not the whole of it: the service
 had to be able to say `ALREADY_SIGNED` before there was anything to translate.
 
-**`SAMPLE_COMPLETED` is the third row of this tier and is deliberately left.**
-It is raised from two places with two different sentences — *"This sample has
-been completed and its findings are final"*, with advice under it, and *"This
-sample is already complete"*, with none. One Hausa sentence would have to be
-vaguer than the longer of the two, or would attach advice to a screen that
-gives none. Consolidating them is a decision about what an auditor is told on
-two different screens rather than a translation, and it is yours.
+**The third row of this tier was one code doing two jobs, and is now two.**
+`SAMPLE_COMPLETED` was raised from two places with two different sentences —
+*"This sample has been completed and its findings are final"*, with advice
+under it, and *"This sample is already complete"*, with none. This page
+previously recorded that as two sentences wanting consolidation, and that was
+the wrong reading.
+
+They are two refusals about one state, told apart by what the auditor was
+trying to do. `recordFinding` is somebody trying to **examine** a transaction
+in a closed sample, and *"Draw a new sample to examine these transactions
+again"* is exactly what they need. `completeSample` is somebody trying to
+**close** a sample that is already closed, and that advice is wrong for them:
+they were not looking at anything, and there is nothing left to do.
+
+Consolidating would have carried false advice onto one screen or stripped true
+advice from the other. So the codes are split —
+`SAMPLE_COMPLETED` keeps the advice, `SAMPLE_ALREADY_COMPLETE` has none — and
+each now means one fixed thing, which is the test the map sets for what may be
+translated at all. That is what took the portal from 6 of the platform's
+refusals to 8, and it is why the API now raises 173 rather than 172.
+
+| Key | Hausa | Borrowed from |
+|---|---|---|
+| `ofcErrSampleCompleted` | An kammala wannan samfurin, kuma binciken sa na karshe ne. | `kammala` (31), `samfur` (13), `binciken karshe` (`ofcIgLimits`) |
+| `ofcNsSampleCompleted` | Ka zana sabon samfuri domin ka sake duba wadannan ma’amaloli. | `Zana samfur` (`ofcWbDraw`), `ma’amaloli` (38) |
+| `ofcErrSampleAlreadyComplete` | An riga an kammala wannan samfurin. | `An riga an …` (16), `kammala` (31) |
+
+One reading is wanted: `binciken sa na karshe ne` renders "its findings are
+final" with the dictionary's own phrase for a finding, `binciken karshe`, which
+already carries "final" inside it — so the sentence says *final* twice in
+Hausa where the English says it once. Whether that reads as emphasis or as
+clumsiness is a judgement about Hausa, not about audit.
 
 **The portal had no way to put a value into a sentence.** Its error component
 read the translation and rendered it as it stood, so any translation naming its

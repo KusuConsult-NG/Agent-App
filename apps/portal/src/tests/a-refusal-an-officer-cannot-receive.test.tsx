@@ -70,7 +70,15 @@ describe('which refusals this portal says it expects', () => {
      * Each is named in the failure rather than counted, so re-adding one says
      * which.
      */
-    expect(keysOf('TRANSLATED_NEXT_STEPS')).toEqual(['STEP_UP_REQUIRED']);
+    /*
+     * `SAMPLE_COMPLETED` is the second, and it earns its place: `recordFinding`
+     * raises it, an auditor reaches that from the workbench, and the advice —
+     * draw a new sample, because the findings are final — is the point of the
+     * refusal rather than an invention. Its pair,
+     * `SAMPLE_ALREADY_COMPLETE`, is deliberately not here: an auditor closing
+     * a closed sample has nothing left to do.
+     */
+    expect(keysOf('TRANSLATED_NEXT_STEPS')).toEqual(['STEP_UP_REQUIRED', 'SAMPLE_COMPLETED']);
 
     for (const agentOnly of [
       'DEVICE_NOT_REGISTERED',
@@ -304,23 +312,54 @@ describe('a revenue month an officer cannot close twice', () => {
   }
 
   /*
-   * And the third row of that tier, which is NOT translated and must not be.
+   * The third row of that tier, which was one code doing two jobs.
    *
-   * `SAMPLE_COMPLETED` is raised from two sites with two different sentences —
-   * one carrying advice, one not — so a single translation would have to be
-   * vaguer than the longer of the two. Consolidating them is a decision about
-   * what an auditor is told on two screens, and until it is made the English
-   * stands. Pinned so nobody translates it without making that decision.
+   * `SAMPLE_COMPLETED` came from two sites with two different sentences, and
+   * the note here used to say they wanted consolidating and that the English
+   * stood until somebody decided. Reading both call sites settles it the other
+   * way: they are two refusals about one state, told apart by what the auditor
+   * was trying to do.
+   *
+   * Examining a transaction in a closed sample needs "draw a new sample";
+   * closing a sample that is already closed does not, because there is nothing
+   * left to do. One sentence could not have served both — it would have
+   * carried false advice onto one screen or stripped true advice from the
+   * other. Split, each says one thing, and both are asserted here.
    */
-  it('keeps the English for a code raised with two different sentences', async () => {
+  it('says the findings are final, and what to do about it', async () => {
     setPortalLanguage('ha');
     render(
       <ErrorAlert
-        error={refusal('SAMPLE_COMPLETED', 'This sample is already complete.', [])}
+        error={{
+          code: 'SAMPLE_COMPLETED',
+          message: 'Untranslated server wording.',
+          moneyStatus: 'NOT_APPLICABLE',
+          nextStep: 'Draw a new sample to examine these transactions again.',
+        }}
       />,
     );
 
-    expect(said()).toBe('This sample is already complete.');
+    expect(said()).toBe(ha.ofcErrSampleCompleted!);
+    // The advice is the point of this one, so it is in Hausa too.
+    expect(document.querySelector('.alert')?.textContent).toContain(ha.ofcNsSampleCompleted!);
+  });
+
+  it('says a sample is already closed, and offers nothing to do about it', async () => {
+    setPortalLanguage('ha');
+    render(
+      <ErrorAlert
+        error={refusal('SAMPLE_ALREADY_COMPLETE', 'Untranslated server wording.', [])}
+      />,
+    );
+
+    expect(said()).toBe(ha.ofcErrSampleAlreadyComplete!);
+    /*
+     * And no next step, because there is none. An auditor who closed a closed
+     * sample has nothing left to do, and "draw a new sample" — which is right
+     * for the other half of this pair — would send them to do work they did
+     * not ask for.
+     */
+    expect(document.querySelector('.alert')?.textContent).not.toContain(ha.ofcNsSampleCompleted!);
   });
 
   /*
