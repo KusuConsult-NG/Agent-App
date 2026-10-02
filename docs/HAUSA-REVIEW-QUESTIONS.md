@@ -1,6 +1,6 @@
 # Hausa review: everything still waiting on a decision
 
-`HAUSA-REVIEW.md` carries all 3,431 dictionary strings, and most of its length
+`HAUSA-REVIEW.md` carries all 3,439 dictionary strings, and most of its length
 is those tables. The open questions are scattered through seven sections of the
 prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
@@ -18,7 +18,7 @@ new strings and none of review.
 
 ## 1. Not a translation question — PSIRS decides
 
-**433 strings address the reader as `ka`: masculine singular.** A woman
+**439 strings address the reader as `ka`: masculine singular.** A woman
 collecting revenue in Bokkos is addressed as a man by the application she uses
 all day.
 
@@ -34,7 +34,7 @@ about field staff. Counting says otherwise:
 | The agent app | 243 |
 | The officer portal | 147 |
 | Citizens, referees and group leaders | 43 |
-| **Total** | **433** of 3,431 |
+| **Total** | **439** of 3,439 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
@@ -50,7 +50,7 @@ than one.
 said nothing did. `rcpThanks` — "Mun gode da sauke nauyin ku", on the printed
 receipt, discussed in § 3.2 below — was written in the polite plural after that
 sentence was, by somebody reaching for the form this question is about. It is
-one string against 433, so it settles nothing; it is worth knowing that the
+one string against 439, so it settles nothing; it is worth knowing that the
 first person to need a form for a stranger picked `ku` without being asked.
 
 **Two earlier figures in this document were wrong, and the second was worse.**
@@ -74,7 +74,7 @@ the biggest decision on the page by a hundred strings, on the page the sheet
 sends the reviewer to before anything else. `scripts/build-hausa-review.mjs`
 now recomputes both and refuses the build when this document disagrees with it,
 the way it already refused a stale count in the sheet itself. The count above
-is 433 because that is what the script measured, not because somebody added
+is 439 because that is what the script measured, not because somebody added
 one hundred and one strings in a single change.
 
 ### What it would cost to change
@@ -411,7 +411,7 @@ roll. If any correction you make runs long, that test will say so rather than
 the receipt.
 
 **And `scanHelp` was not the only dead string in this table.** Checking it
-raised the obvious next question, so it was measured: **43 of the 3,431 keys
+raised the obvious next question, so it was measured: **43 of the 3,439 keys
 are never named anywhere outside the dictionary**, and four of them are in the
 table above — `statusOffline`, `offlineMessage`, `statusFailed`, and
 `civicDutyThanks`, the one the `Mungode` typo was in. Three of the four
@@ -475,6 +475,38 @@ saita`**, which is a draft and wants your eye.
 `2026-09-08 – 2027-09-08` rather than spelling the months, because a period is
 a span, it sits beside a window line already written that way, and two spelt-out
 months is more than the row can carry. Say if you would rather see them.
+
+**4.8 — Eight strings for the refusals one level down the collect path.** Six
+refusals an agent meets while collecting were still reaching them in English:
+one from the rate engine's caller, five from the request that starts a payment.
+Composed from this dictionary's own words, not invented:
+
+| Key | Hausa | Borrowed from |
+|---|---|---|
+| `errNoEffectiveRate` | Babu kudin da Gwamnati ta amince da shi a aiki… | `Gwamnati ta amince`, `errRevenueItemInactive` |
+| `nsNoEffectiveRate` | Dole Gwamnati ta amince da kudi kafin a iya karba… | same |
+| `errInvoiceAlreadyPaid` | An riga an biya wannan takardar biya… | `An riga an …` (3 strings), `takardar biya` (13) |
+| `nsInvoiceAlreadyPaid` | Ka bude rasit daga tarihin ma’amaloli. | `Ka rike rasit`, `ma’amala` |
+| `errPaymentAlreadyVerified` | …kuma an tabbatar da biyan. Kada ka sake karbar kudi. | `an tabbatar`, `Kada ka sake` |
+| `errInvoiceNotPayable` | Wannan takardar biya tana {{state}}… | `kimantawa` |
+| `errInvoiceExpired` | Wannan takardar biya ta kare… | `ta kare` (5) |
+| `errTransactionNotPayable` | Wannan ma’amala tana {{state}}… | `ma’amala` |
+
+I had written `shaidar biya` — proof of payment — for the receipt in
+`nsInvoiceAlreadyPaid`, and `hausa-dictionary-consistency.test.tsx` refused it:
+this dictionary's word for a receipt is `rasit`, in all 54 places it appears,
+and one string using a second word for it is how a vocabulary comes apart. It
+now reads `Ka bude rasit`, matching `Ka rike rasit a cikin firam`. Worth a
+reading on whether the definite `rasitin` would be better for a receipt the
+agent is being sent to one particular one of.
+
+Two of them carry `{{state}}`, and the state now arrives as a field so it can
+be filled from this dictionary rather than left in English. Worth a reading on
+one point: `tana {{state}}` puts the state after the subject as a continuous
+verb — "this bill is cancelled" — and if a Hausa reader would rather it read
+`an soke wannan takardar biya` (a completed action, "this bill has been
+cancelled"), that changes the sentence rather than the label and is worth
+saying now.
 
 **4.7 — `Bai dace ba` for a bank verdict that does not match.** The bank
 verification provider answers VERIFIED, MISMATCH, NOT_FOUND or UNAVAILABLE.
@@ -594,7 +626,7 @@ instruction was already in Hausa under an English heading.
 
 **The scale, counted rather than estimated.** The platform raises **171
 distinct error codes**; the officer portal says 1 of them in Hausa, and the
-agent application says 23. The first version of this section said twenty-six,
+agent application says 29. The first version of this section said twenty-six,
 from a search that matched `conflict('CODE'` on a single line and missed every
 multi-line call and every `new AppError({ code: … })` literal — which is most
 of them. It understated the gap by a factor of six, on the page this document

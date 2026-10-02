@@ -151,6 +151,21 @@ describe('a payment the platform will not start', () => {
       'NOT_DEBITED',
       'which is the reassurance the agent has to give the person in front of them',
     );
+
+    /*
+     * And the state as a field, not only inside the English.
+     *
+     * The agent application translates this refusal by its code, and its Hausa
+     * reads "Wannan takardar biya tana {{state}}". Without this field the
+     * sentence would arrive with a hole in it, and the unit test over
+     * `errorText` would still pass, because it supplies its own detail. This is
+     * the half only the server can get wrong.
+     */
+    assert.deepEqual(
+      refused.body.error.details,
+      [{ field: 'state', issue: 'CANCELLED', code: 'STATE' }],
+      'the state the message names has to travel beside it',
+    );
   });
 
   it('says nothing was taken when the deadline has passed', async () => {
@@ -166,6 +181,9 @@ describe('a payment the platform will not start', () => {
     assert.equal(refused.status, 409, JSON.stringify(refused.body));
     assert.equal(refused.body.error.code, 'INVOICE_EXPIRED');
     assert.equal(refused.body.error.moneyStatus, 'NOT_DEBITED');
+    // This one names no state, so it sends none: a field nothing substitutes
+    // would be a field somebody later tries to use.
+    assert.equal(refused.body.error.details, undefined);
   });
 
   it('never refuses a payment without saying what happened to the money', async () => {

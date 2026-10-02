@@ -2,7 +2,7 @@
 
 import type { ReactElement, ReactNode } from 'react';
 import { Children, cloneElement, isValidElement, useId, useState } from 'react';
-import { BLOCKER_TEXT, enumLabel, formatNaira, statusSeverity } from '@psirs/shared';
+import { BLOCKER_TEXT, ENUM_LABELS, enumLabel, formatNaira, statusSeverity } from '@psirs/shared';
 import type { AgentBlocker, TranslationDictionary } from '@psirs/shared';
 import type { ApiError } from './lib/api';
 import { useI18n } from './lib/i18n';
@@ -117,6 +117,37 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   REVENUE_ITEM_NOT_IN_LGA: 'errRevenueItemNotInLga',
   NO_TAX_PAYABLE: 'errNoTaxPayable',
   ASSESSMENT_AMOUNT_ZERO: 'errAssessmentAmountZero',
+
+  /*
+   * THE SIX THE LAST PASS AT THIS MISSED, AND WHY IT MISSED THEM.
+   *
+   * The commit that added the block above was called "Every refusal on the
+   * collect screen, in English" and it was not. I enumerated the refusals
+   * `createAssessmentIn` raises, and all six of those are above. Doing it
+   * mechanically instead — slicing out the functions the collect path actually
+   * runs and extracting every code — finds what reading one function body
+   * cannot:
+   *
+   *   NO_EFFECTIVE_RATE is raised one level down, by `resolveRate`, which
+   *   `createAssessmentIn` and `quote` both call. It fires when government has
+   *   ended a rate version without publishing a successor.
+   *
+   *   The five payment codes are raised by `initiatePayment`, reached from the
+   *   same screen one tap later. The sentence that decides whether a citizen is
+   *   asked to pay twice was already in Hausa — `ErrorAlert` renders the money
+   *   status from the dictionary and `fe3ef17` saw to that — but the headline
+   *   above it, which says *what* happened, was the server's English.
+   *
+   * `a-refusal-the-collect-screen-can-show.test.ts` now holds the whole path
+   * rather than one function, so the next helper added below this one cannot
+   * repeat it.
+   */
+  NO_EFFECTIVE_RATE: 'errNoEffectiveRate',
+  INVOICE_ALREADY_PAID: 'errInvoiceAlreadyPaid',
+  PAYMENT_ALREADY_VERIFIED: 'errPaymentAlreadyVerified',
+  INVOICE_NOT_PAYABLE: 'errInvoiceNotPayable',
+  INVOICE_EXPIRED: 'errInvoiceExpired',
+  TRANSACTION_NOT_PAYABLE: 'errTransactionNotPayable',
 };
 
 /**
@@ -156,9 +187,45 @@ export function errorText(
   if (!error.details?.length || !sentence.includes('{{')) return sentence;
   return error.details.reduce(
     (text, detail) =>
-      detail.field ? text.replace(`{{${detail.field}}}`, detail.issue) : text,
+      detail.field ? text.replace(`{{${detail.field}}}`, substituted(detail, t)) : text,
     sentence,
   );
+}
+
+/**
+ * What a detail puts into the hole.
+ *
+ * `issue` is prose composed by the server, and prose composed there is prose in
+ * English — so a figure goes in as it is and a STATE goes in through the
+ * dictionary. Two of the payment refusals name a state: "This invoice is
+ * cancelled and can no longer be paid" became, with the sentence translated and
+ * the value not, Hausa with `CANCELLED` sitting in the middle of it.
+ *
+ * Two conditions, and both are deliberate. The detail has to be marked
+ * `STATE`, and the value has to be one the dictionary holds.
+ *
+ * The second is the one that stops damage: `enumLabel` always returns
+ * something — its fallback takes the underscores out and lowercases — so
+ * calling it on a figure would turn an amount or a reference into something
+ * subtly different, and calling it on an unknown state would damage the state
+ * rather than translate it. The same rule is applied on the officer portal's
+ * audit table, for the same reason.
+ *
+ * The first is narrowness rather than safety, and it was nearly dropped for
+ * being untestable: a mutation that removed it failed nothing, because the
+ * details in flight today carry scores and pass marks and none of those is a
+ * dictionary key. It is kept because the alternative rule — translate any
+ * detail whose value happens to match a key — would quietly take in every
+ * detail added later, and `ACTIVE` or `PENDING` is an entirely plausible thing
+ * for some future field to carry as a datum. The test below holds it, so it is
+ * now a property rather than a hopeful line.
+ */
+function substituted(
+  detail: { field?: string; issue: string; code?: string },
+  t: TranslationDictionary,
+): string {
+  if (detail.code !== 'STATE') return detail.issue;
+  return detail.issue in ENUM_LABELS ? enumLabel(detail.issue, t) : detail.issue;
 }
 
 /**
@@ -196,6 +263,11 @@ const TRANSLATED_NEXT_STEPS: Record<string, keyof TranslationDictionary> = {
   PAYMENT_FAILED: 'nsPaymentFailed',
   AGENT_NOT_CLEARED: 'nsAgentNotCleared',
   NO_TAX_PAYABLE: 'nsNoTaxPayable',
+  // The two of the six that carry a next step. The other four say everything
+  // they have to say in one sentence, and an invented instruction would be
+  // worse than none.
+  NO_EFFECTIVE_RATE: 'nsNoEffectiveRate',
+  INVOICE_ALREADY_PAID: 'nsInvoiceAlreadyPaid',
 };
 
 /** The next step for an error, or the server's own words when it has none. */

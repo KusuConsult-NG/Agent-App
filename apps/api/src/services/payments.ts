@@ -127,6 +127,15 @@ export async function initiatePayment(
         // Nothing was started, so nothing was taken — which is what the agent
         // has to be able to tell the person in front of them.
         moneyStatus: 'NOT_DEBITED',
+        /*
+         * The state as a field, not only inside the sentence.
+         *
+         * The agent application translates this refusal by its code, and its
+         * Hausa says "Wannan takardar biya tana {{state}}". Without this it
+         * had nothing to put in the hole, so the choice was an English
+         * sentence or a Hausa one with a gap in it.
+         */
+        details: [{ field: 'state', issue: transaction.invoice_status, code: 'STATE' }],
       });
     }
     if (
@@ -183,6 +192,7 @@ export async function initiatePayment(
         message:
           `This transaction is in state ${transaction.status} and cannot accept a payment now.`,
         moneyStatus: 'NOT_DEBITED',
+        details: [{ field: 'state', issue: transaction.status, code: 'STATE' }],
       });
     }
 

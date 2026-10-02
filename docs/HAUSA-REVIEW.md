@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > nineteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,431 strings; that one is two pages and links back
+> because it carries all 3,439 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,431 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,439 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,431 strings is worse than no sheet, because it looks complete; this one cannot
+3,439 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,431 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,439 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,431 strings: where the
+- The glossary below is applied consistently across all 3,439 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -483,7 +483,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3350 strings, grouped by where an agent meets them. Lower stakes
+3358 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -3266,6 +3266,12 @@ instructions — but they are what an agent reads all day.
 | `errRevenueItemNotForTaxpayerType` | This tax or levy does not apply to this kind of taxpayer. Check whether the record is an individual or a business. | Wannan haraji ko kudin shiga bai shafi irin wannan mai biyan haraji ba. Ka duba ko rikodin na mutum ne ko na kasuwanci. | ☐ | |
 | `errRevenueItemNotInLga` | This tax or levy is not collected in this taxpayer’s Local Government Area. | Ba a karbar wannan haraji ko kudin shiga a karamar hukumar wannan mai biyan haraji ba. | ☐ | |
 | `errAssessmentAmountZero` | The amount works out to nothing from the figures entered. Check them, and tell a PSIRS officer if they are right — the rate may be wrong rather than the figures. | Adadin ya zo babu daga lissafin da aka shigar. Ka duba su, kuma ka gaya wa jami’in PSIRS idan sun dace — watakila kudin ne ba daidai ba, ba lissafin ba. | ☐ | |
+| `errInvoiceAlreadyPaid` | This bill has already been paid. Do not collect payment again. | An riga an biya wannan takardar biya. Kada ka sake karbar kudi. | ☐ | |
+| `errInvoiceExpired` | This bill has expired. Raise a new assessment for the taxpayer. | Wannan takardar biya ta kare. Ka yi sabon kimantawa ga mai biyan haraji. | ☐ | |
+| `errInvoiceNotPayable` | This bill is {{state}} and can no longer be paid. Raise a new assessment. | Wannan takardar biya tana {{state}} kuma ba za a iya biyanta ba. Ka yi sabon kimantawa. | ☐ | |
+| `errNoEffectiveRate` | No rate approved by government is in force for this tax or levy, so nothing can be assessed on it. Choose another, or tell a PSIRS officer. | Babu kudin da Gwamnati ta amince da shi a aiki kan wannan haraji ko kudin shiga, don haka ba za a iya kimanta komai kan sa ba. Ka zabi wani, ko ka gaya wa jami’in PSIRS. | ☐ | |
+| `errPaymentAlreadyVerified` | This charge has already been paid and the payment confirmed. Do not collect payment again. | An riga an biya wannan kudin kuma an tabbatar da biyan. Kada ka sake karbar kudi. | ☐ | |
+| `errTransactionNotPayable` | This charge is {{state}} and cannot take a payment now. | Wannan ma’amala tana {{state}} kuma ba za ta karbi biya a yanzu ba. | ☐ | |
 | `errRateLimited` | Too many attempts. Wait a moment and try again. | Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa. | ☐ | |
 | `errReference` | Reference | Lamba | ☐ | |
 | `errUploadFailed` | The document could not be sent. Try again. | Ba a iya aika takardar ba. Ka sake gwadawa. | ☐ | |
@@ -4067,6 +4073,8 @@ instructions — but they are what an agent reads all day.
 | `nsPaymentUnconfirmed` | Open the transaction from your history to see its current status. | Ka bude cinikin daga tarihinka domin ka ga halin da yake ciki yanzu. | ☐ | |
 | `nsPaymentFailed` | Start the payment again, or choose a different payment method. | Ka sake fara biyan, ko ka zabi wata hanyar biya. | ☐ | |
 | `nsAgentNotCleared` | Open "My Application" to see what is still outstanding. | Ka bude "Nemana" domin ka ga abin da ya rage. | ☐ | |
+| `nsInvoiceAlreadyPaid` | Open the receipt from the transaction history. | Ka bude rasit daga tarihin ma’amaloli. | ☐ | |
+| `nsNoEffectiveRate` | Government has to approve a rate before this can be collected. A PSIRS officer can have it looked at. | Dole Gwamnati ta amince da kudi kafin a iya karba kan wannan. Jami’in PSIRS zai iya sa a duba shi. | ☐ | |
 | `agVehFoundConfirmed` | Vehicle found and confirmed against the vehicle authority record. | An sami motar kuma an tabbatar da ita a rajistar hukumar motoci. | ☐ | |
 | `agVehFoundUnconfirmed` | Vehicle found on the platform. It has not been confirmed against the vehicle authority. | An sami motar a dandalin. Ba a tabbatar da ita a hukumar motoci ba tukuna. | ☐ | |
 | `agVehRegistryUnavailable` | The vehicle authority could not be reached, so we cannot say whether this vehicle is registered. Try again shortly. If the renewal cannot wait, capture the details manually — the record will be flagged for checking once the authority is back. | Ba a iya tuntubar hukumar motoci ba, don haka ba za mu iya cewa an yi rajistar wannan mota ba. Ka sake gwadawa nan ba da dadewa ba. Idan sabuntawar ba za ta iya jira ba, ka shigar da bayanan da hannu — za a yi wa rajistar alama domin a duba ta idan hukumar ta dawo. | ☐ | |

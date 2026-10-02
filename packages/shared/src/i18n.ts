@@ -163,6 +163,12 @@ export interface TranslationDictionary {
   errRevenueItemNotInLga: string;
   errNoTaxPayable: string;
   errAssessmentAmountZero: string;
+  errTransactionNotPayable: string;
+  errPaymentAlreadyVerified: string;
+  errNoEffectiveRate: string;
+  errInvoiceNotPayable: string;
+  errInvoiceExpired: string;
+  errInvoiceAlreadyPaid: string;
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
@@ -3597,6 +3603,8 @@ export interface TranslationDictionary {
   nsPaymentFailed: string;
   nsAgentNotCleared: string;
   nsNoTaxPayable: string;
+  nsNoEffectiveRate: string;
+  nsInvoiceAlreadyPaid: string;
   /** The officer portal's heading over `nsStepUpRequired`. */
   ofcStepUpNeeded: string;
   /*
@@ -4034,6 +4042,18 @@ export const translations: Record<Language, TranslationDictionary> = {
       'No tax is payable on the amount declared, so there is no invoice to raise. The figures are not wrong — this taxpayer is below the threshold.',
     errAssessmentAmountZero:
       'The amount works out to nothing from the figures entered. Check them, and tell a PSIRS officer if they are right — the rate may be wrong rather than the figures.',
+    errInvoiceAlreadyPaid:
+      'This bill has already been paid. Do not collect payment again.',
+    errInvoiceExpired:
+      'This bill has expired. Raise a new assessment for the taxpayer.',
+    errInvoiceNotPayable:
+      'This bill is {{state}} and can no longer be paid. Raise a new assessment.',
+    errNoEffectiveRate:
+      'No rate approved by government is in force for this tax or levy, so nothing can be assessed on it. Choose another, or tell a PSIRS officer.',
+    errPaymentAlreadyVerified:
+      'This charge has already been paid and the payment confirmed. Do not collect payment again.',
+    errTransactionNotPayable:
+      'This charge is {{state}} and cannot take a payment now.',
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
@@ -7139,6 +7159,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     nsAgentNotCleared: 'Open "My Application" to see what is still outstanding.',
     nsNoTaxPayable:
       'Do not increase the amount to make the assessment go through. Tell the taxpayer there is nothing to pay on this.',
+    nsInvoiceAlreadyPaid:
+      'Open the receipt from the transaction history.',
+    nsNoEffectiveRate:
+      'Government has to approve a rate before this can be collected. A PSIRS officer can have it looked at.',
     ofcStepUpNeeded: 'This action needs a one-time code before it can go through.',
     ofcOvJobHealthy: 'Running on schedule.',
     ofcOvJobRunning: 'Running now.',
@@ -7544,6 +7568,18 @@ export const translations: Record<Language, TranslationDictionary> = {
       'Babu harajin da ya kamata a biya kan adadin da aka bayyana, don haka babu takardar biya da za a yi. Lissafin ba kuskure ba ne — wannan mai biyan haraji yana kasa da iyakar.',
     errAssessmentAmountZero:
       'Adadin ya zo babu daga lissafin da aka shigar. Ka duba su, kuma ka gaya wa jami’in PSIRS idan sun dace — watakila kudin ne ba daidai ba, ba lissafin ba.',
+    errInvoiceAlreadyPaid:
+      'An riga an biya wannan takardar biya. Kada ka sake karbar kudi.',
+    errInvoiceExpired:
+      'Wannan takardar biya ta kare. Ka yi sabon kimantawa ga mai biyan haraji.',
+    errInvoiceNotPayable:
+      'Wannan takardar biya tana {{state}} kuma ba za a iya biyanta ba. Ka yi sabon kimantawa.',
+    errNoEffectiveRate:
+      'Babu kudin da Gwamnati ta amince da shi a aiki kan wannan haraji ko kudin shiga, don haka ba za a iya kimanta komai kan sa ba. Ka zabi wani, ko ka gaya wa jami’in PSIRS.',
+    errPaymentAlreadyVerified:
+      'An riga an biya wannan kudin kuma an tabbatar da biyan. Kada ka sake karbar kudi.',
+    errTransactionNotPayable:
+      'Wannan ma’amala tana {{state}} kuma ba za ta karbi biya a yanzu ba.',
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
@@ -10649,6 +10685,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     nsAgentNotCleared: 'Ka bude "Nemana" domin ka ga abin da ya rage.',
     nsNoTaxPayable:
       'Kada ka kara adadin don kimantawar ta wuce. Ka gaya wa mai biyan haraji babu abin da zai biya kan wannan.',
+    nsInvoiceAlreadyPaid:
+      'Ka bude rasit daga tarihin ma’amaloli.',
+    nsNoEffectiveRate:
+      'Dole Gwamnati ta amince da kudi kafin a iya karba kan wannan. Jami’in PSIRS zai iya sa a duba shi.',
     ofcStepUpNeeded: 'Wannan aikin yana bukatar lamba ta lokaci daya kafin ya wuce.',
     ofcOvJobHealthy: 'Yana gudana bisa tsarin lokaci.',
     ofcOvJobRunning: 'Yana gudana yanzu.',

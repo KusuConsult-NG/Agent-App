@@ -204,6 +204,17 @@ export function paymentRefused(params: {
   message: string;
   moneyStatus: 'RECEIVED' | 'NOT_DEBITED';
   nextStep?: string;
+  /**
+   * Fields the message names, sent separately so a client can say the same
+   * thing in the reader's language.
+   *
+   * Two of these refusals name a state — "This invoice is cancelled" — and the
+   * agent application translates by code, so the translated sentence needs the
+   * state as a value it can substitute. Parsing it back out of the English
+   * would break the moment somebody improved the wording, silently, in the
+   * language nobody testing it reads.
+   */
+  details?: ErrorDetail[];
 }): AppError {
   return new AppError({ statusCode: 409, ...params });
 }
