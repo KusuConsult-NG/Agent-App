@@ -13,7 +13,7 @@
 
 import { REVENUE_RECOGNISED_STATES, parseKobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { pool, query, queryOne, withTransaction } from '../db/pool';
+import { advisoryLock, LOCK_NAMESPACE, pool, query, queryOne, withTransaction } from '../db/pool';
 import { conflict, notFound, badRequest } from '../lib/errors';
 import { generateVerificationCode } from '../lib/crypto';
 import { endOfDay } from '../lib/calendar-day';
@@ -161,6 +161,32 @@ export async function upsertVehicle(params: {
   const authority = await vehicleRegistry.lookup(normalised);
 
   return withTransaction(async (client) => {
+    /*
+     * One capture of this plate at a time.
+     *
+     * What follows reads the vehicle and then either updates it or inserts it,
+     * which is a merge when one caller does it and a race when two do. A plain
+     * SELECT takes no lock, and there is no row to lock when the vehicle is new
+     * — so two agents capturing the same vehicle both found nothing, both
+     * inserted, and the second was refused by
+     * `vehicles_registration_number_key`.
+     *
+     * The refusal is the smaller half of that. The capture it refused was
+     * MEANT to be a merge: the code above exists to fold a second sighting into
+     * the record rather than reject it, and the loser's details — the owner's
+     * phone, the expiry the registry returned — were dropped on the floor along
+     * with the request. Two agents at one motor park is not an unusual Tuesday,
+     * and the same window is open between a live capture and an offline draft
+     * syncing the same plate.
+     *
+     * An advisory lock rather than making the two statements one upsert: the
+     * update is selective — `COALESCE` on six columns, and a rule that an
+     * authority outage must not overwrite a confirmed lookup — and the two
+     * branches answer with different `source` values. Reproducing that inside
+     * `ON CONFLICT DO UPDATE` would move the logic into SQL to save a lock.
+     */
+    await advisoryLock(client, LOCK_NAMESPACE.VEHICLE, normalised);
+
     const found = authority.outcome === 'FOUND';
     const record = authority.vehicle;
     const source = found ? 'AUTHORITY_LOOKUP' : 'MANUAL_ENTRY';

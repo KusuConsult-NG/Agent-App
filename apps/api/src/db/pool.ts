@@ -166,6 +166,15 @@ export const LOCK_NAMESPACE = {
   WORKER: 7,
   /** Schema migration, so simultaneous boots do not race each other. */
   MIGRATION: 8,
+  /**
+   * One registration number, however many agents are looking at the vehicle.
+   *
+   * `upsertVehicle` read the plate and then inserted, which is a merge for one
+   * caller and a race for two. Keyed on the normalised number rather than on a
+   * row id because the row may not exist yet, which is exactly the case that
+   * raced.
+   */
+  VEHICLE: 9,
 } as const;
 
 /**
