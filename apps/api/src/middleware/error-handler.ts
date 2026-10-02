@@ -191,6 +191,18 @@ export const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
     'An acknowledgement has already been issued for this transaction.',
   idx_commissions_recovered_once:
     'That commission has already been recovered. It cannot be recovered twice.',
+  /*
+   * Added by migration 084, and required here by the check that reads the
+   * schema — which is the check working: a new unique index is classified or
+   * the build stops.
+   *
+   * `raiseObjection` answers `OBJECTION_ALREADY_OPEN` before reaching the
+   * index, so this is the backstop for a caller that does not come through the
+   * service. Worded to say the same thing, because somebody meeting one of
+   * them has no way of knowing which they met.
+   */
+  idx_objections_open:
+    'An objection to this estimate is already open and waiting for a decision.',
   receipts_payment_id_key:
     'A receipt has already been issued for this payment. No duplicate has been created.',
 

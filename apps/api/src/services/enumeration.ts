@@ -680,9 +680,28 @@ export async function raiseObjection(
       );
     }
     /*
-     * One open objection at a time. The unique index refuses the second, but a
-     * constraint violation reaches an officer as a failure rather than as the
-     * fact that somebody already raised this.
+     * One open objection at a time. Two things make that true, and this comment
+     * used to name a third that did not exist.
+     *
+     * It said "the unique index refuses the second". There was no unique index:
+     * migration 071 created `idx_objections_open` as a plain partial index. The
+     * conclusion was right anyway, and for a reason the comment did not give —
+     * the `SELECT ... FOR UPDATE` on the assessment, three statements above,
+     * orders two callers before either reaches the read below. So the service
+     * was safe and said so for the wrong reason, which is the kind of comment
+     * that survives until somebody moves the statement it silently depends on.
+     *
+     * Migration 084 makes the index unique, so the claim is now true as
+     * written and the rule holds against a caller that never comes through
+     * here at all — a script, a console, a future path that forgets the
+     * `FOR UPDATE`. That is this repository's own standard, from migration
+     * 080's header: a rule the service enforces and the database does not is
+     * one UPDATE away from being undone.
+     *
+     * Measured, not assumed. An advisory lock was added here first and removed
+     * again when removing it failed nothing: two concurrent `raiseObjection`
+     * calls are already ordered, and a lock no test can justify is a lock the
+     * next reader deletes while wondering what it was for.
      */
     const open = await queryOne<{ id: string }>(
       client,
