@@ -1299,6 +1299,19 @@ describe('Access control and audit integrity (PRD §36, §45, §67)', () => {
    * actually did: the auditor's query answers.
    */
   it('answers an auditor asking what has happened to a taxpayer record', async () => {
+    /*
+     * Somebody looks at the record first, so there is a look to report.
+     *
+     * The answer unions two halves — who CHANGED the record, from the audit
+     * log, and who merely READ it, from `taxpayer_record_access_logs`. This
+     * test asserted only that every row was of a permitted kind, which it
+     * passed while returning nothing but CHANGE rows: registration writes an
+     * audit row and nobody here had opened the record, so the READ half was
+     * empty and the assertion could not tell.
+     */
+    const opened = await get(`/taxpayers/${ctx.taxpayerId}`, { token: ctx.auditorToken });
+    assert.equal(opened.status, 200, JSON.stringify(opened.body));
+
     const response = await get(
       `/government/audit/queries/taxpayer-access?taxpayerId=${ctx.taxpayerId}`,
       { token: ctx.auditorToken },
@@ -1308,15 +1321,22 @@ describe('Access control and audit integrity (PRD §36, §45, §67)', () => {
     // bare array, so 500 was indistinguishable from all of them.
     assert.ok(response.body.rows.length >= 1);
     assert.equal(response.body.truncated, false);
-    // Every row says whether it is a look or a change. Without this the two
-    // halves are indistinguishable once merged, which is the defect the union
-    // would otherwise have introduced while fixing another.
-    for (const row of response.body.rows) {
-      assert.ok(
-        row.kind === 'READ' || row.kind === 'CHANGE',
-        `a row of neither kind: ${JSON.stringify(row)}`,
-      );
-    }
+    /*
+     * BOTH HALVES OF THE UNION, not merely rows of a permitted kind.
+     *
+     * This checked that every row's `kind` was READ or CHANGE, and its own
+     * comment claimed that held the two halves apart. It did not: if the
+     * CHANGE arm returned nothing the surviving rows would all be READ, each
+     * satisfying the disjunction, and the test would pass having lost half the
+     * answer an auditor asked for. The same shape as the two sweeps deleted
+     * earlier in this branch for being unfalsifiable.
+     */
+    const kinds = new Set<string>(response.body.rows.map((row: { kind: string }) => row.kind));
+    assert.deepEqual(
+      [...kinds].sort(),
+      ['CHANGE', 'READ'],
+      `the answer is missing a half: ${JSON.stringify(response.body.rows)}`,
+    );
   });
 });
 
