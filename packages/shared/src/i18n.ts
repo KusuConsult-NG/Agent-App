@@ -169,6 +169,29 @@ export interface TranslationDictionary {
   errInvoiceNotPayable: string;
   errInvoiceExpired: string;
   errInvoiceAlreadyPaid: string;
+  /*
+   * PUTTING SOMEBODY ON THE REGISTER, WHICH IS WHERE EVERYTHING ELSE STARTS.
+   *
+   * Registering a taxpayer is the first thing an agent does for anybody and
+   * the most common thing they do at all — nothing can be assessed, collected
+   * or receipted against a person who is not on the register. Every refusal
+   * on that screen was the server's English.
+   *
+   * Two of them already had their next step in Hausa, under a headline that
+   * was not: `nsTinServiceUnavailable` and `nsTinNotFound` were written when
+   * the advice on those two branches was corrected, and the sentence above
+   * them was left. An agent read the instruction in their own language and
+   * the thing it was an instruction about in English.
+   *
+   * Two carry a placeholder, because they name a record that already exists:
+   * who the person is already registered as, and which TIN was not found.
+   * Both arrive as `details` beside the refusal rather than being parsed back
+   * out of the server's prose.
+   */
+  errTaxpayerAlreadyExists: string;
+  errPossibleDuplicateTaxpayer: string;
+  errTinServiceUnavailable: string;
+  errTinNotFound: string;
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
@@ -3601,6 +3624,23 @@ export interface TranslationDictionary {
   nsUpdateRequiredToEnumerate: string;
   nsTinServiceUnavailable: string;
   nsTinNotFound: string;
+  /*
+   * The two the registration screen needed that did not exist yet.
+   *
+   * `nsPossibleDuplicateTaxpayer` is not a translation of the API's own next
+   * step, deliberately. The API says "resubmit with acknowledgeDuplicates set
+   * to true", which is the right instruction for a client and a thing no
+   * person can do — the screen the agent is looking at carries the override as
+   * a button. So this names the test to apply before pressing it.
+   *
+   * It does not point at the panel below, which was the first wording. That
+   * panel has two forms and one of them appears precisely when the matches
+   * could NOT be listed — so "the matching records are listed below" would be
+   * false exactly when the agent most needs to be careful. The decision holds
+   * either way.
+   */
+  nsTaxpayerAlreadyExists: string;
+  nsPossibleDuplicateTaxpayer: string;
   nsKycProviderUnavailable: string;
   nsPaymentUnconfirmed: string;
   nsPaymentFailed: string;
@@ -4047,6 +4087,13 @@ export const translations: Record<Language, TranslationDictionary> = {
       'The amount works out to nothing from the figures entered. Check them, and tell a PSIRS officer if they are right — the rate may be wrong rather than the figures.',
     errInvoiceAlreadyPaid:
       'This bill has already been paid. Do not collect payment again.',
+    errTaxpayerAlreadyExists:
+      'This person is already registered as {{subject}}. A second record would be a duplicate.',
+    errPossibleDuplicateTaxpayer:
+      'A record was found that may be this same person. Check it before opening a new one.',
+    errTinServiceUnavailable:
+      'The PSIRS TIN service could not be reached, so this TIN cannot be confirmed. Nobody has been registered.',
+    errTinNotFound: 'TIN {{tin}} could not be found in the PSIRS TIN service.',
     errInvoiceExpired:
       'This bill has expired. Raise a new assessment for the taxpayer.',
     errInvoiceNotPayable:
@@ -7161,6 +7208,9 @@ export const translations: Record<Language, TranslationDictionary> = {
       'Try again in a few minutes. Do NOT register this taxpayer as a new TIN applicant — that would create a second TIN for someone who already has one.',
     nsTinNotFound:
       'Check the number against the taxpayer’s own document first — a mistyped digit is the usual cause. Only if they have never had a TIN, go back and register them without one; the platform will apply for a new TIN for them.',
+    nsTaxpayerAlreadyExists: 'Open the existing record and continue from there.',
+    nsPossibleDuplicateTaxpayer:
+      'Register them as new only if none of the matches is the same person.',
     nsKycProviderUnavailable: 'Try again in a few minutes. Your application is unchanged.',
     nsPaymentUnconfirmed: 'Open the transaction from your history to see its current status.',
     nsPaymentFailed: 'Start the payment again, or choose a different payment method.',
@@ -7578,6 +7628,13 @@ export const translations: Record<Language, TranslationDictionary> = {
       'Adadin ya zo babu daga lissafin da aka shigar. Ka duba su, kuma ka gaya wa jami’in PSIRS idan sun dace — watakila kudin ne ba daidai ba, ba lissafin ba.',
     errInvoiceAlreadyPaid:
       'An riga an biya wannan takardar biya. Kada ka sake karbar kudi.',
+    errTaxpayerAlreadyExists:
+      'An riga an yi rajistar wannan mutumin a matsayin {{subject}}. Rikodi na biyu zai zama kwafi.',
+    errPossibleDuplicateTaxpayer:
+      'An sami rikodin da zai yiwu na wannan mutumin ne. Ka duba shi kafin ka bude sabuwar rajista.',
+    errTinServiceUnavailable:
+      'Ba a iya isa ga sabis din TIN na PSIRS ba, don haka ba a tabbatar da wannan TIN ba. Ba a yi rajistar kowa ba.',
+    errTinNotFound: 'Ba a sami TIN {{tin}} a sabis din TIN na PSIRS ba.',
     errInvoiceExpired:
       'Wannan takardar biya ta kare. Ka yi sabon kimantawa ga mai biyan haraji.',
     errInvoiceNotPayable:
@@ -10692,6 +10749,9 @@ export const translations: Record<Language, TranslationDictionary> = {
       'Ka sake gwadawa nan da mintuna kadan. KADA ka yi rajistar wannan mai biyan haraji a matsayin sabon mai neman TIN — hakan zai kirkiri TIN na biyu ga wanda ya riga ya mallaki daya.',
     nsTinNotFound:
       'Da farko ka duba lambar da takardar mai biyan harajin kansa — yawanci kuskuren buga lamba ne sanadi. Sai kawai idan bai taba mallakar TIN ba, ka koma ka yi rajistarsa ba tare da TIN ba; dandalin zai nema masa sabuwar TIN.',
+    nsTaxpayerAlreadyExists: 'Ka bude rikodin da ke akwai ka ci gaba daga nan.',
+    nsPossibleDuplicateTaxpayer:
+      'Ka yi rajistarsa a matsayin sabo sai idan babu daya daga cikinsu da shi ne mutumin.',
     nsKycProviderUnavailable: 'Ka sake gwadawa nan da mintuna kadan. Nemanka bai canza ba.',
     nsPaymentUnconfirmed: 'Ka bude cinikin daga tarihinka domin ka ga halin da yake ciki yanzu.',
     nsPaymentFailed: 'Ka sake fara biyan, ko ka zabi wata hanyar biya.',

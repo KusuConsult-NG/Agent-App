@@ -454,6 +454,33 @@ describe('Taxpayer onboarding and duplicate control (PRD §10, §11)', () => {
 
     assert.equal(response.status, 409);
     assert.equal(response.body.error.code, 'TAXPAYER_ALREADY_EXISTS');
+
+    /*
+     * And who they are already registered as, as a field.
+     *
+     * The agent application translates this refusal by its code and its Hausa
+     * reads "An riga an yi rajistar wannan mutumin a matsayin {{subject}}".
+     * Without this field the sentence arrives with a gap where the name goes,
+     * and the name is the whole of what the agent needs: it is how they find
+     * the record instead of making a second one.
+     *
+     * One field rather than a name and a TIN separately, because the TIN is
+     * conditional. A translation carrying "(TIN {{tin}})" would print that
+     * literally for everybody who has not got one, since the substitution
+     * leaves a placeholder the server did not send alone on purpose.
+     */
+    const subject = response.body.error.details?.find(
+      (detail: { field?: string }) => detail.field === 'subject',
+    );
+    assert.ok(subject, `no subject travelled with the refusal: ${JSON.stringify(response.body)}`);
+    // The name on the record that already exists — not the one just typed —
+    // and the TIN beside it, which is the half the conditional composes.
+    assert.match(subject.issue, /^Rahila Provisions Store \(TIN \d+\)$/);
+    assert.ok(
+      response.body.error.message.includes(subject.issue),
+      'the field and the English have to name the same record, or the Hausa reader and the ' +
+        'English reader are told about different ones',
+    );
   });
 
   it('warns on a weaker match and records the agent’s decision', async () => {

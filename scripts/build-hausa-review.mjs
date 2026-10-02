@@ -84,7 +84,25 @@ function safetyKeys() {
  *
  * `db/` is excluded: revenue items and notification templates carry a `code`
  * field too, and `PIT`, `ROAD` and `RECEIPT_GENERATED_SMS` are not refusals.
+ *
+ * COMMENTS ARE STRIPPED FIRST, and the reason is the second time this has
+ * happened rather than the first. The `AppError` branch below decides whether
+ * a `code:` field is a refusal by looking 400 characters either side of it for
+ * `AppError` or `statusCode`. `TIN_NOT_FOUND` carries a fourteen-line comment
+ * between its `statusCode` and its `code` — a comment explaining why it has a
+ * code of its own at all, which is to say why it is a refusal — and that
+ * pushed the evidence out of the window. The figure was one short and the
+ * document was told to write down the short one.
+ *
+ * Measuring source by proximity cannot survive prose sitting in the middle of
+ * what is being measured, and prose is what this codebase has most of. So the
+ * comments come out before anything is counted, which also stops a
+ * commented-out refusal being counted as one.
  */
+function withoutComments(source) {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
 function apiErrorCodes() {
   const codes = new Set();
   const walk = (dir) => {
@@ -93,7 +111,7 @@ function apiErrorCodes() {
       if (entry.isDirectory()) {
         if (entry.name !== 'tests' && entry.name !== 'db') walk(path);
       } else if (entry.name.endsWith('.ts')) {
-        const source = readFileSync(path, 'utf8');
+        const source = withoutComments(readFileSync(path, 'utf8'));
         for (const match of source.matchAll(/(?:conflict|refused)\(\s*'([A-Z_][A-Z_0-9]*)'/g)) {
           codes.add(match[1]);
         }
@@ -103,7 +121,7 @@ function apiErrorCodes() {
         // refusals moved into one, and the guard caught it, which is the
         // argument for counting rather than writing the figure down.
         for (const match of source.matchAll(
-          /[a-z][A-Za-z]*(?:Refused|Error|Conflict)\(\{\s*(?:\/\/[^\n]*\n\s*)*code:\s*'([A-Z_][A-Z_0-9]*)'/g,
+          /[a-z][A-Za-z]*(?:Refused|Error|Conflict)\(\{\s*code:\s*'([A-Z_][A-Z_0-9]*)'/g,
         )) {
           codes.add(match[1]);
         }

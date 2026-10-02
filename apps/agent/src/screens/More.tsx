@@ -47,12 +47,52 @@ interface VehicleLookup {
  * Falls back to the stored English when there is no code, which is how a
  * refusal recorded before this existed comes back, and how the one path that
  * replays a reason stored earlier answers.
+ *
+ * THE HOLES IN THE SENTENCE, AND WHOSE JOB IT WAS TO FILL THEM.
+ *
+ * Three of these translations carry a placeholder, and the API sends the value
+ * for exactly one of them. `reject()` in `routes/taxpayers.ts` says why, and
+ * says it as a division of labour: "The failing fields, sent apart from the
+ * sentence they were baked into. The phone knows its own draft type and
+ * reference and can fill those in itself; this is the one part of a refusal it
+ * cannot work out."
+ *
+ * The phone did not fill them in. `{{detail}}` was substituted here and the
+ * other two were not, so a capture refused as the wrong kind read `shigarwa
+ * irin "{{type}}"`, and one PSIRS could not process at all read `ka ba da
+ * lamba {{reference}} ga tallafi` — quote reference {{reference}} to support,
+ * which is the only instruction in that sentence and it named nothing. In
+ * English too: the dictionary's English carries the same placeholders, and the
+ * filled sentence the API composed is discarded the moment the code is in the
+ * map. Both are on the rendered list, which is where they were found.
+ *
+ * `draftType` and `clientReference` are fields of the draft in hand, so the
+ * server was right that this is the place. `enumLabel` for the type because it
+ * is an enum with a name in both languages, and the line above this one in the
+ * list already prints it that way.
+ *
+ * AND WHAT IS LEFT IF A HOLE SURVIVES.
+ *
+ * `errorText` leaves a placeholder the server did not send alone on purpose,
+ * and that is right where it is used: `ErrorAlert` lists `details` underneath,
+ * so the value is on the screen even when the sentence has a gap. This list
+ * has no second line. A sync response carries a code, a sentence and at most
+ * `detail`, and nothing else is coming — so a refusal whose translation names
+ * something only the server knows, such as the taxpayer an existing record
+ * already belongs to, cannot be completed here at any later date.
+ *
+ * The stored English is a complete sentence and says the same thing. It loses
+ * to a translation and beats one with a hole in it.
  */
 function refusalText(draft: Draft, t: TranslationDictionary): string {
   const recorded = draft.message ?? '';
   if (!draft.code) return recorded;
-  const said = errorText({ code: draft.code, message: recorded }, t);
-  return draft.detail ? said.replace('{{detail}}', draft.detail) : said;
+  let said = errorText({ code: draft.code, message: recorded }, t);
+  if (draft.detail) said = said.replace('{{detail}}', draft.detail);
+  said = said
+    .replace('{{type}}', enumLabel(draft.draftType, t))
+    .replace('{{reference}}', draft.clientReference);
+  return /\{\{\w+\}\}/.test(said) ? recorded || said : said;
 }
 
 /**

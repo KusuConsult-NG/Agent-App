@@ -1,6 +1,6 @@
 # Hausa review: everything still waiting on a decision
 
-`HAUSA-REVIEW.md` carries all 3,442 dictionary strings, and most of its length
+`HAUSA-REVIEW.md` carries all 3,448 dictionary strings, and most of its length
 is those tables. The open questions are scattered through seven sections of the
 prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
@@ -18,7 +18,7 @@ new strings and none of review.
 
 ## 1. Not a translation question — PSIRS decides
 
-**440 strings address the reader as `ka`: masculine singular.** A woman
+**443 strings address the reader as `ka`: masculine singular.** A woman
 collecting revenue in Bokkos is addressed as a man by the application she uses
 all day.
 
@@ -31,10 +31,10 @@ about field staff. Counting says otherwise:
 
 | Who reads it | Strings |
 |---|---|
-| The agent app | 243 |
-| The officer portal | 147 |
+| The agent app | 252 |
+| The officer portal | 148 |
 | Citizens, referees and group leaders | 43 |
-| **Total** | **440** of 3,442 |
+| **Total** | **443** of 3,448 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
@@ -411,7 +411,7 @@ roll. If any correction you make runs long, that test will say so rather than
 the receipt.
 
 **And `scanHelp` was not the only dead string in this table.** Checking it
-raised the obvious next question, so it was measured: **43 of the 3,442 keys
+raised the obvious next question, so it was measured: **43 of the 3,448 keys
 are never named anywhere outside the dictionary**, and four of them are in the
 table above — `statusOffline`, `offlineMessage`, `statusFailed`, and
 `civicDutyThanks`, the one the `Mungode` typo was in. Three of the four
@@ -536,6 +536,56 @@ match it: both are the kind of a log entry, so both read as past events rather
 than as nouns. If a noun pair would be better on a table heading — *karatu* and
 *canji* — that is a reading decision and worth saying.
 
+**4.9 — Six strings for the refusals on the registration screen.** Registering
+somebody is the first thing an agent does for anybody and the gate everything
+else is behind: nothing can be assessed, collected or receipted against a
+person who is not on the register. All four refusals that screen can show were
+reaching the agent in the server's English.
+
+Two of them had their **next step** in Hausa already and their headline in
+English. `nsTinServiceUnavailable` and `nsTinNotFound` were written when the
+advice on those two branches was corrected — the advice that used to tell an
+agent to register a second TIN for somebody who already had one — and the
+sentence they are advice about was left behind. So the agent read what to do in
+their own language, and what had happened in somebody else's.
+
+| Key | Hausa | Borrowed from |
+|---|---|---|
+| `errTaxpayerAlreadyExists` | An riga an yi rajistar wannan mutumin a matsayin {{subject}}… | `An riga an …` (13), `rajista` (132), `kwafi` (8) |
+| `nsTaxpayerAlreadyExists` | Ka bude rikodin da ke akwai ka ci gaba daga nan. | `Ka bude rasit`, `rikodi` (52) |
+| `errPossibleDuplicateTaxpayer` | An sami rikodin da zai yiwu na wannan mutumin ne… | `An sami` (5), `tpCheckSamePerson` |
+| `nsPossibleDuplicateTaxpayer` | Ka yi rajistarsa a matsayin sabo sai idan babu daya daga cikinsu… | `tpNoneOfThese` |
+| `errTinServiceUnavailable` | Ba a iya isa ga sabis din TIN na PSIRS ba… | `isa ga` (12), `tabbatar da` (90) |
+| `errTinNotFound` | Ba a sami TIN {{tin}} a sabis din TIN na PSIRS ba. | `Ba a sami` (6) |
+
+**Two readings are wanted on these, and one is a judgement about how PSIRS
+works rather than about Hausa.**
+
+The first is `{{subject}}` in `errTaxpayerAlreadyExists`. It is filled with a
+name and, when the person has one, a TIN — *Rahila Provisions Store (TIN
+274034597)* — composed as a single value by the API rather than as two. A
+translation carrying `(TIN {{tin}})` separately would print that literally for
+everybody who has not got a TIN, because an unsent placeholder is deliberately
+left alone rather than blanked. If the parenthesis reads wrongly in Hausa the
+answer is a different composition on the server, not a different sentence here,
+and it is worth saying.
+
+The second is `nsPossibleDuplicateTaxpayer`, which is **not** a translation of
+the API's next step. The API says to resubmit with `acknowledgeDuplicates` set
+to true — correct for a client, and a thing no person can do — and that
+sentence was reaching an agent in English on the screen where they decide
+whether two records are the same human being. The Hausa names the test to apply
+before pressing the button the screen already carries. An earlier draft pointed
+at the panel below instead (*the matching records are listed below*) and was
+wrong: that panel has a second form which appears precisely when the matches
+could **not** be listed, so the sentence would have been false exactly when the
+agent most needed care.
+
+`mutumin` — the person — is used in all four rather than `mai biyan haraji`,
+because somebody being refused registration is not yet a taxpayer. If that
+reads as presumptuous about an individual where a business is being registered,
+that is a reading decision.
+
 > `HAUSA-REVIEW.md` §§ *Strings that had Hausa and were not being shown*, *And
 > every other date*, *`enumAssigned` was doing double duty*
 
@@ -624,9 +674,9 @@ failed, a step-up the officer walked away from. `STEP_UP_REQUIRED` has now been
 added, because it guards every consequential money action in the portal and its
 instruction was already in Hausa under an English heading.
 
-**The scale, counted rather than estimated.** The platform raises **171
+**The scale, counted rather than estimated.** The platform raises **172
 distinct error codes**; the officer portal says 1 of them in Hausa, and the
-agent application says 29. The first version of this section said twenty-six,
+agent application says 33. The first version of this section said twenty-six,
 from a search that matched `conflict('CODE'` on a single line and missed every
 multi-line call and every `new AppError({ code: … })` literal — which is most
 of them. It understated the gap by a factor of six, on the page this document

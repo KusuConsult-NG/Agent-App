@@ -50,7 +50,7 @@ function fieldLabel(field: string): string {
  * Hausa sentence guessed for a message nobody has seen would be worse than the
  * English one — the agent cannot tell a guess from a translation.
  */
-const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
+export const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   /*
    * A capture PSIRS refused. These reach here rather than through `ApiError`
    * because they arrive one-per-draft inside a batch response, but they are
@@ -148,6 +148,29 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   INVOICE_NOT_PAYABLE: 'errInvoiceNotPayable',
   INVOICE_EXPIRED: 'errInvoiceExpired',
   TRANSACTION_NOT_PAYABLE: 'errTransactionNotPayable',
+
+  /*
+   * PUTTING SOMEBODY ON THE REGISTER.
+   *
+   * The first thing an agent does for anybody, and the gate everything else
+   * is behind: nothing can be assessed, collected or receipted against a
+   * person who is not registered. All four refusals the screen can show were
+   * the server's English.
+   *
+   * Two of them had their next step in Hausa already and their headline in
+   * English — `nsTinServiceUnavailable` and `nsTinNotFound` were written when
+   * the advice on those two branches was corrected, and the sentence they are
+   * advice about was left behind. The agent read what to do in their own
+   * language and what had happened in somebody else's.
+   *
+   * Found the same way the six above were: by slicing the functions the
+   * screen's requests actually run and extracting every code, which is what
+   * `a-refusal-a-screen-can-show.test.ts` now does for this path too.
+   */
+  TAXPAYER_ALREADY_EXISTS: 'errTaxpayerAlreadyExists',
+  POSSIBLE_DUPLICATE_TAXPAYER: 'errPossibleDuplicateTaxpayer',
+  TIN_SERVICE_UNAVAILABLE: 'errTinServiceUnavailable',
+  TIN_NOT_FOUND: 'errTinNotFound',
 };
 
 /**
@@ -268,6 +291,19 @@ const TRANSLATED_NEXT_STEPS: Record<string, keyof TranslationDictionary> = {
   // worse than none.
   NO_EFFECTIVE_RATE: 'nsNoEffectiveRate',
   INVOICE_ALREADY_PAID: 'nsInvoiceAlreadyPaid',
+  /*
+   * The registration screen's two. The other two already had theirs, which is
+   * how the split was noticed at all.
+   *
+   * `POSSIBLE_DUPLICATE_TAXPAYER` is the one place this map does not translate
+   * the API's sentence so much as answer the same question for a different
+   * reader. The API says to resubmit with `acknowledgeDuplicates` set, which
+   * is correct for a client and useless to a person; the screen under this
+   * alert lists the matches and carries the button. So the next step points
+   * there, and the API keeps its own words for the callers they are for.
+   */
+  TAXPAYER_ALREADY_EXISTS: 'nsTaxpayerAlreadyExists',
+  POSSIBLE_DUPLICATE_TAXPAYER: 'nsPossibleDuplicateTaxpayer',
 };
 
 /** The next step for an error, or the server's own words when it has none. */

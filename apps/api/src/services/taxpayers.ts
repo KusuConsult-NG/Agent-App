@@ -229,12 +229,25 @@ export async function registerTaxpayer(params: {
     );
 
     if (decisive) {
-      throw conflict(
-        'TAXPAYER_ALREADY_EXISTS',
-        `This person is already registered as ${decisive.displayName}` +
-          `${decisive.tin ? ` (TIN ${decisive.tin})` : ''}. A second record would be a duplicate.`,
-        'Open the existing taxpayer record and continue from there.',
-      );
+      /*
+       * The subject as a field, composed here rather than in the sentence.
+       *
+       * The agent application translates by code and its Hausa reads "An riga
+       * an yi rajistar wannan mutumin a matsayin {{subject}}" — so it needs
+       * the name, and the TIN when there is one, as something it can
+       * substitute. Composed as one value rather than two because the TIN is
+       * conditional: a translation carrying "(TIN {{tin}})" would print that
+       * literally for everybody who has not got one, since `errorText` leaves
+       * a placeholder the server did not send alone on purpose.
+       */
+      const subject = `${decisive.displayName}${decisive.tin ? ` (TIN ${decisive.tin})` : ''}`;
+      throw new AppError({
+        statusCode: 409,
+        code: 'TAXPAYER_ALREADY_EXISTS',
+        message: `This person is already registered as ${subject}. A second record would be a duplicate.`,
+        nextStep: 'Open the existing taxpayer record and continue from there.',
+        details: [{ field: 'subject', issue: subject }],
+      });
     }
 
     throw conflict(
@@ -370,7 +383,18 @@ export async function registerTaxpayer(params: {
           'Check the number against the taxpayer’s own document first — a mistyped digit is ' +
           'the usual cause. Only if they have never had a TIN, go back and register them ' +
           'without one; the platform will apply for a new TIN for them.',
-        details: [{ field: 'existingTin', issue: 'Not found in the authoritative TIN register' }],
+        details: [
+          { field: 'existingTin', issue: 'Not found in the authoritative TIN register' },
+          /*
+           * And the number itself, so the Hausa sentence can name it.
+           *
+           * A second entry rather than reusing the one above: that one's
+           * `issue` is prose saying what went wrong, which is what a client
+           * with no translation falls back to, and overwriting it with a bare
+           * TIN would take that away to save a line.
+           */
+          { field: 'tin', issue: String(input.existingTin) },
+        ],
       });
     }
 

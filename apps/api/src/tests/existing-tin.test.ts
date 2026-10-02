@@ -121,6 +121,37 @@ describe('a TIN written the way people write it', () => {
     // other refusal, because the two are acted on differently.
     assert.equal(response.body.error.code, 'TIN_NOT_FOUND');
   });
+
+  it('sends the number itself, and keeps the sentence that explains it', async () => {
+    /*
+     * The agent application says this refusal in Hausa — "Ba a sami TIN
+     * {{tin}} a sabis din TIN na PSIRS ba" — and the number is the whole
+     * point of it: an agent who mistyped a digit finds it by reading the
+     * number back, and that is the likeliest cause by a distance.
+     *
+     * Two details rather than one. The prose entry is what a client with no
+     * translation falls back to, and overwriting it with a bare number to
+     * save a line would take that away.
+     */
+    const response = await registerWithTin('definitely-not-a-tin');
+    assert.equal(response.body.error.code, 'TIN_NOT_FOUND');
+
+    const details = response.body.error.details as { field?: string; issue: string }[];
+    assert.deepEqual(
+      details.map((detail) => detail.field).sort(),
+      ['existingTin', 'tin'],
+      JSON.stringify(details),
+    );
+    assert.equal(
+      details.find((detail) => detail.field === 'tin')!.issue,
+      'definitely-not-a-tin',
+      'the number as typed, which is what the agent has to compare against the document',
+    );
+    assert.match(
+      details.find((detail) => detail.field === 'existingTin')!.issue,
+      /not found in the authoritative tin register/i,
+    );
+  });
 });
 
 describe('what an agent is told when a TIN is not found', () => {

@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > nineteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,442 strings; that one is two pages and links back
+> because it carries all 3,448 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,442 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,448 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,442 strings is worse than no sheet, because it looks complete; this one cannot
+3,448 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,442 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,448 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,442 strings: where the
+- The glossary below is applied consistently across all 3,448 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -483,7 +483,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3361 strings, grouped by where an agent meets them. Lower stakes
+3367 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -3270,6 +3270,10 @@ instructions — but they are what an agent reads all day.
 | `errRevenueItemNotInLga` | This tax or levy is not collected in this taxpayer’s Local Government Area. | Ba a karbar wannan haraji ko kudin shiga a karamar hukumar wannan mai biyan haraji ba. | ☐ | |
 | `errAssessmentAmountZero` | The amount works out to nothing from the figures entered. Check them, and tell a PSIRS officer if they are right — the rate may be wrong rather than the figures. | Adadin ya zo babu daga lissafin da aka shigar. Ka duba su, kuma ka gaya wa jami’in PSIRS idan sun dace — watakila kudin ne ba daidai ba, ba lissafin ba. | ☐ | |
 | `errInvoiceAlreadyPaid` | This bill has already been paid. Do not collect payment again. | An riga an biya wannan takardar biya. Kada ka sake karbar kudi. | ☐ | |
+| `errTaxpayerAlreadyExists` | This person is already registered as {{subject}}. A second record would be a duplicate. | An riga an yi rajistar wannan mutumin a matsayin {{subject}}. Rikodi na biyu zai zama kwafi. | ☐ | |
+| `errPossibleDuplicateTaxpayer` | A record was found that may be this same person. Check it before opening a new one. | An sami rikodin da zai yiwu na wannan mutumin ne. Ka duba shi kafin ka bude sabuwar rajista. | ☐ | |
+| `errTinServiceUnavailable` | The PSIRS TIN service could not be reached, so this TIN cannot be confirmed. Nobody has been registered. | Ba a iya isa ga sabis din TIN na PSIRS ba, don haka ba a tabbatar da wannan TIN ba. Ba a yi rajistar kowa ba. | ☐ | |
+| `errTinNotFound` | TIN {{tin}} could not be found in the PSIRS TIN service. | Ba a sami TIN {{tin}} a sabis din TIN na PSIRS ba. | ☐ | |
 | `errInvoiceExpired` | This bill has expired. Raise a new assessment for the taxpayer. | Wannan takardar biya ta kare. Ka yi sabon kimantawa ga mai biyan haraji. | ☐ | |
 | `errInvoiceNotPayable` | This bill is {{state}} and can no longer be paid. Raise a new assessment. | Wannan takardar biya tana {{state}} kuma ba za a iya biyanta ba. Ka yi sabon kimantawa. | ☐ | |
 | `errNoEffectiveRate` | No rate approved by government is in force for this tax or levy, so nothing can be assessed on it. Choose another, or tell a PSIRS officer. | Babu kudin da Gwamnati ta amince da shi a aiki kan wannan haraji ko kudin shiga, don haka ba za a iya kimanta komai kan sa ba. Ka zabi wani, ko ka gaya wa jami’in PSIRS. | ☐ | |
@@ -4072,6 +4076,8 @@ instructions — but they are what an agent reads all day.
 | `nsUpdateRequiredToEnumerate` | Close and reopen the app to install the latest version. Anything already saved on this phone will still be sent. | Ka rufe manhajar ka sake budewa domin shigar da sabuwar siga. Duk abin da aka riga aka ajiye a wannan waya za a aika shi. | ☐ | |
 | `nsTinServiceUnavailable` | Try again in a few minutes. Do NOT register this taxpayer as a new TIN applicant — that would create a second TIN for someone who already has one. | Ka sake gwadawa nan da mintuna kadan. KADA ka yi rajistar wannan mai biyan haraji a matsayin sabon mai neman TIN — hakan zai kirkiri TIN na biyu ga wanda ya riga ya mallaki daya. | ☐ | |
 | `nsTinNotFound` | Check the number against the taxpayer’s own document first — a mistyped digit is the usual cause. Only if they have never had a TIN, go back and register them without one; the platform will apply for a new TIN for them. | Da farko ka duba lambar da takardar mai biyan harajin kansa — yawanci kuskuren buga lamba ne sanadi. Sai kawai idan bai taba mallakar TIN ba, ka koma ka yi rajistarsa ba tare da TIN ba; dandalin zai nema masa sabuwar TIN. | ☐ | |
+| `nsTaxpayerAlreadyExists` | Open the existing record and continue from there. | Ka bude rikodin da ke akwai ka ci gaba daga nan. | ☐ | |
+| `nsPossibleDuplicateTaxpayer` | Register them as new only if none of the matches is the same person. | Ka yi rajistarsa a matsayin sabo sai idan babu daya daga cikinsu da shi ne mutumin. | ☐ | |
 | `nsKycProviderUnavailable` | Try again in a few minutes. Your application is unchanged. | Ka sake gwadawa nan da mintuna kadan. Nemanka bai canza ba. | ☐ | |
 | `nsPaymentUnconfirmed` | Open the transaction from your history to see its current status. | Ka bude cinikin daga tarihinka domin ka ga halin da yake ciki yanzu. | ☐ | |
 | `nsPaymentFailed` | Start the payment again, or choose a different payment method. | Ka sake fara biyan, ko ka zabi wata hanyar biya. | ☐ | |
