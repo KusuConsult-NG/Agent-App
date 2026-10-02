@@ -21,7 +21,7 @@
 import type { PoolClient } from 'pg';
 import type { RefereeCategory } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { pool, query, queryOne, withTransaction } from '../db/pool';
+import { advisoryLock, LOCK_NAMESPACE, pool, query, queryOne, withTransaction } from '../db/pool';
 import { generateToken, hashIdentityNumber, maskIdentityNumber, sha256 } from '../lib/crypto';
 import { badRequest, conflict, notFound, AppError } from '../lib/errors';
 import { nextRefereeCode } from '../lib/references';
@@ -68,6 +68,22 @@ export async function nominateReferee(params: {
   const { input } = params;
 
   return withTransaction(async (client) => {
+    /*
+     * One nomination into this application's referee slot at a time.
+     *
+     * The active-referee read below decides a refusal on a row that does not
+     * exist yet, so no `FOR UPDATE` can order two callers. Two nominations
+     * submitted together both found nothing and both inserted — two
+     * outstanding invitations for one slot, with no replacement recorded
+     * against either, which is two attempts at a clearance PRD §29 means an
+     * applicant to make one at a time.
+     *
+     * 087 holds the rule at the database. This is what keeps the service's own
+     * sentence — "A referee request is already outstanding" — rather than
+     * handing the applicant a constraint violation.
+     */
+    await advisoryLock(client, LOCK_NAMESPACE.AGENT_REFEREE, params.agentId);
+
     const applicant = await queryOne<{
       phone: string;
       alternate_phone: string | null;

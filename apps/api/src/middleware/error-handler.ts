@@ -46,6 +46,16 @@ export const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
    * what the index exists to prevent, and the officer doing it is the person
    * who can resolve which record should be the live one.
    */
+  /*
+   * 087. `nominateReferee` holds an advisory lock on the application, so its
+   * own `REFEREE_ALREADY_NOMINATED` normally answers first and says what to do
+   * — wait for a response, or request a replacement. This is the backstop for
+   * a caller that does not come through that function, worded to say the same
+   * thing, because somebody meeting one of the two has no way of knowing which.
+   */
+  idx_referees_one_active:
+    'A referee request is already outstanding for this application. Wait for a response, ' +
+    'or request a replacement.',
   idx_taxpayers_identity_live:
     'Another taxpayer on the register already has that identification number. Two live ' +
     'records for one person cannot both stand — resolve the duplicate before putting this ' +

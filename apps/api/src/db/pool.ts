@@ -189,6 +189,17 @@ export const LOCK_NAMESPACE = {
   DEPARTMENT_CODE: 11,
   /** One agent's identity check, while a new attempt supersedes the last. */
   AGENT_KYC: 12,
+  /**
+   * One application's referee slot, while a nomination is written into it.
+   *
+   * `nominateReferee` reads `referees` for any row in an active state, refuses
+   * if it finds one, and inserts if it does not — and the row it looks for
+   * does not exist yet. Two nominations submitted together both found nothing
+   * and both inserted, leaving an applicant with two outstanding invitations
+   * and no record of a replacement: two attempts at clearance where PRD §29's
+   * control is one at a time, deliberately chosen and recorded.
+   */
+  AGENT_REFEREE: 13,
 } as const;
 
 /**
