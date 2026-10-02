@@ -200,6 +200,22 @@ export const LOCK_NAMESPACE = {
    * control is one at a time, deliberately chosen and recorded.
    */
   AGENT_REFEREE: 13,
+  /**
+   * One scope's target for one period, while a figure is being set against it.
+   *
+   * `setTarget` supersedes whatever stood for the same scope and dates and
+   * then inserts, which is a revision for one caller and a race for two: both
+   * UPDATEs match nothing, both INSERT, and the second meets
+   * `revenue_targets_one_live_per_scope`. The caller is then refused a target
+   * that would have been set had the two arrived a second apart, and told to
+   * close a target they cannot see — where sequentially they would have
+   * superseded it and been told which figure they replaced.
+   *
+   * Keyed on the scope, its identifiers and the two dates, in the same shape
+   * the index is keyed on. The dates go into the key as the DATE Postgres will
+   * store, so two callers who name the same day differently still queue.
+   */
+  REVENUE_TARGET: 14,
 } as const;
 
 /**

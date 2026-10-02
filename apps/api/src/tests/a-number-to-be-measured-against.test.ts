@@ -328,6 +328,144 @@ describe('target versus actual', () => {
 });
 
 // ===========================================================================
+describe('two labels for one period, and the figure that depended on which', () => {
+  /*
+   * Migration 056 set out to make two live targets impossible, and said what
+   * the second one costs: "every achievement percentage would depend on which
+   * row the query happened to read first."
+   *
+   * `revenue_targets_one_live_per_scope` keyed that on `period_kind` as well
+   * as the dates, and nothing that reads a target filters on `period_kind` —
+   * not `withTarget`, which takes the forecast's figure with `LIMIT 1` and no
+   * ORDER BY, and not `targetRollup`, whose count and SUM run over the same
+   * columns. The route takes `periodKind`, `periodStart` and `periodEnd` as
+   * three independent fields, so a MONTHLY target for this month and a
+   * QUARTERLY one for the same two dates were two live rows the index allowed
+   * and every reader treated as one.
+   *
+   * Both assertions below are on counts and sums rather than on which row came
+   * back, because which row came back is the part that was never decided.
+   */
+  it('supersedes the figure for the same dates, whatever the period is called', async () => {
+    const period = thisMonth();
+    const first = await setTarget({ periodKind: 'MONTHLY', amountKobo: '50000000' });
+    assert.equal(first.status, 201, JSON.stringify(first.body));
+
+    const second = await setTarget({ periodKind: 'QUARTERLY', amountKobo: '90000000' });
+    assert.equal(second.status, 201, JSON.stringify(second.body));
+    assert.equal(
+      second.body.superseded,
+      first.body.id,
+      'a second figure for the same scope and the same two dates did not ' +
+        'supersede the first, so both are live and the label is the only thing ' +
+        'telling them apart',
+    );
+
+    const live = await query<{ amount_kobo: string; period_kind: string }>(
+      pool,
+      `SELECT amount_kobo::text, period_kind FROM revenue_targets
+        WHERE status = 'ACTIVE' AND scope = 'STATE'
+          AND period_start = $1 AND period_end = $2`,
+      [iso(period.start), iso(period.end)],
+    );
+    assert.equal(
+      live.length,
+      1,
+      `${live.length} live state targets for one period: ${JSON.stringify(live)}`,
+    );
+    assert.equal(live[0]!.amount_kobo, '90000000', 'and it is the figure set second');
+  });
+
+  it('counts an LGA once in the rollup, not once per label', async () => {
+    // The rollup's own symptom, and the deterministic one: `lgas_with_a_target`
+    // is a count and `lga_targets_kobo` a sum, so a second live row does not
+    // merely risk being read — it is read, and added.
+    const period = thisMonth();
+    await setTarget({ scope: 'LGA', lgaId, periodKind: 'MONTHLY', amountKobo: '30000000' });
+    await setTarget({ scope: 'LGA', lgaId, periodKind: 'QUARTERLY', amountKobo: '45000000' });
+
+    const rollup = await get(
+      `/government/targets/rollup?periodStart=${iso(period.start)}&periodEnd=${iso(period.end)}`,
+      auth('admin'),
+    );
+    assert.equal(rollup.status, 200, JSON.stringify(rollup.body));
+    assert.equal(
+      rollup.body.lgas_with_a_target,
+      '1',
+      'one LGA with one target for the period was reported as more than one',
+    );
+    assert.equal(
+      rollup.body.lga_targets_kobo,
+      '45000000',
+      'the apportioned figure is the sum of two rows that both claim to be ' +
+        'the target for the same work',
+    );
+  });
+
+  it('is refused a second live figure at the database, not only by the service', async () => {
+    /*
+     * Asserted here rather than through the route, because the service is now
+     * correct and would never send the second insert. The index's job is to
+     * hold whoever writes — migration 080's header is the principle: "a rule
+     * the service enforces and the database does not is one UPDATE away from
+     * being undone." It was keyed on `period_kind`, so the two rows below were
+     * accepted, and every reader of a target then read them as one.
+     */
+    const period = thisMonth();
+    const setter = await queryOne<{ id: string }>(
+      pool,
+      'SELECT id FROM users WHERE phone = $1',
+      ['+2348073000001'],
+    );
+    assert.ok(setter, 'the officer who sets the figure exists');
+
+    const insert = (periodKind: string, amountKobo: string) =>
+      pool.query(
+        `INSERT INTO revenue_targets
+           (scope, period_kind, period_start, period_end, amount_kobo, set_by)
+         VALUES ('STATE', $1, $2, $3, $4, $5)`,
+        [periodKind, iso(period.start), iso(period.end), amountKobo, setter!.id],
+      );
+
+    await insert('MONTHLY', '50000000');
+    await assert.rejects(
+      insert('QUARTERLY', '90000000'),
+      /revenue_targets_one_live_per_scope/,
+      'the database accepted a second live target for the same scope and the ' +
+        'same two dates, differing only in what the period is called',
+    );
+  });
+
+  it('still lets the same scope hold a target for a longer period beside it', async () => {
+    /*
+     * The tightening has to stop at identical dates. A month and the quarter
+     * containing it are different periods and both are ordinary things to
+     * plan against — which is why this is keyed on the dates rather than on
+     * anything that would make one of the two unsettable.
+     */
+    const month = thisMonth();
+    const quarter = resolvePeriod('QUARTERLY');
+    const monthly = await setTarget({ periodKind: 'MONTHLY', amountKobo: '50000000' });
+    const quarterly = await setTarget({
+      periodKind: 'QUARTERLY',
+      periodStart: iso(quarter.start),
+      periodEnd: iso(quarter.end),
+      amountKobo: '150000000',
+    });
+
+    assert.equal(monthly.status, 201, JSON.stringify(monthly.body));
+    assert.equal(quarterly.status, 201, JSON.stringify(quarterly.body));
+    assert.equal(quarterly.body.superseded, null, 'the quarter superseded the month inside it');
+    assert.notEqual(
+      iso(month.end),
+      iso(quarter.end),
+      'this month and this quarter end on the same day, so the case above is ' +
+        'not the one this test means to cover',
+    );
+  });
+});
+
+// ===========================================================================
 describe('every scope and every period a target can be set for', () => {
   /*
    * Reached rather than declared.

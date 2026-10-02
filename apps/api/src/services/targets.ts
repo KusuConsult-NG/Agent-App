@@ -39,7 +39,7 @@
  */
 
 import type { Db } from '../db/pool';
-import { query, queryOne, withTransaction } from '../db/pool';
+import { advisoryLock, LOCK_NAMESPACE, query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { REVENUE_STATES_SQL } from '../lib/revenue-states';
 import { currentYearInPlateau, plateauParts, todayInPlateau } from '../lib/calendar-day';
@@ -73,6 +73,12 @@ export interface SetTargetInput {
   categoryId?: string | null;
   revenueItemId?: string | null;
   agentId?: string | null;
+  /**
+   * A label for grouping, in migration 056's words, "rather than the authority
+   * on what the period is" — a fiscal year that does not start in January
+   * makes "Q1" four different date ranges. So it is stored and filtered on,
+   * and the two dates below are what identifies the period.
+   */
   periodKind: TargetPeriod;
   periodStart: Date;
   periodEnd: Date;
@@ -87,10 +93,38 @@ export interface SetTargetInput {
  * stays answerable. The unique index only covers ACTIVE rows, which is what
  * lets the old figure remain beside the new one.
  *
+ * "The same thing and period" means the scope, its identifiers and the two
+ * dates. Not the label: a target set as QUARTERLY over the dates an existing
+ * MONTHLY one covers supersedes it, because one of those two labels is wrong
+ * and no reader of a target has ever filtered on it.
+ *
  * Both statements run in one transaction: a supersede that committed without
  * its replacement would leave the period with no target at all, and a screen
  * showing 0% achievement against nothing.
  */
+/**
+ * The one logical target a call is setting, as a lock key.
+ *
+ * Deliberately the same columns `revenue_targets_one_live_per_scope` is keyed
+ * on, so what the lock serialises and what the database refuses are the same
+ * thing. Dates are reduced to the DATE they will be stored as: the column is
+ * DATE and the server runs UTC, so a caller who sends a midnight and one who
+ * sends a midday on the same day are setting the same period and have to
+ * queue behind each other rather than race.
+ */
+function targetKey(input: SetTargetInput): string {
+  const day = (date: Date) => date.toISOString().slice(0, 10);
+  return [
+    input.scope,
+    input.lgaId ?? '',
+    input.categoryId ?? '',
+    input.revenueItemId ?? '',
+    input.agentId ?? '',
+    day(input.periodStart),
+    day(input.periodEnd),
+  ].join('|');
+}
+
 export async function setTarget(
   actor: Actor,
   input: SetTargetInput,
@@ -104,6 +138,11 @@ export async function setTarget(
   assertScopeIsCoherent(input);
 
   return withTransaction(async (client) => {
+    // Before the read, because the row this supersedes may not exist yet and
+    // a second caller setting a figure for the same period would otherwise
+    // insert beside it rather than replace it. The key is the index's key.
+    await advisoryLock(client, LOCK_NAMESPACE.REVENUE_TARGET, targetKey(input));
+
     const previous = await queryOne<{ id: string; amount_kobo: string }>(
       client,
       `UPDATE revenue_targets
@@ -114,7 +153,15 @@ export async function setTarget(
           AND category_id IS NOT DISTINCT FROM $3
           AND revenue_item_id IS NOT DISTINCT FROM $4
           AND agent_id IS NOT DISTINCT FROM $5
-          AND period_kind = $6 AND period_start = $7 AND period_end = $8
+          -- Not period_kind, which was here. Matching on it meant a MONTHLY
+          -- target for 1-31 March did not supersede a QUARTERLY one for the
+          -- same two dates: both stayed ACTIVE, because the unique index was
+          -- keyed on the label as well. Nothing that reads a target filters
+          -- on it, so the forecast took whichever row came back first, and
+          -- the rollup added the two figures and counted one LGA twice.
+          -- Migration 088 narrows the index to the dates and says why the
+          -- dates are the period; this is the write that matches it.
+          AND period_start = $6 AND period_end = $7
         RETURNING id, amount_kobo`,
       [
         input.scope,
@@ -122,7 +169,6 @@ export async function setTarget(
         input.categoryId ?? null,
         input.revenueItemId ?? null,
         input.agentId ?? null,
-        input.periodKind,
         input.periodStart,
         input.periodEnd,
       ],
