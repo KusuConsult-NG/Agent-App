@@ -175,6 +175,20 @@ export const LOCK_NAMESPACE = {
    * raced.
    */
   VEHICLE: 9,
+  /**
+   * A phone number, while an application is being created against it.
+   *
+   * `submitApplication` reads `users` for the phone and then inserts one. Two
+   * taps on Apply both found nothing, both inserted, and the second was
+   * refused by `users_phone_key` — so the answer was the generic duplicate
+   * sentence instead of `PHONE_ALREADY_REGISTERED`, which the agent
+   * application translates and which says to sign in instead.
+   */
+  APPLICATION_PHONE: 10,
+  /** A department code, while one is being created against it. */
+  DEPARTMENT_CODE: 11,
+  /** One agent's identity check, while a new attempt supersedes the last. */
+  AGENT_KYC: 12,
 } as const;
 
 /**

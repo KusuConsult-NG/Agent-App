@@ -28,7 +28,7 @@ import {
   type ApplicationState,
 } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { pool, query, queryOne, withTransaction } from '../db/pool';
+import { advisoryLock, LOCK_NAMESPACE, pool, query, queryOne, withTransaction } from '../db/pool';
 import { config } from '../config';
 import { hashIdentityNumber, hashPassword, maskIdentityNumber } from '../lib/crypto';
 import { AppError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
@@ -341,6 +341,19 @@ export async function submitApplication(params: {
   const { input } = params;
 
   return withTransaction(async (client) => {
+    /*
+     * One application against this phone number at a time.
+     *
+     * The read below takes no lock and the user it looks for does not exist
+     * yet, so two taps on Apply both found nothing, both inserted, and the
+     * second was refused by `users_phone_key`. The remedy the person needs is
+     * the same either way — sign in rather than apply again — but they were
+     * told it by the generic duplicate sentence rather than by
+     * `PHONE_ALREADY_REGISTERED`, which is the one of the two the agent
+     * application can say in Hausa.
+     */
+    await advisoryLock(client, LOCK_NAMESPACE.APPLICATION_PHONE, input.phone);
+
     const existing = await queryOne<{ id: string }>(client, 'SELECT id FROM users WHERE phone = $1', [
       input.phone,
     ]);
@@ -528,9 +541,26 @@ export async function submitKyc(params: {
   }
 
   return withTransaction(async (client) => {
+    /*
+     * One identity check for this agent at a time.
+     *
+     * The comment that was here said the numbering was safe because it happens
+     * "in the same transaction that supersedes, so two submissions racing
+     * cannot claim one attempt number". One transaction is not one lock. Under
+     * READ COMMITTED the second submission's UPDATE blocks on the row the
+     * first locked, and when the first commits the predicate is re-evaluated
+     * against a row that is now superseded — so it matches nothing, updates
+     * nothing, and the insert that follows puts a second row with
+     * `superseded_at IS NULL` against one agent. `idx_agent_kyc_current`
+     * refuses it, and the agent is told to supersede the current check before
+     * recording another, which is an instruction about a table.
+     *
+     * Measured both ways in `concurrency/agent-kyc-race.test.ts`.
+     */
+    await advisoryLock(client, LOCK_NAMESPACE.AGENT_KYC, params.agentId);
+
     // Resubmission supersedes rather than overwrites, so a failed attempt stays
-    // in the record (Addendum §28). Numbered in the same transaction that
-    // supersedes, so two submissions racing cannot claim one attempt number.
+    // in the record (Addendum §28).
     await client.query(
       `UPDATE agent_kyc SET superseded_at = now() WHERE agent_id = $1 AND superseded_at IS NULL`,
       [params.agentId],

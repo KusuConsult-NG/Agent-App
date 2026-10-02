@@ -30,7 +30,7 @@
 
 import type { PoolClient } from 'pg';
 import type { Db } from '../db/pool';
-import { query, queryOne, withTransaction } from '../db/pool';
+import { advisoryLock, LOCK_NAMESPACE, query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { recordAudit } from './audit';
 
@@ -98,6 +98,20 @@ export async function createDepartment(
   if (input.headUserId) await assertPortalOfficer(input.headUserId);
 
   return withTransaction(async (client) => {
+    /*
+     * One department against this code at a time.
+     *
+     * The read takes no lock and the department does not exist yet, so two
+     * administrators creating the same code both found nothing and the second
+     * was refused by `departments_code_key` rather than by `DEPARTMENT_EXISTS`,
+     * which names the code back to them.
+     */
+    await advisoryLock(
+      client,
+      LOCK_NAMESPACE.DEPARTMENT_CODE,
+      input.code.trim().toUpperCase(),
+    );
+
     const existing = await queryOne<{ id: string }>(
       client,
       'SELECT id FROM departments WHERE code = $1',
