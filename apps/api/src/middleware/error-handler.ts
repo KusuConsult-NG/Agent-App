@@ -72,10 +72,16 @@ export const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
    * line instead of the one that says what to do about it. The constraint is
    * where the rule actually holds, so the words belong here too.
    *
-   * Every other named constraint in the schema is now classified too, either
-   * with a message below or in `UNIQUE_CONSTRAINT_NOT_SHOWN` with the reason it
-   * has none. This paragraph used to say there were twelve of them. There were
+   * Every other unique index in the schema is now classified too, either with a
+   * message below or in `UNIQUE_CONSTRAINT_NOT_SHOWN` with the reason it has
+   * none. This paragraph used to say there were twelve of them. There were
    * seventy-one.
+   *
+   * And then there were eight more, because the check that counts them
+   * excluded primary keys on a reason that did not hold: not all of them are a
+   * uuid with a random default. Three of the eight are natural keys. Two
+   * figures asserted off an impression in one file, which is why the check now
+   * reads the column type and the default rather than the word "primary".
    *
    * AND A CLAIM FROM THE SAME PARAGRAPH THAT WAS ALSO WRONG.
    *
@@ -187,6 +193,25 @@ export const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
     'That commission has already been recovered. It cannot be recovered twice.',
   receipts_payment_id_key:
     'A receipt has already been issued for this payment. No duplicate has been created.',
+
+  /*
+   * THREE PRIMARY KEYS THAT ARE NATURAL KEYS.
+   *
+   * The check that reads the schema used to exclude primary keys outright, on
+   * the stated grounds that every one is a uuid with a random default so a
+   * violation is a collision in a random number. Eight are not, and three of
+   * those are on columns a person types or chooses — so a violation is
+   * something somebody did, and "that record already exists" is as unhelpful
+   * here as anywhere else.
+   *
+   * Each has a pre-check that answers better: `ROLE_EXISTS` names the role,
+   * `ALREADY_GRANTED` names the role and the permission. These are the
+   * backstops for when two administrators act at the same moment, which is
+   * what the pre-checks cannot see.
+   */
+  roles_pkey: 'A role already uses that name. Role names appear on every officer’s account.',
+  role_permissions_pkey: 'That permission is already granted to this role.',
+  user_territories_pkey: 'That territory is already assigned to this officer.',
 };
 
 /**
@@ -296,7 +321,18 @@ export const UNIQUE_CONSTRAINT_NOT_SHOWN: Record<string, string> = {
   referees_reference_code_key: 'GENERATED.',
   incentive_awards_collection_code_key: 'GENERATED. The code a winner collects against.',
 
+  // ABSORBED — the three primary keys on a name or a key that every writer
+  // upserts on. Each is a single row per subject, kept up to date rather than
+  // inserted again.
+  background_jobs_pkey: 'ABSORBED. The scheduler upserts on the job name.',
+  integration_health_pkey:
+    'ABSORBED. Every call upserts on the integration name — `ON CONFLICT (name) DO UPDATE`, ' +
+    'which is how the counters accumulate.',
+  rate_limit_buckets_pkey: 'ABSORBED. The limiter upserts on the bucket key.',
+
   // INTERNAL — the platform talking to itself.
+  schema_migrations_pkey: 'INTERNAL. A sequence, in the migration runner.',
+  usage_events_pkey: 'INTERNAL. A sequence.',
   audit_logs_sequence_no_key: 'INTERNAL. The audit chain numbers its own entries.',
   schema_migrations_filename_key: 'INTERNAL. The migration runner.',
   sessions_refresh_token_hash_key: 'INTERNAL. A token hash; a clash is a generator fault.',

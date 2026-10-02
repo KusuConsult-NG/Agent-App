@@ -187,12 +187,24 @@ describe('two officers, one staff number', () => {
 });
 
 /**
- * Every unique index the live schema declares, excluding primary keys.
+ * Every unique index the live schema declares that a person can collide with.
  *
- * Primary keys are left out, and it is worth saying why rather than leaving it
- * to be inferred: every one of them is a `uuid` with a `gen_random_uuid()`
- * default, so a violation is a collision in a random number and not something
- * anybody did. A message for it would be a message about an impossibility.
+ * The first version of this excluded primary keys outright, with a reason I
+ * wrote down without counting: "every one of them is a `uuid` with a
+ * `gen_random_uuid()` default, so a violation is a collision in a random number
+ * and not something anybody did". Eight of them are not. Five are upserted or
+ * fed by a sequence, and three are natural keys on columns a person types or
+ * chooses:
+ *
+ *   roles (name)                       — an administrator naming a role
+ *   role_permissions (role, permission)— granting the same permission twice
+ *   user_territories (user_id, territory_id) — assigning a territory twice
+ *
+ * It is the third claim on this branch to be asserted off an impression rather
+ * than counted, after "twelve other named constraints" and "twenty-six
+ * refusals". So the exclusion is narrowed to what it can actually support: a
+ * primary key on ONE column that is a uuid with a random default. Everything
+ * else has to be classified like any other constraint.
  */
 async function liveUniqueIndexes(): Promise<string[]> {
   const rows = await query<{ relname: string }>(
@@ -202,7 +214,25 @@ async function liveUniqueIndexes(): Promise<string[]> {
        JOIN pg_index i ON i.indexrelid = c.oid
        JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE i.indisunique AND n.nspname = 'public'
-        AND NOT i.indisprimary
+        /*
+         * A primary key is excluded only when it is a single uuid column with a
+         * random default — the case where a violation really is a collision in
+         * a random number. A composite key, or one on text, is a natural key
+         * and a violation is something somebody did.
+         */
+        AND NOT (
+          i.indisprimary
+          AND array_length(i.indkey::int2[], 1) = 1
+          AND EXISTS (
+            SELECT 1
+              FROM pg_attribute a
+              LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+             WHERE a.attrelid = i.indrelid
+               AND a.attnum = i.indkey[0]
+               AND format_type(a.atttypid, NULL) = 'uuid'
+               AND pg_get_expr(d.adbin, d.adrelid) LIKE 'gen_random_uuid()%'
+          )
+        )
       ORDER BY 1`,
   );
   return rows.map((row) => row.relname);
