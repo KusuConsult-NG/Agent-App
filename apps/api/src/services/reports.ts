@@ -801,6 +801,46 @@ export async function rateChangeHistory(db: Db, params: { revenueItemId?: string
 }
 
 /**
+ * Two caps, named rather than written into the SQL twice.
+ *
+ * Both answers are read from a screen and both were capped silently: 500
+ * entries of who has touched a taxpayer's record, 1000 receipts for a revenue
+ * item. The figure has to appear in the query, in the slice and in what the
+ * caller is told, and three copies of a number are how one of them drifts.
+ */
+const ACCESS_LOG_CAP = 500;
+const RECEIPTS_BY_ITEM_CAP = 1000;
+
+/*
+ * Both are a default argument rather than a constant read inside the query,
+ * and that is for the tests rather than for the callers — no route passes one.
+ *
+ * Reaching five hundred rows to prove that the five-hundred-and-first is
+ * reported would mean writing five hundred rows, which is slow and proves the
+ * fixture. Asserting only that a short answer reports `truncated: false` proves
+ * less than it looks: a mutation that makes `truncated` always false passes it,
+ * which is exactly what the mutation check found. Driving the cap down to two
+ * runs the same arithmetic on the same path and kills that mutation.
+ */
+
+/**
+ * An answer, and whether it is the whole answer.
+ *
+ * The queries read one row past the cap and never return it, which answers
+ * "was anything dropped" exactly. A second `count(*)` would have to repeat
+ * every filter to be right, and the audit queries have scope predicates that
+ * are easy to repeat and easy to repeat wrongly.
+ *
+ * The shape matches `deliver`'s JSON envelope, because an officer reading two
+ * capped answers on one screen should not have to learn two shapes for the same
+ * fact.
+ */
+function capped<T>(rows: T[], cap: number): { rows: T[]; truncated: boolean; cap: number | null } {
+  const truncated = rows.length > cap;
+  return { rows: truncated ? rows.slice(0, cap) : rows, truncated, cap: truncated ? cap : null };
+}
+
+/**
  * Who has looked at one taxpayer's record, and who has changed it.
  *
  * This is the endpoint behind the oversight screen's "Who has looked at one
@@ -820,8 +860,8 @@ export async function rateChangeHistory(db: Db, params: { revenueItemId?: string
  * The `kind` column is first so it reads first — the oversight table takes its
  * columns from the keys of the first row, in order.
  */
-export async function taxpayerAccessLog(db: Db, taxpayerId: string) {
-  return query(
+export async function taxpayerAccessLog(db: Db, taxpayerId: string, cap = ACCESS_LOG_CAP) {
+  const rows = await query(
     db,
     /*
      * Two things about the SQL.
@@ -853,18 +893,20 @@ export async function taxpayerAccessLog(db: Db, taxpayerId: string) {
             u.full_name, u.role, a.ip_address, a.device_id
        FROM audit_logs a LEFT JOIN users u ON u.id = a.actor_id
       WHERE a.entity_type = 'taxpayer' AND a.entity_id = $1::text
-      ORDER BY created_at DESC LIMIT 500`,
-    [taxpayerId],
+      ORDER BY created_at DESC LIMIT $2`,
+    [taxpayerId, cap + 1],
   );
+  return capped(rows, cap);
 }
 
 export async function receiptsByRevenueItem(
   db: Db,
   params: { revenueItemCode: string },
   scope: ReportScope = { kind: 'STATEWIDE' },
+  cap = RECEIPTS_BY_ITEM_CAP,
 ) {
   const { statewide, territoryIds } = scopeParams(scope);
-  return query(
+  const rows = await query(
     db,
     `SELECT r.receipt_number, r.amount_kobo, r.issued_at, r.status,
             t.transaction_reference, l.name AS lga, ag.agent_code
@@ -875,9 +917,10 @@ export async function receiptsByRevenueItem(
        LEFT JOIN agents ag ON ag.id = t.agent_id
       WHERE ri.code = $1
         AND ${transactionScopeSql('t', 2, 3)}
-      ORDER BY r.issued_at DESC LIMIT 1000`,
-    [params.revenueItemCode, statewide, territoryIds],
+      ORDER BY r.issued_at DESC LIMIT $4`,
+    [params.revenueItemCode, statewide, territoryIds, cap + 1],
   );
+  return capped(rows, cap);
 }
 
 /**

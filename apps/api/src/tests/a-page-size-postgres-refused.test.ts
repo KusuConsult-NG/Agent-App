@@ -100,7 +100,16 @@ describe('a page size that is not a page size', () => {
       // above and take three working screens away.
       const response = await get(`${path}?limit=5`, { token });
       assert.equal(response.status, 200, JSON.stringify(response.body));
-      assert.ok(Array.isArray(response.body), 'and it is still a list');
+      /*
+       * Rows, wherever they are.
+       *
+       * Two of these three answer `{ rows, truncated, cap }` now, because a
+       * list that stopped at its cap had no way to say so and the export beside
+       * it did. This asks the narrower thing it always meant: that a valid
+       * limit still produces rows rather than a refusal.
+       */
+      const rows = Array.isArray(response.body) ? response.body : response.body.rows;
+      assert.ok(Array.isArray(rows), `and it still answers rows: ${JSON.stringify(response.body).slice(0, 160)}`);
     });
   }
 });

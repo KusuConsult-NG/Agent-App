@@ -198,13 +198,15 @@ describe('what the auditor is shown', () => {
     );
     assert.equal(response.status, 200, JSON.stringify(response.body));
 
-    const kinds = (response.body as { kind: string; action: string }[]).map((row) => row.kind);
+    const kinds = (response.body.rows as { kind: string; action: string }[]).map(
+      (row) => row.kind,
+    );
     assert.ok(kinds.includes('READ'), 'the look is in the answer');
     assert.ok(kinds.includes('CHANGE'), 'and so is the registration that created the record');
 
-    const read = (response.body as { kind: string; action: string; full_name: string }[]).find(
-      (row) => row.kind === 'READ',
-    );
+    const read = (
+      response.body.rows as { kind: string; action: string; full_name: string }[]
+    ).find((row) => row.kind === 'READ');
     assert.equal(read!.action, 'TAXPAYER_RECORD', 'the row says what was shown');
     assert.equal(read!.full_name, OFFICER.fullName, 'and who was shown it');
   });
@@ -228,9 +230,11 @@ describe('what the auditor is shown', () => {
       { token: auditorToken },
     );
     assert.equal(
-      (response.body as { kind: string }[]).filter((row) => row.kind === 'READ').length,
+      (response.body.rows as { kind: string }[]).filter((row) => row.kind === 'READ').length,
       2,
+      'and the answer says it is not capped, so two is two and not two of many',
     );
+    assert.equal(response.body.truncated, false);
   });
 });
 

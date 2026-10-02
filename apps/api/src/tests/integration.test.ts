@@ -1277,11 +1277,14 @@ describe('Access control and audit integrity (PRD §36, §45, §67)', () => {
       { token: ctx.auditorToken },
     );
     assert.equal(response.status, 200);
-    assert.ok(response.body.length >= 1);
+    // `{ rows, truncated, cap }`: this answer is capped at 500 and used to be a
+    // bare array, so 500 was indistinguishable from all of them.
+    assert.ok(response.body.rows.length >= 1);
+    assert.equal(response.body.truncated, false);
     // Every row says whether it is a look or a change. Without this the two
     // halves are indistinguishable once merged, which is the defect the union
     // would otherwise have introduced while fixing another.
-    for (const row of response.body) {
+    for (const row of response.body.rows) {
       assert.ok(
         row.kind === 'READ' || row.kind === 'CHANGE',
         `a row of neither kind: ${JSON.stringify(row)}`,

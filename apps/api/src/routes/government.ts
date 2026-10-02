@@ -2862,12 +2862,21 @@ async function deliver(
   const filename = truncatedAt ? `${options.filename}-PARTIAL` : options.filename;
   if (format === 'json') {
     /*
-     * The screen, which is not a file. It is handed a bare array, and putting
-     * the flag in it would change the shape the two screens read. They still
-     * draw a capped list without saying so; that is a separate gap on a
-     * separate surface and is not closed here.
+     * The screen, which is not a file — and which used to be handed a bare
+     * array.
+     *
+     * The comment here said so, and said the shape could not change because
+     * two screens read it: "They still draw a capped list without saying so;
+     * that is a separate gap on a separate surface and is not closed here."
+     * The cap and the disclosure were computed one line above and thrown away
+     * for the one caller that is a person looking at a screen.
+     *
+     * It is an envelope now. Both screens normalise, because an endpoint that
+     * answers an array to one format and an object to another is worse than
+     * either — and `rows` first keeps the common case a one-word change at the
+     * call site.
      */
-    res.json(rows);
+    res.json({ rows, truncated: truncatedAt !== null, cap: truncatedAt });
     return;
   }
 

@@ -425,6 +425,24 @@ function isTranslatedState(column: string, value: unknown): value is string {
   return typeof value === 'string' && value in ENUM_LABELS;
 }
 
+/**
+ * One of the five audit answers, however the endpoint shapes it.
+ *
+ * Two of them are capped — 500 entries of who has touched a taxpayer's record,
+ * 1000 receipts for one revenue item — and both used to answer a bare array, so
+ * an auditor asking "who has looked at this record" was shown 500 rows and
+ * nothing to say there were four thousand. The other three are uncapped and
+ * answer an array still, which is why this takes either shape rather than
+ * assuming the new one.
+ */
+async function auditAnswer(path: string): Promise<{ rows: any[]; cap: number | null }> {
+  const answer = await api.get<any[] | { rows: any[]; truncated: boolean; cap: number | null }>(
+    path,
+  );
+  if (Array.isArray(answer)) return { rows: answer, cap: null };
+  return { rows: answer.rows, cap: answer.truncated ? (answer.cap ?? null) : null };
+}
+
 const AUDIT_QUERIES: AuditQuery[] = [
   {
     key: 'reversed',
@@ -749,11 +767,15 @@ function chainAnswer(answer: ChainAnswer, t: TranslationDictionary): string {
 export function AuditScreen() {
   const { t } = usePortalI18n();
   const [entries, setEntries] = useState<any[] | null>(null);
+  /** The cap the entry list hit, or null when it holds everything asked for. */
+  const [entriesCap, setEntriesCap] = useState<number | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [verification, setVerification] = useState<ChainAnswer | null>(null);
   const [queryResult, setQueryResult] = useState<{
     label: keyof TranslationDictionary;
     rows: any[];
+    /** The cap this answer hit. Two of the five can be capped; three cannot. */
+    cap: number | null;
   } | null>(null);
   const [pending, setPending] = useState<AuditQuery | null>(null);
   /*
@@ -785,9 +807,23 @@ export function AuditScreen() {
     const params = auditQuery(150);
 
     setEntries(null);
+    setEntriesCap(null);
     api
-      .get<any[]>(`/government/audit?${params.toString()}`)
-      .then(setEntries)
+      .get<any[] | { rows: any[]; truncated: boolean; cap: number | null }>(
+        `/government/audit?${params.toString()}`,
+      )
+      /*
+       * The same envelope the transactions list reads, and for the same reason:
+       * the endpoint had always known whether 150 entries were all of them and
+       * told only the export. An auditor reading a log whose head is missing,
+       * and not knowing it is missing, is reading a different log.
+       */
+      .then((answer) => {
+        setEntries(Array.isArray(answer) ? answer : answer.rows);
+        setEntriesCap(
+          Array.isArray(answer) ? null : answer.truncated ? (answer.cap ?? null) : null,
+        );
+      })
       .catch((caught) => {
         setError(asApiError(caught));
       });
@@ -868,8 +904,7 @@ export function AuditScreen() {
                 }
                 setPending(null);
                 try {
-                  const rows = await api.get<any[]>(query.path);
-                  setQueryResult({ label: query.label, rows });
+                  setQueryResult({ label: query.label, ...(await auditAnswer(query.path)) });
                 } catch (caught) {
                   setError(asApiError(caught));
                 }
@@ -885,8 +920,8 @@ export function AuditScreen() {
         <AuditQueryParameters
           query={pending}
           onCancel={() => setPending(null)}
-          onRan={(rows) => {
-            setQueryResult({ label: pending.label, rows });
+          onRan={(answer) => {
+            setQueryResult({ label: pending.label, ...answer });
             setPending(null);
           }}
           onError={setError}
@@ -896,6 +931,11 @@ export function AuditScreen() {
       {queryResult && (
         <div className="card card--flush">
           <div className="card__pad">
+            {queryResult.cap !== null && (
+              <Alert kind="warning">
+                {t.ofcAnswerStoppedAtCap.replace('{{n}}', String(queryResult.cap))}
+              </Alert>
+            )}
             <div className="card__header">
               <h2 className="card__title">{t[queryResult.label]}</h2>
               <button type="button" className="small secondary" onClick={() => setQueryResult(null)}>{t.ofcKycClose}</button>
@@ -982,6 +1022,14 @@ export function AuditScreen() {
           </div>
         </div>
 
+        {entriesCap !== null && (
+          <div className="card__pad" style={{ paddingTop: 0 }}>
+            <Alert kind="warning">
+              {t.ofcListStoppedAtCap.replace('{{n}}', String(entriesCap))}
+            </Alert>
+          </div>
+        )}
+
         {!entries ? (
           <div style={{ padding: 18 }}>
             <Loading rows={6} />
@@ -1061,7 +1109,7 @@ function AuditQueryParameters({
 }: {
   query: AuditQuery;
   onCancel: () => void;
-  onRan: (rows: any[]) => void;
+  onRan: (answer: { rows: any[]; cap: number | null }) => void;
   onError: (error: ApiError) => void;
 }) {
   const { lang, t } = usePortalI18n();
@@ -1167,7 +1215,7 @@ function AuditQueryParameters({
         params.set('from', new Date(`${range.from}T00:00:00`).toISOString());
         params.set('to', new Date(`${range.to}T23:59:59`).toISOString());
       }
-      onRan(await api.get<any[]>(`${query.path}?${params.toString()}`));
+      onRan(await auditAnswer(`${query.path}?${params.toString()}`));
     } catch (caught) {
       onError(asApiError(caught));
     } finally {

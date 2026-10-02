@@ -501,7 +501,7 @@ describe('Government retains the full view', () => {
 
     const transactions = await get('/government/transactions', { token: ctx.adminToken });
     assert.ok(
-      (transactions.body as { transaction_reference: string }[]).some(
+      (transactions.body.rows as { transaction_reference: string }[]).some(
         (row) => row.transaction_reference === ctx.otherTransactionRef,
       ),
     );

@@ -309,7 +309,16 @@ describe('an export is a different act from a read', () => {
   it('serves the same rows as JSON, CSV, a workbook and a PDF', async () => {
     const asJson = await get('/government/transactions?limit=10', auth('auditor'));
     assert.equal(asJson.status, 200);
-    assert.ok(Array.isArray(asJson.body));
+    /*
+     * An envelope, not a bare array.
+     *
+     * The JSON answer carries whether the list is all of it, which is the one
+     * thing the file beside it has said in its filename since the exports were
+     * fixed and the screen did not say at all.
+     */
+    assert.ok(Array.isArray(asJson.body.rows), JSON.stringify(asJson.body).slice(0, 200));
+    assert.equal(asJson.body.truncated, false, 'ten rows asked for, fewer than ten exist');
+    assert.equal(asJson.body.cap, null, 'and so no cap was hit');
 
     const asCsv = await get('/government/transactions?limit=10&format=csv', auth('auditor'));
     assert.equal(asCsv.status, 200);
