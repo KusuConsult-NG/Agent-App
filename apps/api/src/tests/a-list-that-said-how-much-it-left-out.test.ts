@@ -13,11 +13,11 @@
  *
  * So the export beside the transactions list has said it was partial since
  * `f24a1f6`, and the list above it said nothing — on the same query, in the
- * same card, for the same officer. And two of the five audit answers are
+ * same card, for the same officer. And three of the six audit answers are
  * capped in their own SQL rather than through `deliver`: 500 entries of who has
- * touched a taxpayer's record, 1000 receipts for one revenue item. An auditor
- * asking who had looked at a record was shown 500 rows and nothing to say there
- * were four thousand.
+ * touched a taxpayer's record, 500 searches of the register, 1000 receipts for
+ * one revenue item. An auditor asking who had looked at a record was shown 500
+ * rows and nothing to say there were four thousand.
  *
  * WHAT IS ASSERTED, AND WHY THE CAP IS DRIVEN DOWN
  *

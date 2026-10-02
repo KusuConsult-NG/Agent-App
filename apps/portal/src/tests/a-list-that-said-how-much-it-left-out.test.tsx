@@ -146,13 +146,14 @@ describe('a transactions list that stopped at its cap', () => {
 });
 
 /*
- * The same fact on the audit screen, which has two capped lists of its own.
+ * The same fact on the audit screen, which has three capped lists of its own.
  *
  * The entry list is capped by `limit` through `deliver`, like the transactions
- * list. The five standard questions are different: two of them are capped in
- * their own SQL — 500 entries of who has touched a taxpayer's record, 1000
- * receipts for one revenue item — and three are not capped at all, which is why
- * the screen takes either shape rather than assuming the new one.
+ * list. The six standard questions are different: three of them are capped in
+ * their own SQL — 500 entries of who has touched a taxpayer's record, 500
+ * searches of the register, 1000 receipts for one revenue item — and three are
+ * not capped at all, which is why the screen takes either shape rather than
+ * assuming the new one.
  */
 describe('the audit screen', () => {
   const ENTRY = {

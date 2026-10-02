@@ -426,14 +426,19 @@ function isTranslatedState(column: string, value: unknown): value is string {
 }
 
 /**
- * One of the five audit answers, however the endpoint shapes it.
+ * One of the six audit answers, however the endpoint shapes it.
  *
- * Two of them are capped — 500 entries of who has touched a taxpayer's record,
- * 1000 receipts for one revenue item — and both used to answer a bare array, so
- * an auditor asking "who has looked at this record" was shown 500 rows and
- * nothing to say there were four thousand. The other three are uncapped and
- * answer an array still, which is why this takes either shape rather than
- * assuming the new one.
+ * Three of them are capped — 500 entries of who has touched a taxpayer's
+ * record, 500 searches of the register, 1000 receipts for one revenue item —
+ * and they used to answer a bare array, so an auditor asking "who has looked
+ * at this record" was shown 500 rows and nothing to say there were four
+ * thousand. The other three are uncapped and answer an array still, which is
+ * why this takes either shape rather than assuming the new one.
+ *
+ * The figures are checked rather than written down: `a-figure-nobody-recounted`
+ * reads `AUDIT_QUERIES` and the caps in `reports.ts` and fails if this sentence
+ * disagrees with them. It said five and two until the register-search answer
+ * was added beside it and this comment was not.
  */
 async function auditAnswer(path: string): Promise<{ rows: any[]; cap: number | null }> {
   const answer = await api.get<any[] | { rows: any[]; truncated: boolean; cap: number | null }>(
