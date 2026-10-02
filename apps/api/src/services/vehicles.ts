@@ -311,6 +311,42 @@ function captureMessage(outcome: VehicleLookupOutcome): string {
  * machinery as a market levy.
  */
 
+/**
+ * The period a renewal of N months grants, counted from wherever cover now ends.
+ *
+ * An early renewal carries the unexpired time forward: a motorist renewing a
+ * month before their papers run out would otherwise pay for twelve months and
+ * receive eleven, and it compounds over a vehicle's life. A vehicle that has
+ * lapsed, or that this platform has never renewed, starts today — back-dating
+ * cover across a period the vehicle was driving unlicensed is a worse answer.
+ *
+ * ONE PLACE, because it is applied twice and the two used to disagree. The
+ * dates worked out when a renewal is RAISED are an estimate: they are computed
+ * from the vehicle's expiry at that moment, and nothing refuses a second
+ * renewal raised beside the first — reasonably, since a motorist may want to
+ * change twelve months to twenty-four. Completion used to write the stored
+ * estimate straight onto the vehicle, so two twelve-month renewals raised
+ * together and both paid granted twelve months of cover for twenty-four months
+ * of money, and a six-month one completed after a twelve-month one moved the
+ * expiry BACKWARDS.
+ *
+ * So the grant recomputes from the live expiry, under a lock, and the estimate
+ * stays what it is. Having one function say what a renewal of N months means
+ * is what stops the two answers drifting again.
+ */
+export function renewalPeriod(
+  currentExpiry: Date | null,
+  months: number,
+  now: Date = new Date(),
+): { periodStart: Date; expiryDate: Date } {
+  const unexpired =
+    currentExpiry && currentExpiry.getTime() > now.getTime() ? new Date(currentExpiry) : null;
+  const periodStart = unexpired ?? now;
+  const expiryDate = new Date(periodStart);
+  expiryDate.setMonth(expiryDate.getMonth() + months);
+  return { periodStart, expiryDate };
+}
+
 export async function initiateRenewal(params: {
   vehicleId: string;
   revenueItemId: string;
@@ -400,14 +436,10 @@ export async function initiateRenewal(params: {
    * across a period the vehicle was driving unlicensed would be a worse answer
    * than starting now.
    */
-  const now = new Date();
-  const unexpired =
-    vehicle.current_expiry_date && vehicle.current_expiry_date.getTime() > now.getTime()
-      ? new Date(vehicle.current_expiry_date)
-      : null;
-  const periodStart = unexpired ?? now;
-  const expiryDate = new Date(periodStart);
-  expiryDate.setMonth(expiryDate.getMonth() + params.renewalPeriodMonths);
+  const { periodStart, expiryDate } = renewalPeriod(
+    vehicle.current_expiry_date,
+    params.renewalPeriodMonths,
+  );
 
   /*
    * Worked out before the assessment, not after, so both carry the same dates.
@@ -566,6 +598,44 @@ export async function completeRenewal(params: {
       );
     }
 
+    /*
+     * THE PERIOD IS DECIDED HERE, not when the renewal was raised.
+     *
+     * The dates on the renewal row were computed from the vehicle's expiry at
+     * the moment it was raised, and nothing refuses a second renewal raised
+     * beside the first. Writing the stored date onto the vehicle therefore
+     * granted whichever estimate landed last: two twelve-month renewals both
+     * paid gave twelve months of cover for twenty-four months of money, and a
+     * six-month renewal completed after a twelve-month one moved the expiry
+     * backwards. Both are in `vehicle-renewal.test.ts`, with the dates.
+     *
+     * `FOR UPDATE` on the vehicle, because this reads its expiry in order to
+     * change it, and two renewals settling at once would otherwise read the
+     * same base again — the same fault one level down.
+     */
+    const live = await queryOne<{ current_expiry_date: Date | null }>(
+      client,
+      'SELECT current_expiry_date FROM vehicles WHERE id = $1 FOR UPDATE',
+      [renewal.vehicle_id],
+    );
+    const granted = renewalPeriod(
+      live?.current_expiry_date ?? null,
+      renewal.renewal_period_months,
+    );
+
+    /*
+     * And the row is corrected to what was granted.
+     *
+     * Otherwise the certificate prints one period and the renewal record keeps
+     * another, which is the disagreement that `expires_at` versus `expiry_date`
+     * already caused once on this table — "neither side knew there was a
+     * disagreement, because neither knew the other's convention".
+     */
+    await client.query(
+      'UPDATE vehicle_renewals SET period_start = $2, expiry_date = $3 WHERE id = $1',
+      [renewal.id, granted.periodStart, granted.expiryDate],
+    );
+
     const verificationCode = generateVerificationCode();
     const issuedAt = new Date();
 
@@ -580,8 +650,8 @@ export async function completeRenewal(params: {
       vehicleType: renewal.vehicle_type,
       colour: renewal.colour,
       renewalPeriodMonths: renewal.renewal_period_months,
-      periodStart: renewal.period_start,
-      expiryDate: renewal.expiry_date,
+      periodStart: granted.periodStart,
+      expiryDate: granted.expiryDate,
       issuedAt,
       transactionReference: renewal.transaction_reference ?? '',
       verificationCode,
@@ -605,7 +675,7 @@ export async function completeRenewal(params: {
        * side knew there was a disagreement, because neither knew the other's
        * convention.
        */
-      expiresAt: endOfDay(renewal.expiry_date),
+      expiresAt: endOfDay(granted.expiryDate),
     });
 
     await client.query(
@@ -617,7 +687,7 @@ export async function completeRenewal(params: {
 
     await client.query('UPDATE vehicles SET current_expiry_date = $2 WHERE id = $1', [
       renewal.vehicle_id,
-      renewal.expiry_date,
+      granted.expiryDate,
     ]);
 
     await recordAudit(client, {
@@ -628,7 +698,7 @@ export async function completeRenewal(params: {
       entityId: renewal.id,
       newValue: {
         documentNumber: document.documentNumber,
-        expiryDate: renewal.expiry_date.toISOString().slice(0, 10),
+        expiryDate: granted.expiryDate.toISOString().slice(0, 10),
         registrationNumber: renewal.registration_number,
       },
     });
@@ -639,7 +709,10 @@ export async function completeRenewal(params: {
         taxpayerId: renewal.taxpayer_id,
         variables: {
           registration: renewal.registration_number,
-          expiry: renewal.expiry_date.toISOString().slice(0, 10),
+          // The granted date, not the estimate the renewal was raised with.
+          // A motorist told one date by text and shown another on the
+          // certificate has no way to know which is theirs.
+          expiry: granted.expiryDate.toISOString().slice(0, 10),
         },
         entityType: 'vehicle_renewal',
         entityId: renewal.id,
@@ -650,7 +723,7 @@ export async function completeRenewal(params: {
       documentId: document.documentId,
       documentNumber: document.documentNumber,
       verificationCode: document.verificationCode,
-      expiryDate: renewal.expiry_date,
+      expiryDate: granted.expiryDate,
       // Carried out of the transaction so the authority can be told once the
       // renewal is durably recorded, rather than while its rows are locked.
       announce: {

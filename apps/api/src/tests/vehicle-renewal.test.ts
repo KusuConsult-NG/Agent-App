@@ -158,6 +158,204 @@ function renewalRow(renewalId: string) {
 }
 
 describe('A renewal confirmed by webhook is still issued', () => {
+  /*
+   * TWELVE MONTHS PAID TWICE, TWELVE MONTHS RECEIVED.
+   *
+   * `initiateRenewal` works out the new expiry when the renewal is RAISED, from
+   * the vehicle's expiry at that moment, and stores it on the renewal row.
+   * Completion then writes that stored date onto the vehicle. So two renewals
+   * raised before either is paid are both computed from the same base, and both
+   * write the same expiry: the motorist pays for twenty-four months of cover
+   * and is given twelve.
+   *
+   * No concurrency is needed. An agent whose first payment failed, or a
+   * motorist who changes their mind about the period, or two agents at one
+   * motor park, all produce two PENDING_PAYMENT renewals — and nothing refuses
+   * the second, which is reasonable: a motorist may well want to change twelve
+   * months to twenty-four.
+   *
+   * THE SAME MECHANISM MOVES COVER BACKWARDS. Complete a twenty-four month
+   * renewal and then a twelve month one raised beside it, and the vehicle's
+   * expiry goes from +24 to +12. The second completion does not add less; it
+   * overwrites.
+   *
+   * The carry-forward this sits on was itself a fix for the same class of
+   * fault, and its comment says so: "A motorist renewing a month before their
+   * papers ran out lost that month: twelve months paid, eleven received." It
+   * corrected the one-renewal case and left this one.
+   */
+  /**
+   * Take a renewal's charge all the way to settled money.
+   *
+   * The fixture above only initiates the payment; a renewal is issued when the
+   * State holds the money, which is the gateway confirming and a settlement
+   * covering it. Both halves, because "nothing is granted on the gateway word
+   * alone" is a rule the test beside this one pins.
+   */
+  async function payAndSettle(
+    agent: { token: string },
+    device: string,
+    transactionId: string,
+    key: string,
+  ) {
+    const initiated = await post(
+      '/payments/initiate',
+      { transactionId },
+      { token: agent.token, deviceId: device, idempotencyKey: `pay-${key}` },
+    );
+    assert.equal(initiated.status, 201, JSON.stringify(initiated.body));
+    const simulated = await post(
+      '/payments/simulate',
+      { gatewayReference: initiated.body.gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
+      { token: agent.token, deviceId: device },
+    );
+    assert.equal(simulated.status, 200, JSON.stringify(simulated.body));
+    await settleTransaction(transactionId);
+  }
+
+  /** The vehicle and its owner, by plate — the renew response carries neither. */
+  async function vehicleByPlate(plate: string) {
+    const row = await queryOne<{ id: string; taxpayer_id: string }>(
+      pool,
+      'SELECT id, taxpayer_id FROM vehicles WHERE registration_number = $1',
+      [plate],
+    );
+    assert.ok(row, `no vehicle ${plate}`);
+    return row!;
+  }
+
+  async function expiryOf(plate: string): Promise<string | null> {
+    const row = await queryOne<{ current_expiry_date: Date | null }>(
+      pool,
+      'SELECT current_expiry_date FROM vehicles WHERE registration_number = $1',
+      [plate],
+    );
+    return row?.current_expiry_date?.toISOString().slice(0, 10) ?? null;
+  }
+
+  /** Months between two ISO dates, to the nearest whole month. */
+  function monthsBetween(from: string, to: string): number {
+    const a = new Date(`${from}T00:00:00Z`);
+    const b = new Date(`${to}T00:00:00Z`);
+    return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24 * 30.4375));
+  }
+
+  it('gives twenty-four months of cover for two twelve-month renewals', async () => {
+    const plate = 'JOS900TW';
+    const first = await renewalAwaitingPayment(plate, '+2347044555900');
+    const today = new Date().toISOString().slice(0, 10);
+
+    // A second renewal raised while the first is still unpaid. Nothing refuses
+    // it, and the vehicle's expiry has not moved, so it is computed from the
+    // same base.
+    const found = await vehicleByPlate(plate);
+    const second = await post(
+      `/vehicles/${found.id}/renew`,
+      {
+        revenueItemId: await revenueItemByCode('VEH-RENEW-PRIVATE'),
+        renewalPeriodMonths: 12,
+        taxpayerId: found.taxpayer_id,
+      },
+      { token: first.agent.token, deviceId: first.device, idempotencyKey: 'rnw-second-tw' },
+    );
+    assert.equal(second.status, 201, JSON.stringify(second.body));
+
+    await payAndSettle(first.agent, first.device, first.renewal.transactionId, 'tw-1');
+    await payAndSettle(first.agent, first.device, second.body.transactionId, 'tw-2');
+
+    assert.equal((await renewalRow(first.renewal.renewalId))?.status, 'COMPLETED');
+    assert.equal((await renewalRow(second.body.renewalId))?.status, 'COMPLETED');
+
+    const expiry = await expiryOf(plate);
+    assert.ok(expiry, 'the vehicle has no expiry at all');
+    assert.equal(
+      monthsBetween(today, expiry!),
+      24,
+      `two twelve-month renewals were paid for and the vehicle expires ${expiry}, which is ` +
+        'twelve months of cover for twenty-four months of money',
+    );
+  });
+
+  it('tells the motorist the date on their certificate, not the estimate', async () => {
+    /*
+     * The renewal row, the certificate, the vehicle and the text message all
+     * have to say one date. The notification used to carry the estimate the
+     * renewal was raised with, so a motorist whose granted period differed —
+     * which is every motorist with a second renewal in flight — was told one
+     * date by text and shown another on the paper they hand to a policeman.
+     */
+    const plate = 'JOS902SM';
+    const first = await renewalAwaitingPayment(plate, '+2347044555902');
+    const found = await vehicleByPlate(plate);
+    const second = await post(
+      `/vehicles/${found.id}/renew`,
+      {
+        revenueItemId: await revenueItemByCode('VEH-RENEW-PRIVATE'),
+        renewalPeriodMonths: 12,
+        taxpayerId: found.taxpayer_id,
+      },
+      { token: first.agent.token, deviceId: first.device, idempotencyKey: 'rnw-second-sm' },
+    );
+    assert.equal(second.status, 201, JSON.stringify(second.body));
+
+    await payAndSettle(first.agent, first.device, first.renewal.transactionId, 'sm-1');
+    await payAndSettle(first.agent, first.device, second.body.transactionId, 'sm-2');
+
+    const expiry = await expiryOf(plate);
+    const told = await queryOne<{ message: string }>(
+      pool,
+      `SELECT message FROM notifications
+        WHERE entity_id = $1 AND event = 'VEHICLE_RENEWAL_COMPLETED' LIMIT 1`,
+      [second.body.renewalId],
+    );
+    assert.ok(told, 'the motorist was not told at all');
+    assert.ok(
+      told!.message.includes(expiry!),
+      `the text message and the vehicle disagree about when the cover ends: the vehicle ` +
+        `expires ${expiry} and the motorist was told "${told!.message}"`,
+    );
+
+    // And the renewal row carries what was granted, so the record and the
+    // certificate cannot drift either.
+    const row = await queryOne<{ expiry_date: Date }>(
+      pool,
+      'SELECT expiry_date FROM vehicle_renewals WHERE id = $1',
+      [second.body.renewalId],
+    );
+    assert.equal(row!.expiry_date.toISOString().slice(0, 10), expiry);
+  });
+
+  it('never moves a vehicle’s cover backwards', async () => {
+    const plate = 'JOS901BK';
+    const long = await renewalAwaitingPayment(plate, '+2347044555901');
+    const today = new Date().toISOString().slice(0, 10);
+
+    const found = await vehicleByPlate(plate);
+    const short = await post(
+      `/vehicles/${found.id}/renew`,
+      {
+        revenueItemId: await revenueItemByCode('VEH-RENEW-PRIVATE'),
+        renewalPeriodMonths: 6,
+        taxpayerId: found.taxpayer_id,
+      },
+      { token: long.agent.token, deviceId: long.device, idempotencyKey: 'rnw-second-bk' },
+    );
+    assert.equal(short.status, 201, JSON.stringify(short.body));
+
+    // The twelve-month one lands first, then the six-month one.
+    await payAndSettle(long.agent, long.device, long.renewal.transactionId, 'bk-1');
+    const afterLong = await expiryOf(plate);
+    await payAndSettle(long.agent, long.device, short.body.transactionId, 'bk-2');
+    const afterShort = await expiryOf(plate);
+
+    assert.ok(
+      afterShort! >= afterLong!,
+      `cover went backwards: ${afterLong} became ${afterShort} when a shorter renewal ` +
+        'raised beside the first one was completed after it',
+    );
+    assert.equal(monthsBetween(today, afterShort!), 18, `expires ${afterShort}`);
+  });
+
   it('issues the document and notifies the authority without any client poll', async () => {
     const { agent, device, renewal, gatewayReference } = await renewalAwaitingPayment();
 
