@@ -108,3 +108,63 @@ export function recordTaxpayerAccess(params: {
     },
   );
 }
+
+/**
+ * Which fields a search used, and what was typed into them.
+ *
+ * Only the fields that were actually sent, so a reviewer reading
+ * `{"q": "musa"}` knows the officer typed a name and nothing else. `limit` and
+ * the scope are left out: they are how much and where the platform would
+ * answer, not what was asked for.
+ */
+export type SearchFilters = Record<string, string | number | boolean>;
+
+/**
+ * Record that somebody searched the register.
+ *
+ * One row per search, not per result. The commit that added
+ * `taxpayer_record_access_logs` left the search out on the grounds that a row
+ * per match would put one officer's typo on twenty citizens' access logs,
+ * which is still true — and was only half the argument, because the search
+ * discloses more than the record read that was logged: per match it answers
+ * TIN, name, business name, phone, email, address, community, LGA and ward.
+ *
+ * Best-effort at `error` level, like the record log. A search that could not be
+ * logged still answers, because refusing to let an officer look somebody up
+ * because a log is down helps nobody — but a missing row here is not
+ * recoverable later and not detectable from anywhere else.
+ */
+export function recordTaxpayerSearch(params: {
+  searchedBy: string | null;
+  actorRole: string | null;
+  filters: SearchFilters;
+  matched: number;
+  ipAddress?: string | null;
+  deviceId?: string | null;
+  requestId?: string | null;
+}): Promise<void> {
+  return bestEffort(
+    'taxpayer_search.record',
+    pool.query(
+      `INSERT INTO taxpayer_search_logs
+         (searched_by, actor_role, filters, matched, ip_address, device_id)
+       VALUES ($1, $2, $3::jsonb, $4, $5, $6)`,
+      [
+        params.searchedBy,
+        params.actorRole,
+        JSON.stringify(params.filters),
+        params.matched,
+        params.ipAddress ?? null,
+        params.deviceId ?? null,
+      ],
+    ),
+    {
+      level: 'error',
+      detail: {
+        matched: params.matched,
+        fields: Object.keys(params.filters).join(','),
+        requestId: params.requestId,
+      },
+    },
+  );
+}

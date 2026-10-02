@@ -131,7 +131,7 @@ The reasons are not interchangeable, which is why they are written out per row r
 | `dashboard:executive` | View | revenue_officer, finance_officer, admin | `GET /government/dashboard`<br>`GET /government/revenue/by-category` |
 | `fraud:read` | View | supervisor, revenue_officer, finance_officer, auditor, admin | `GET /government/leakage`<br>`GET /government/fraud/flags`<br>decided in `services/cases.ts`<br>decided in `services/investigation.ts` |
 | `fraud:manage` | Edit | revenue_officer, admin | `POST /agents/referees/flags/:id/review`<br>`POST /government/fraud/flags/:id/review`<br>`POST /government/fraud/sweep` |
-| `audit:read` | View | revenue_officer, finance_officer, auditor, admin | `GET /agents/kyc/documents/:id/access`<br>`GET /government/workers`<br>`GET /government/intelligence/taxpayers/:id/access-log`<br>`GET /government/reconciliation/awaiting-settlement`<br>…and 14 more |
+| `audit:read` | View | revenue_officer, finance_officer, auditor, admin | `GET /agents/kyc/documents/:id/access`<br>`GET /government/workers`<br>`GET /government/intelligence/taxpayers/:id/access-log`<br>`GET /government/reconciliation/awaiting-settlement`<br>…and 15 more |
 | `audit:sample` | Configure | auditor | `POST /government/audit/samples`<br>`GET /government/audit/samples`<br>`GET /government/audit/samples/:id`<br>`POST /government/audit/samples/items/:id/finding`<br>…and 1 more |
 | `audit:report` | Configure | auditor | `POST /government/audit/reports`<br>`GET /government/audit/reports`<br>`GET /government/audit/reports/:id`<br>`GET /government/audit/reports/:id/export`<br>…and 1 more |
 | `audit:sign` | Approve | auditor | `POST /government/audit/reports/:id/sign` |

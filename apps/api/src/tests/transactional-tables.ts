@@ -29,6 +29,7 @@ export const TRANSACTIONAL_TABLES = [
    */
   'taxpayer_connection_access_logs',
   'taxpayer_record_access_logs',
+  'taxpayer_search_logs',
   'taxpayer_connections',
   'paye_schedule_lines',
   'paye_schedules',

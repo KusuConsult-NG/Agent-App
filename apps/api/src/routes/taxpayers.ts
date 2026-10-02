@@ -33,7 +33,7 @@ import { observationCaptureSchema } from './government';
 import { recordObservation } from '../services/enumeration';
 import { evaluateRegistrationRisk } from '../services/fraud';
 import { getTaxpayerIncentives, syncTaxpayerComplianceAndIncentives } from '../services/incentives';
-import { recordTaxpayerAccess } from '../services/taxpayer-access';
+import { recordTaxpayerAccess, recordTaxpayerSearch } from '../services/taxpayer-access';
 import { queueNotification } from '../services/notifications';
 
 /** What a citizen can hand an agent, once the search box has recognised it. */
@@ -498,13 +498,42 @@ taxpayerRouter.get(
         }
       }
 
-      res.json(
-        await taxpayers.searchTaxpayers(
-          pool,
-          search,
-          identifiedExactly ? { kind: 'STATEWIDE' } : reach.scope,
-        ),
+      const found = await taxpayers.searchTaxpayers(
+        pool,
+        search,
+        identifiedExactly ? { kind: 'STATEWIDE' } : reach.scope,
       );
+
+      /*
+       * Logged after the answer, with what was asked and how much came back.
+       *
+       * This is the bulk disclosure the record log does not cover: per match
+       * the rows above carry TIN, name, phone, email and address, so a name
+       * typed into the box returns the contact details of everybody who
+       * matches it. One row per search rather than per result — see migration
+       * 085 for why the filters are kept and the ids are not.
+       *
+       * `data` rather than `search`: what the officer sent, not what the
+       * platform made of it. A `q` that looks like a TIN is promoted to the
+       * `tin` filter a few lines above, and the log should say the officer
+       * typed something into the one box — which is what they did — rather
+       * than report an interpretation back as if it were the input.
+       *
+       * Without `limit`, which is how much the platform would answer rather
+       * than what was asked for.
+       */
+      const { limit: _pageSize, ...asked } = data;
+      await recordTaxpayerSearch({
+        searchedBy: req.auth!.userId,
+        actorRole: req.auth!.role,
+        filters: asked as Record<string, string | number | boolean>,
+        matched: found.length,
+        ipAddress: req.clientIp,
+        deviceId: req.auth!.deviceId,
+        requestId: req.requestId,
+      });
+
+      res.json(found);
     },
   ),
 );

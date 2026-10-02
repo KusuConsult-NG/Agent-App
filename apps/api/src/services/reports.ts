@@ -810,6 +810,7 @@ export async function rateChangeHistory(db: Db, params: { revenueItemId?: string
  */
 const ACCESS_LOG_CAP = 500;
 const RECEIPTS_BY_ITEM_CAP = 1000;
+const SEARCH_LOG_CAP = 500;
 
 /*
  * Both are a default argument rather than a constant read inside the query,
@@ -838,6 +839,34 @@ const RECEIPTS_BY_ITEM_CAP = 1000;
 function capped<T>(rows: T[], cap: number): { rows: T[]; truncated: boolean; cap: number | null } {
   const truncated = rows.length > cap;
   return { rows: truncated ? rows.slice(0, cap) : rows, truncated, cap: truncated ? cap : null };
+}
+
+/**
+ * Who has been searching the register, and for what.
+ *
+ * The reader for `taxpayer_search_logs`. It exists in the same commit as the
+ * table on purpose: a safeguard whose whole value is that somebody eventually
+ * looks at it, which nobody can look at, is a table that costs disk and
+ * protects nobody — which is what `a-log-nobody-could-read.test.tsx` found the
+ * connections access log to be.
+ *
+ * The officer's name and role, what they typed, how many people it returned,
+ * and from where. The count is the column that distinguishes a lookup of one
+ * known trader from a trawl, and ordering by it is how somebody asks the
+ * question this log is for.
+ */
+export async function registerSearches(db: Db, cap = SEARCH_LOG_CAP) {
+  const rows = await query(
+    db,
+    `SELECT l.created_at, u.full_name, COALESCE(l.actor_role, u.role) AS role,
+            l.filters, l.matched, l.ip_address, l.device_id
+       FROM taxpayer_search_logs l
+       LEFT JOIN users u ON u.id = l.searched_by
+      ORDER BY l.created_at DESC
+      LIMIT $1`,
+    [cap + 1],
+  );
+  return capped(rows, cap);
 }
 
 /**

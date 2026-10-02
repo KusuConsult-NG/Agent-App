@@ -467,6 +467,16 @@ const AUDIT_QUERIES: AuditQuery[] = [
     path: '/government/audit/queries/receipts-by-item',
     parameter: { name: 'revenueItemCode', prompt: 'ofcOvWhichRevenueItem', source: 'revenueItems' },
   },
+  /*
+   * No parameter, because the question is about the officers rather than about
+   * one citizen: "who has been trawling the register this week" is asked
+   * without knowing whose records came back.
+   */
+  {
+    key: 'register-searches',
+    label: 'ofcOvWhoSearchedTheRegister',
+    path: '/government/audit/queries/register-searches',
+  },
   {
     key: 'taxpayer-access',
     label: 'ofcOvWhoLookedAtRecord',

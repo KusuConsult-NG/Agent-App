@@ -931,6 +931,7 @@ export interface TranslationDictionary {
   ofcOvOneAgentCollected: string;
   ofcOvReceiptsOneItem: string;
   ofcOvWhoLookedAtRecord: string;
+  ofcOvWhoSearchedTheRegister: string;
   ofcOvJob: string;
   ofcOvRuns: string;
   ofcOvLastSucceeded: string;
@@ -4695,6 +4696,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOvOneAgentCollected: "Everything one agent collected",
     ofcOvReceiptsOneItem: "Receipts issued under one revenue item",
     ofcOvWhoLookedAtRecord: "Who has looked at one taxpayer’s record",
+    ofcOvWhoSearchedTheRegister: "Who has been searching the register",
     ofcOvJob: "Job",
     ofcOvRuns: "Runs",
     ofcOvLastSucceeded: "Last succeeded",
@@ -8225,6 +8227,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOvOneAgentCollected: "Duk abin da wakili daya ya karba",
     ofcOvReceiptsOneItem: "Rasit din da aka bayar a karkashin nau’in haraji daya",
     ofcOvWhoLookedAtRecord: "Wa ya duba rikodin mai biyan haraji daya",
+    ofcOvWhoSearchedTheRegister: "Wa ya ke bincike a cikin rajista",
     ofcOvJob: "Aiki",
     ofcOvRuns: "Gudanarwa",
     ofcOvLastSucceeded: "Nasara ta karshe",

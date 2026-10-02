@@ -269,10 +269,18 @@ governmentRouter.get(
 /*
  * Who has read this person's record, and under what claimed purpose.
  *
- * Held behind `audit:read` rather than the report permissions. The officers
- * who look at the graph should not be the ones who decide what the log of
- * their looking says, and an auditor asking "who has been running coverage
- * queries against this citizen" is the question the log exists to answer.
+ * Held behind `audit:read` rather than the report permissions. The sentence
+ * that used to follow said "the officers who look at the graph should not be
+ * the ones who decide what the log of their looking says" — which describes a
+ * separation this gate does not make: `audit:read` is held by revenue_officer,
+ * finance_officer, auditor and admin, so the officers running coverage queries
+ * can read this log too.
+ *
+ * What stops them deciding what it says is that
+ * `taxpayer_connection_access_logs` is append-only at the database. The
+ * permission narrows who can look; the triggers are what make it evidence.
+ * Noticed while gating `/audit/queries/register-searches`, where I had started
+ * to repeat the claim.
  */
 governmentRouter.get(
   '/intelligence/taxpayers/:id/access-log',
@@ -2416,6 +2424,38 @@ governmentRouter.get(
   requirePermission('audit:read'),
   validateQuery(z.object({ taxpayerId: uuidSchema }), async (_req, res, data) => {
     res.json(await reports.taxpayerAccessLog(pool, data.taxpayerId));
+  }),
+);
+
+/*
+ * The sixth of PRD §67's questions, which the PRD did not ask and the platform
+ * needs: who has been searching the register.
+ *
+ * Behind `audit:read`, which is the same gate as every other access log here —
+ * and which does NOT separate the searcher from the reader. A revenue officer
+ * holds `audit:read` and also runs the searches this records, so they can read
+ * their own trawl.
+ *
+ * That is worth stating rather than implying, because the neighbouring
+ * `/intelligence/taxpayers/:id/access-log` claims the opposite in its own
+ * comment — "the officers who look at the graph should not be the ones who
+ * decide what the log of their looking says" — and `audit:read` is held by
+ * revenue_officer, finance_officer, auditor and admin, so it has never
+ * separated them either. That comment is corrected below.
+ *
+ * What does hold is the half that matters more: the table is append-only at
+ * the database, so an officer who can read their searches still cannot remove
+ * one. "Deciding what the log says" is prevented by the triggers, not by the
+ * permission. Separating reading as well would need a permission only auditors
+ * and administrators hold, and the three that fit that shape — `audit:sample`,
+ * `audit:report`, `audit:sign` — all mean something else. Inventing a seventh
+ * is a decision about the role model and not one to make inside this route.
+ */
+governmentRouter.get(
+  '/audit/queries/register-searches',
+  requirePermission('audit:read'),
+  asyncHandler(async (_req, res) => {
+    res.json(await reports.registerSearches(pool));
   }),
 );
 
