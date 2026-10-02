@@ -3669,6 +3669,17 @@ export interface TranslationDictionary {
   ofcErrPeriodOpen: string;
   ofcErrPeriodNotOpen: string;
   /*
+   * SIGNING AN AUDIT REPORT, the other half of the tier §7 names.
+   *
+   * Both name the report, so both carry it as a field. `SAMPLE_COMPLETED` is
+   * the third row of that tier and is NOT here: it is raised from two places
+   * with two different sentences, one of them carrying advice, and a single
+   * translation would have to be vaguer than the longer of the two. The
+   * service says so at the site.
+   */
+  ofcErrAlreadySigned: string;
+  ofcErrAlreadyWithdrawn: string;
+  /*
    * What the job monitor says about a job, and how often it runs.
    *
    * Both were English on a screen that offers Hausa, and both are composed
@@ -7243,6 +7254,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcErrPeriodClosed: '{{period}} is already closed.',
     ofcErrPeriodOpen: '{{period}} is already open.',
     ofcErrPeriodNotOpen: '{{period}} is not open. Its status is: {{state}}.',
+    ofcErrAlreadySigned: '{{report}} has already been signed.',
+    ofcErrAlreadyWithdrawn: '{{report}} is already withdrawn.',
     ofcOvJobHealthy: 'Running on schedule.',
     ofcOvJobRunning: 'Running now.',
     ofcOvJobOverdue: 'Has not started when it should have. The schedule itself may have stopped.',
@@ -10787,6 +10800,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcErrPeriodClosed: 'An riga an rufe {{period}}.',
     ofcErrPeriodOpen: 'An riga an bude {{period}}.',
     ofcErrPeriodNotOpen: 'Ba a bude {{period}} ba. Matsayinsa shi ne: {{state}}.',
+    ofcErrAlreadySigned: 'An riga an sa hannu kan {{report}}.',
+    ofcErrAlreadyWithdrawn: 'An riga an janye {{report}}.',
     ofcOvJobHealthy: 'Yana gudana bisa tsarin lokaci.',
     ofcOvJobRunning: 'Yana gudana yanzu.',
     ofcOvJobOverdue:

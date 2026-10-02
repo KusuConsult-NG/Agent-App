@@ -242,6 +242,24 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   PERIOD_CLOSED: 'ofcErrPeriodClosed',
   PERIOD_OPEN: 'ofcErrPeriodOpen',
   PERIOD_NOT_OPEN: 'ofcErrPeriodNotOpen',
+
+  /*
+   * The second half of that tier: the audit workbench.
+   *
+   * Both name the report, and both were reaching an officer as the DATABASE's
+   * English until the read above them took a lock — two officers signing one
+   * report both passed the pre-check, the trigger refused the second, and the
+   * handler turned a P0001 into FINANCIAL_CONTROL_BLOCKED carrying "who signed
+   * an audit report, and when, cannot be rewritten". A sentence about
+   * rewriting, for an officer who signed a report that was unsigned when they
+   * looked, in a code this map does not hold.
+   *
+   * `SAMPLE_COMPLETED` is the third row and is deliberately absent: it is
+   * raised from two sites with two different sentences, and `audit-workbench.ts`
+   * says so where it happens.
+   */
+  ALREADY_SIGNED: 'ofcErrAlreadySigned',
+  ALREADY_WITHDRAWN: 'ofcErrAlreadyWithdrawn',
 };
 
 /**

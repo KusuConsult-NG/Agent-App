@@ -550,6 +550,15 @@ describe('a report is a moment, not a query', () => {
       auth('auditor'),
     );
     assert.equal(again.status, 409, JSON.stringify(again.body));
+    assert.equal(again.body.error.code, 'ALREADY_SIGNED');
+    /*
+     * And the report number as a field, so the portal can name it in Hausa.
+     * This is the half only the server can get wrong: the portal's own test
+     * supplies its details, so it would pass with none of this sent.
+     */
+    assert.deepEqual(again.body.error.details, [
+      { field: 'report', issue: again.body.error.message.split(' ')[0] },
+    ]);
 
     await assert.rejects(
       () => query(pool, `UPDATE audit_reports SET status = 'GENERATED' WHERE id = $1`, [id]),
@@ -586,6 +595,19 @@ describe('a report is a moment, not a query', () => {
       auth('auditor'),
     );
     assert.equal(signed.status, 409, JSON.stringify(signed.body));
+
+    // And withdrawing it twice names the report too.
+    await grantStepUp(tokens.auditor, PHONES.auditor, 'audit.report.sign');
+    const twice = await post(
+      `/government/audit/reports/${id}/withdraw`,
+      { reason: 'Withdrawing something already withdrawn.' },
+      auth('auditor'),
+    );
+    assert.equal(twice.status, 409, JSON.stringify(twice.body));
+    assert.equal(twice.body.error.code, 'ALREADY_WITHDRAWN');
+    assert.deepEqual(twice.body.error.details, [
+      { field: 'report', issue: twice.body.error.message.split(' ')[0] },
+    ]);
   });
 
   it('answers every one of the thirteen questions without falling over', async () => {

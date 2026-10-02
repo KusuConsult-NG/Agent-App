@@ -1,6 +1,6 @@
 # Hausa review: everything still waiting on a decision
 
-`HAUSA-REVIEW.md` carries all 3,451 dictionary strings, and most of its length
+`HAUSA-REVIEW.md` carries all 3,453 dictionary strings, and most of its length
 is those tables. The open questions are scattered through seven sections of the
 prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
@@ -34,7 +34,7 @@ about field staff. Counting says otherwise:
 | The agent app | 252 |
 | The officer portal | 148 |
 | Citizens, referees and group leaders | 43 |
-| **Total** | **443** of 3,451 |
+| **Total** | **443** of 3,453 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
@@ -411,7 +411,7 @@ roll. If any correction you make runs long, that test will say so rather than
 the receipt.
 
 **And `scanHelp` was not the only dead string in this table.** Checking it
-raised the obvious next question, so it was measured: **43 of the 3,451 keys
+raised the obvious next question, so it was measured: **43 of the 3,453 keys
 are never named anywhere outside the dictionary**, and four of them are in the
 table above — `statusOffline`, `offlineMessage`, `statusFailed`, and
 `civicDutyThanks`, the one the `Mungode` typo was in. Three of the four
@@ -675,7 +675,7 @@ added, because it guards every consequential money action in the portal and its
 instruction was already in Hausa under an English heading.
 
 **The scale, counted rather than estimated.** The platform raises **172
-distinct error codes**; the officer portal says 4 of them in Hausa, and the
+distinct error codes**; the officer portal says 6 of them in Hausa, and the
 agent application says 33. The first version of this section said twenty-six,
 from a search that matched `conflict('CODE'` on a single line and missed every
 multi-line call and every `new AppError({ code: … })` literal — which is most
@@ -729,6 +729,35 @@ they raise written down here, rather than a page of Hausa written in one pass.
 | `ofcErrPeriodClosed` | An riga an rufe {{period}}. | `An riga an …` (13), `rufe` (56) |
 | `ofcErrPeriodOpen` | An riga an bude {{period}}. | same, `bude` (89) |
 | `ofcErrPeriodNotOpen` | Ba a bude {{period}} ba. Matsayinsa shi ne: {{state}}. | `Ba a … ba`, `enumClosing`, `enumClosed` |
+
+### 7.2 — The audit-report row, done, and a race that was saying it wrong
+
+| Key | Hausa | Borrowed from |
+|---|---|---|
+| `ofcErrAlreadySigned` | An riga an sa hannu kan {{report}}. | `An riga an …` (16), `sa hannu` (11) |
+| `ofcErrAlreadyWithdrawn` | An riga an janye {{report}}. | same, `janye` (18) |
+
+**Neither of these was reaching an officer at all when two of them acted at
+once.** `signReport` read the report's status, refused `ALREADY_SIGNED` on it,
+and wrote the signature — without locking the row it had just read. Two
+officers who opened the same unsigned report both read GENERATED and both
+wrote. Nothing was overwritten, because the integrity trigger refuses the
+second write, but the officer was then told *"who signed an audit report, and
+when, cannot be rewritten"* — a sentence about rewriting a signature, for
+somebody who signed a report that was unsigned when they looked at it. It
+arrives as `FINANCIAL_CONTROL_BLOCKED`, which names neither the report nor what
+happened and is not a code this map holds. `withdrawReport` had the same shape.
+
+So the Hausa was the second half of that fix, not the whole of it: the service
+had to be able to say `ALREADY_SIGNED` before there was anything to translate.
+
+**`SAMPLE_COMPLETED` is the third row of this tier and is deliberately left.**
+It is raised from two places with two different sentences — *"This sample has
+been completed and its findings are final"*, with advice under it, and *"This
+sample is already complete"*, with none. One Hausa sentence would have to be
+vaguer than the longer of the two, or would attach advice to a screen that
+gives none. Consolidating them is a decision about what an auditor is told on
+two different screens rather than a translation, and it is yours.
 
 **The portal had no way to put a value into a sentence.** Its error component
 read the translation and rendered it as it stood, so any translation naming its

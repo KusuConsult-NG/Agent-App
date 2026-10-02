@@ -132,21 +132,22 @@ describe('the refusal every money action in this portal can produce', () => {
      * than the English, because the reader cannot tell a guess from a
      * translation. Until somebody reviews them, the English stands.
      *
-     * This used to use PERIOD_CLOSED, which is now translated — it is in the
-     * row `HAUSA-REVIEW-QUESTIONS.md` §7 calls the tier. `ALREADY_SIGNED` is
-     * in the row below it, the audit workbench, and is next rather than done.
+     * This used to use PERIOD_CLOSED and then ALREADY_SIGNED, and both are now
+     * translated — they are the two rows `HAUSA-REVIEW-QUESTIONS.md` §7 calls
+     * the tier. `ROLE_RETIRED` is in the row that section calls mostly
+     * administrative and says can stay in English.
      */
     render(
       <ErrorAlert
         error={{
-          code: 'ALREADY_SIGNED',
-          message: 'AR-2026-000014 has already been signed.',
+          code: 'ROLE_RETIRED',
+          message: 'That role has been retired and cannot be granted.',
           moneyStatus: 'NOT_APPLICABLE',
         }}
       />,
     );
 
-    expect(screen.getByText('AR-2026-000014 has already been signed.')).toBeTruthy();
+    expect(screen.getByText('That role has been retired and cannot be granted.')).toBeTruthy();
   });
 });
 
@@ -253,6 +254,74 @@ describe('a revenue month an officer cannot close twice', () => {
       expect(text).not.toContain('CLOSING');
     });
   }
+
+  /*
+   * THE OTHER HALF OF THE TIER: an audit report an officer's name goes on.
+   *
+   * Both of these reached an officer as the DATABASE's English until the read
+   * in `signReport` took a lock — two officers signing one report both passed
+   * the pre-check, migration 062's trigger refused the second, and the handler
+   * turned the P0001 into FINANCIAL_CONTROL_BLOCKED carrying "who signed an
+   * audit report, and when, cannot be rewritten". The service can say what
+   * actually happened, and now does.
+   */
+  for (const lang of ['ha', 'en'] as const) {
+    it(`names the report already signed, in ${lang}`, async () => {
+      setPortalLanguage(lang);
+      render(
+        <ErrorAlert
+          error={refusal('ALREADY_SIGNED', 'Untranslated server wording.', [
+            { field: 'report', issue: 'PSIRS-AR/2026/00014' },
+          ])}
+        />,
+      );
+
+      const text = said();
+      expect(text).not.toMatch(/\{\{\w+\}\}/);
+      expect(text, 'the report number is how the officer finds it').toContain(
+        'PSIRS-AR/2026/00014',
+      );
+      expect(text).not.toContain('Untranslated server wording');
+      if (lang === 'ha') expect(text).toContain('sa hannu');
+    });
+
+    it(`names the report already withdrawn, in ${lang}`, async () => {
+      setPortalLanguage(lang);
+      render(
+        <ErrorAlert
+          error={refusal('ALREADY_WITHDRAWN', 'Untranslated server wording.', [
+            { field: 'report', issue: 'PSIRS-AR/2026/00015' },
+          ])}
+        />,
+      );
+
+      const text = said();
+      expect(text).not.toMatch(/\{\{\w+\}\}/);
+      expect(text).toContain('PSIRS-AR/2026/00015');
+      expect(text).not.toContain('Untranslated server wording');
+      if (lang === 'ha') expect(text).toContain('janye');
+    });
+  }
+
+  /*
+   * And the third row of that tier, which is NOT translated and must not be.
+   *
+   * `SAMPLE_COMPLETED` is raised from two sites with two different sentences —
+   * one carrying advice, one not — so a single translation would have to be
+   * vaguer than the longer of the two. Consolidating them is a decision about
+   * what an auditor is told on two screens, and until it is made the English
+   * stands. Pinned so nobody translates it without making that decision.
+   */
+  it('keeps the English for a code raised with two different sentences', async () => {
+    setPortalLanguage('ha');
+    render(
+      <ErrorAlert
+        error={refusal('SAMPLE_COMPLETED', 'This sample is already complete.', [])}
+      />,
+    );
+
+    expect(said()).toBe('This sample is already complete.');
+  });
 
   /*
    * And a state the enum table has no name for is printed as it arrived.

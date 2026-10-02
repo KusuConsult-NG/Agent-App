@@ -31,7 +31,7 @@ import type { PoolClient } from 'pg';
 import type { Db } from '../db/pool';
 import type { Permission } from '@psirs/shared';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
-import { badRequest, conflict, notFound } from '../lib/errors';
+import { AppError, badRequest, conflict, notFound } from '../lib/errors';
 import { REVENUE_STATES_SQL } from '../lib/revenue-states';
 import { currentYearInPlateau } from '../lib/calendar-day';
 import { canonicalJson, recordAudit } from './audit';
@@ -379,6 +379,23 @@ export async function completeSample(
     );
     if (!sample) throw notFound('Sample');
     if (sample.status === 'COMPLETED') {
+      /*
+       * ONE CODE, TWO SENTENCES — which is why this row is not translated with
+       * the two above it.
+       *
+       * `recordFinding` raises SAMPLE_COMPLETED as "This sample has been
+       * completed and its findings are final", with "Draw a new sample to
+       * examine these transactions again" under it. This site raises the same
+       * code as "This sample is already complete", with no next step. They
+       * mean the same thing and say it differently, and the translation map's
+       * own test is that a code means one fixed thing — so one Hausa sentence
+       * would have to be vaguer than the longer of the two, or would attach
+       * advice to a site that deliberately gives none.
+       *
+       * Consolidating them is the right fix and it is a decision about what an
+       * auditor is told on two different screens, not a translation. Left as
+       * it is, named here, rather than translated around.
+       */
       throw conflict('SAMPLE_COMPLETED', 'This sample is already complete.');
     }
     if (Number.parseInt(sample.pending, 10) > 0) {
@@ -626,14 +643,48 @@ export async function signReport(
   note: string,
 ): Promise<void> {
   await withTransaction(async (client) => {
+    /*
+     * `FOR UPDATE`, because the refusal below is decided on this status.
+     *
+     * Without it two officers who open the same unsigned report both read
+     * GENERATED and both go on to write. Nothing is overwritten — migration
+     * 062's trigger refuses the second write, "who signed an audit report, and
+     * when, cannot be rewritten" — but that is a sentence about rewriting a
+     * signature, and rewriting is not what the second officer did: they signed
+     * a report that was unsigned when they looked at it. The handler turns the
+     * P0001 into FINANCIAL_CONTROL_BLOCKED, which names neither the report nor
+     * what happened, carries a support reference they have no use for, and is
+     * not in the portal's translation map.
+     *
+     * `ALREADY_SIGNED` and `ALREADY_WITHDRAWN` say what happened and name the
+     * report. Locking the row is what lets the service say them.
+     *
+     * The fourth instance of one shape — read a status, refuse on it, write
+     * without having locked it — after the agent application, the department
+     * code and the KYC submission. `closePeriod` and `setTaxpayerStatus`, which
+     * decide the same kind of thing, have always locked.
+     */
     const report = await queryOne<{ id: string; status: string; report_number: string }>(
       client,
-      'SELECT id, status, report_number FROM audit_reports WHERE id = $1',
+      'SELECT id, status, report_number FROM audit_reports WHERE id = $1 FOR UPDATE',
       [reportId],
     );
     if (!report) throw notFound('Report');
     if (report.status === 'SIGNED') {
-      throw conflict('ALREADY_SIGNED', `${report.report_number} has already been signed.`);
+      /*
+       * The report number as a field, so the portal can name it in Hausa.
+       *
+       * `HAUSA-REVIEW-QUESTIONS.md` §7 puts this row in the tier with the
+       * revenue period, and for the same reason: signing an audit report is an
+       * act an officer's name goes on. The number has to travel beside the
+       * sentence rather than be parsed back out of it.
+       */
+      throw new AppError({
+        statusCode: 409,
+        code: 'ALREADY_SIGNED',
+        message: `${report.report_number} has already been signed.`,
+        details: [{ field: 'report', issue: report.report_number }],
+      });
     }
     if (report.status === 'WITHDRAWN') {
       throw conflict(
@@ -676,14 +727,22 @@ export async function withdrawReport(
   reason: string,
 ): Promise<void> {
   await withTransaction(async (client) => {
+    // `FOR UPDATE` for the reason given on `signReport`: the refusal below is
+    // decided on this status, and two officers withdrawing one report both
+    // read GENERATED without it.
     const report = await queryOne<{ id: string; status: string; report_number: string }>(
       client,
-      'SELECT id, status, report_number FROM audit_reports WHERE id = $1',
+      'SELECT id, status, report_number FROM audit_reports WHERE id = $1 FOR UPDATE',
       [reportId],
     );
     if (!report) throw notFound('Report');
     if (report.status === 'WITHDRAWN') {
-      throw conflict('ALREADY_WITHDRAWN', `${report.report_number} is already withdrawn.`);
+      throw new AppError({
+        statusCode: 409,
+        code: 'ALREADY_WITHDRAWN',
+        message: `${report.report_number} is already withdrawn.`,
+        details: [{ field: 'report', issue: report.report_number }],
+      });
     }
 
     await client.query(
