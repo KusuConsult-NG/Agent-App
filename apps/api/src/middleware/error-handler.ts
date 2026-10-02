@@ -26,8 +26,16 @@ function isPostgresError(error: unknown): error is PostgresError {
   return error instanceof Error && typeof (error as PostgresError).code === 'string';
 }
 
-/** Map unique-constraint names to language the caller can act on. */
-const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
+/**
+ * Map unique-constraint names to language the caller can act on.
+ *
+ * Exported, with the overlap map below, only so a test can hold every key in
+ * both to the names the live schema actually has. A key is a string matched
+ * against `error.constraint`, so a renamed index or a mistyped name does not
+ * fail anything — it silently returns the generic sentence, which is the
+ * failure mode these messages exist to avoid.
+ */
+export const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
   taxpayers_tin_key: 'A taxpayer with this TIN already exists.',
   users_phone_key: 'This phone number is already registered.',
   users_email_key: 'This email address is already registered.',
@@ -44,6 +52,48 @@ const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
     'This webhook event has already been processed.',
   vehicles_registration_number_key: 'A vehicle with this registration number already exists.',
   agents_user_id_key: 'This user already has an agent application.',
+
+  /*
+   * FIVE MORE THAT A PERSON CAN COLLIDE WITH.
+   *
+   * The fallback is "That record already exists. No duplicate has been
+   * created." It is true, it is reassuring about the duplicate, and it names
+   * nothing — so on a form with a dozen fields the person is not told which
+   * one clashed.
+   *
+   * `users_staff_number_key` is the clearest of them. Phone and email are two
+   * lines above, both with a message; a staff number is the third identifier on
+   * the same table and had none, so an administrator creating an officer was
+   * told a record existed without being told which of the three it was.
+   *
+   * The PAYE one already had its sentence — `filePayeSchedule` reads the month
+   * first and refuses with it — but that read cannot see an uncommitted filing,
+   * so two officers filing one month together leave the loser with the generic
+   * line instead of the one that says what to do about it. The constraint is
+   * where the rule actually holds, so the words belong here too.
+   *
+   * Twelve other named constraints still fall back, deliberately. They are
+   * configuration paths where the generic sentence is adequate — a rate version
+   * number reused, a current-settings row — and reaching them means an officer
+   * writing reference data rather than a person filling in a form.
+   *
+   * One thing this does not fix: the agent application translates a refusal by
+   * its code, and DUPLICATE_RECORD is not in its map, so for the two bank
+   * account rules a Hausa-reading agent still reads English. The right answer
+   * there is a specific code raised by the service, as `/drafts/sync` does with
+   * its own unique violation; that is a larger change than a message and is
+   * recorded in `docs/HAUSA-REVIEW-QUESTIONS.md` with the rest of question 7.
+   */
+  users_staff_number_key: 'That staff number already belongs to another officer.',
+  idx_paye_one_live_filing:
+    'A return has already been filed for this employer and month. Cancel that one before ' +
+    'filing again — a second filing would double what the employer appears to owe.',
+  bank_accounts_one_active_per_owner:
+    'This holder already has an account in use. A new one replaces it rather than joining it.',
+  bank_accounts_one_proposal_per_owner:
+    'A change to this account is already waiting for a decision. It has to be approved or ' +
+    'refused before another can be proposed.',
+  obligation_unique: 'This taxpayer already has that tax or levy on their record.',
 };
 
 /**
@@ -60,7 +110,7 @@ const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
  * time they use the screen, and the answer they need is "close the current one
  * first", not a reference number.
  */
-const OVERLAP_CONSTRAINT_MESSAGES: Record<string, string> = {
+export const OVERLAP_CONSTRAINT_MESSAGES: Record<string, string> = {
   financial_periods_do_not_overlap:
     'A financial period already covers part of those dates. Periods cannot overlap.',
   lga_class_no_overlap:
