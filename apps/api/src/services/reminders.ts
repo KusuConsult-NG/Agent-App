@@ -58,6 +58,21 @@ import { UNDER_OPEN_OBJECTION_SQL } from '../lib/enforcement-suspended';
 import { pool, query, withTransaction } from '../db/pool';
 import { queueNotification } from './notifications';
 import { citizenPortalUrl } from '../lib/public-urls';
+
+/**
+ * Another sweep has this invoice's window.
+ *
+ * Its own type rather than a bare Error, so the catch in the loop can count it
+ * as skipped without logging it beside the failures that are faults. Two
+ * sweeps racing is an ordinary outcome of the on-demand trigger existing; a
+ * reminder that could not be queued is not.
+ */
+class ReminderAlreadyClaimed extends Error {
+  constructor(invoiceId: string, event: string) {
+    super(`${event} for invoice ${invoiceId} was already claimed by another sweep`);
+    this.name = 'ReminderAlreadyClaimed';
+  }
+}
 import type { NotificationEvent } from './notifications';
 
 /*
@@ -202,12 +217,38 @@ async function processWindow(
   for (const invoice of invoices) {
     try {
       await withTransaction(async (client) => {
-        // Mark the flag first, inside the transaction, so a crash mid-send
-        // does not cause duplicate reminders (better to miss one than to spam).
-        await client.query(
-          `UPDATE invoices SET ${window.flagColumn} = true WHERE id = $1`,
+        /*
+         * Mark the flag first, inside the transaction, so a crash mid-send
+         * does not cause duplicate reminders (better to miss one than to spam).
+         *
+         * AND ONLY IF IT IS STILL FALSE.
+         *
+         * Without that condition the claim in `server.ts` — "running it more
+         * than once never duplicates a reminder" — held one sweep after
+         * another and not two side by side. Both select the invoice while the
+         * flag is false, the first takes the row lock and queues, and the
+         * second unblocks, sets true to true, and queues the same unsolicited
+         * demand for payment again.
+         *
+         * Two sweeps can run at once: the scheduled one holds a job lock, but
+         * `POST /government/reminders/send-due` calls this directly, so an
+         * officer pressing the button while the schedule runs — or two
+         * officers pressing it together — is exactly that. The route now takes
+         * the same lock, and this condition is what makes the sweep idempotent
+         * whatever reaches it.
+         *
+         * `rowCount` of zero means another sweep has this invoice. Throwing
+         * rolls back and counts it as skipped, which is what it is: nothing
+         * for this sweep to do, because the work is already done.
+         */
+        const claimed = await client.query(
+          `UPDATE invoices SET ${window.flagColumn} = true
+            WHERE id = $1 AND ${window.flagColumn} = false`,
           [invoice.id],
         );
+        if (claimed.rowCount === 0) {
+          throw new ReminderAlreadyClaimed(invoice.id, window.event);
+        }
 
         const dueDate = NIGERIAN_DATE.format(invoice.expires_at);
 
@@ -246,7 +287,13 @@ async function processWindow(
       sent++;
     } catch (error) {
       // Do not let one failed invoice block the rest of the sweep.
-      console.error(`[reminders] failed for invoice ${invoice.id}:`, error);
+      //
+      // A reminder another sweep had already claimed is not a failure and does
+      // not belong in the error log beside the ones that are: it is counted as
+      // skipped, which is the honest word for it.
+      if (!(error instanceof ReminderAlreadyClaimed)) {
+        console.error(`[reminders] failed for invoice ${invoice.id}:`, error);
+      }
       skipped++;
     }
   }

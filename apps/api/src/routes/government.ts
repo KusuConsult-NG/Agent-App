@@ -2811,7 +2811,43 @@ governmentRouter.post(
   '/reminders/send-due',
   requirePermission('support:manage'),
   asyncHandler(async (_req, res) => {
-    const result = await sendDueReminders();
+    /*
+     * Behind the sweep's own lock, so pressing this while it runs does not
+     * make a second one.
+     *
+     * The scheduled sweep goes through `runJob` and holds this lock; this
+     * route called `sendDueReminders()` bare, so an officer pressing the
+     * button during a sweep — or two officers pressing it together — had two
+     * sweeps reading the same window flags. Each invoice's claim is
+     * conditional now, which is what makes the duplicate impossible rather
+     * than unlikely; this is what stops the second sweep doing the work twice
+     * over before discovering that.
+     *
+     * `withJobLock` rather than `runJob`: `runJob` records a start against the
+     * job, and the health board decides whether a job is overdue by comparing
+     * its last start against its interval. A manual press recording a
+     * scheduled run would let this button hide a scheduler that had stopped —
+     * the same reasoning the reconcile-now button above gives for the same
+     * choice.
+     */
+    const outcome = await withJobLock('reminder-sweep', () => sendDueReminders());
+
+    if (!outcome.ran) {
+      /*
+       * A 409, following the reconcile-now button in this file rather than the
+       * timer: "The scheduled path answers contention with `{ skipped: true }`,
+       * which is right for a timer and wrong for a person. An officer who
+       * presses Reconcile and is handed 'skipped' has learned nothing."
+       */
+      throw conflict(
+        'REMINDER_SWEEP_ALREADY_RUNNING',
+        'A reminder sweep is already running.',
+        'Wait for it to finish. Every invoice it has reached is flagged for this window, ' +
+          'so a second sweep would send nothing a taxpayer has not already been sent.',
+      );
+    }
+
+    const result = outcome.value;
     res.json({
       ...result,
       message: `${result.sent} reminder(s) queued, ${result.skipped} skipped (errors or daily levies).`,
