@@ -610,7 +610,7 @@ export async function forecast(
   const notStarted = daysElapsed <= 0;
 
   if (periodComplete || notStarted) {
-    return withTarget(db, params, {
+    return withTarget(db, params, { statewide }, {
       is_forecast: true,
       basis: notStarted ? 'INSUFFICIENT_HISTORY' : 'RUN_RATE',
       confidence: notStarted ? 'LOW' : 'HIGH',
@@ -649,7 +649,7 @@ export async function forecast(
   if (shares.length < 2) {
     // Run rate, and honest about it.
     const projected = (collected * BigInt(daysInPeriod)) / BigInt(daysElapsed);
-    return withTarget(db, params, {
+    return withTarget(db, params, { statewide }, {
       is_forecast: true,
       basis: 'RUN_RATE',
       confidence: 'LOW',
@@ -679,7 +679,7 @@ export async function forecast(
    */
   if (share < 500) {
     const projected = (collected * BigInt(daysInPeriod)) / BigInt(daysElapsed);
-    return withTarget(db, params, {
+    return withTarget(db, params, { statewide }, {
       is_forecast: true,
       basis: 'RUN_RATE',
       confidence: 'LOW',
@@ -698,7 +698,7 @@ export async function forecast(
   }
 
   const projected = (collected * 10_000n) / BigInt(share);
-  return withTarget(db, params, {
+  return withTarget(db, params, { statewide }, {
     is_forecast: true,
     basis: 'SEASONAL',
     // Three comparable years and past the quarter mark is as confident as this
@@ -718,7 +718,34 @@ export async function forecast(
   });
 }
 
-/** Attach the target for the same period and scope, where one has been set. */
+/**
+ * Attach the target for the same period and scope, where one has been set.
+ *
+ * THE SCOPE IS PART OF "THE SAME", AND WAS MISSING.
+ *
+ * Every `collectedBetween` call in `forecast` is passed the caller's scope.
+ * This was passed none, and matched a target on the explicit lgaId,
+ * categoryId and revenueItemId alone — so a supervisor holding one territory
+ * and naming no LGA was given the STATE target, and
+ * `projected_achievement_bp` divided their own collections by the whole
+ * state's figure. A supervisor exactly on course for their share of Plateau
+ * read a few per cent, and the shortfall was the rest of the state's.
+ *
+ * `is_forecast` does not cover that. The projection is labelled as
+ * arithmetic; the target and the achievement were presented as facts about
+ * the caller's area.
+ *
+ * WHY NO TARGET RATHER THAN A SMALLER ONE
+ *
+ * `targetRollup` exists because targets do not aggregate — "the sum of the
+ * LGA targets is usually *not* the state target, because the state figure
+ * carries headroom" — so it reports both figures and the difference instead.
+ * Summing the targets under a territory here would invent the aggregation
+ * that module deliberately refuses to make, and a target set for a wider area
+ * than the projection covers is not this caller's target. `Forecast` already
+ * models having none, and the portal renders both fields only when they are
+ * present.
+ */
 async function withTarget(
   db: Db,
   params: {
@@ -728,8 +755,11 @@ async function withTarget(
     categoryId?: string | null;
     revenueItemId?: string | null;
   },
+  scope: { statewide: boolean },
   result: Forecast,
 ): Promise<Forecast> {
+  if (!scope.statewide) return result;
+
   const target = await queryOne<{ amount_kobo: string }>(
     db,
     `SELECT amount_kobo FROM revenue_targets
