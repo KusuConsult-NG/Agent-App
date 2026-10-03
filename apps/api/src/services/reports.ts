@@ -17,7 +17,12 @@
 import type { Db } from '../db/pool';
 import { query, queryOne } from '../db/pool';
 import { REVENUE_STATES_SQL } from '../lib/revenue-states';
-import { PLATEAU_TODAY_SQL, plateauDateSql, plateauMidnightSql } from '../lib/calendar-day';
+import {
+  PLATEAU_TODAY_SQL,
+  plateauDateSql,
+  plateauMidnightSql,
+  plateauWallClockSql,
+} from '../lib/calendar-day';
 import { outstandingExceptionSql } from './reconciliation';
 import { CURRENT_FINDINGS_SQL } from '../lib/reconciliation-findings';
 import { PAYABLE_INVOICE_SQL } from '../lib/payable-invoice';
@@ -1534,7 +1539,7 @@ export async function adminWorkItems(db: Db) {
     query(
       db,
       `SELECT a.id, a.agent_code, u.full_name, l.name AS lga, a.clearance_status,
-              to_char(a.updated_at, 'YYYY-MM-DD') AS waiting_since
+              to_char(${plateauDateSql('a.updated_at')}, 'YYYY-MM-DD') AS waiting_since
          FROM agents a JOIN users u ON u.id = a.user_id
          LEFT JOIN lgas l ON l.id = a.lga_id
         WHERE a.clearance_status = 'READY_FOR_REVIEW'
@@ -1543,7 +1548,7 @@ export async function adminWorkItems(db: Db) {
     query(
       db,
       `SELECT d.id, d.device_identifier, d.device_name, u.full_name, a.agent_code,
-              to_char(d.registered_at, 'YYYY-MM-DD') AS registered
+              to_char(${plateauDateSql('d.registered_at')}, 'YYYY-MM-DD') AS registered
          FROM agent_devices d
          JOIN agents a ON a.id = d.agent_id
          JOIN users u ON u.id = a.user_id
@@ -1583,7 +1588,7 @@ export async function revenueOfficerWorkItems(db: Db) {
     query(
       db,
       `SELECT i.id, i.invoice_number, i.total_amount_kobo::text AS amount_kobo,
-              to_char(i.expires_at, 'YYYY-MM-DD') AS expires_on,
+              to_char(${plateauDateSql('i.expires_at')}, 'YYYY-MM-DD') AS expires_on,
               coalesce(tp.business_name, tp.first_name || ' ' || tp.last_name) AS taxpayer
          FROM invoices i JOIN taxpayers tp ON tp.id = i.taxpayer_id
         WHERE i.status = 'UNPAID' AND i.expires_at IS NOT NULL
@@ -1603,7 +1608,7 @@ export async function financeOfficerWorkItems(db: Db) {
               r.expected_amount_kobo::text AS expected_kobo,
               r.received_amount_kobo::text AS received_kobo,
               r.variance_kobo::text AS variance_kobo,
-              to_char(r.created_at, 'YYYY-MM-DD') AS raised
+              to_char(${plateauDateSql('r.created_at')}, 'YYYY-MM-DD') AS raised
          FROM (${CURRENT_FINDINGS_SQL}) r
         WHERE ${outstandingExceptionSql('r')}
         ORDER BY r.created_at LIMIT 5`,
@@ -1612,7 +1617,7 @@ export async function financeOfficerWorkItems(db: Db) {
       db,
       `SELECT p.id, p.payout_reference, p.amount_kobo::text AS amount_kobo,
               p.commission_count::text AS commissions, u.full_name AS agent,
-              to_char(p.requested_at, 'YYYY-MM-DD') AS requested
+              to_char(${plateauDateSql('p.requested_at')}, 'YYYY-MM-DD') AS requested
          FROM commission_payouts p
          JOIN agents a ON a.id = p.agent_id
          JOIN users u ON u.id = a.user_id
@@ -1635,8 +1640,10 @@ export async function auditorWorkItems(db: Db) {
   const [refusals, reversals] = await Promise.all([
     query(
       db,
+      // Plateau's wall clock. The portal prints this string under "When" as
+      // it arrives, and in UTC it read an hour behind for every refusal.
       `SELECT id, action, entity_type, actor_role, reason,
-              to_char(created_at, 'YYYY-MM-DD HH24:MI') AS at
+              to_char(${plateauWallClockSql('created_at')}, 'YYYY-MM-DD HH24:MI') AS at
          FROM audit_logs
         WHERE result = 'DENIED'
         ORDER BY created_at DESC LIMIT 5`,
@@ -1644,7 +1651,7 @@ export async function auditorWorkItems(db: Db) {
     query(
       db,
       `SELECT t.transaction_reference, t.status, t.amount_kobo::text AS amount_kobo,
-              to_char(t.updated_at, 'YYYY-MM-DD') AS at,
+              to_char(${plateauDateSql('t.updated_at')}, 'YYYY-MM-DD') AS at,
               coalesce(tp.business_name, tp.first_name || ' ' || tp.last_name) AS taxpayer
          FROM transactions t JOIN taxpayers tp ON tp.id = t.taxpayer_id
         WHERE t.status IN ('REVERSED','REFUNDED')
@@ -2120,7 +2127,9 @@ export async function commissionByPlaceAndPeriod(
     ),
     query(
       db,
-      `SELECT to_char(date_trunc('month', c.created_at), 'YYYY-MM') AS period,
+      // Plateau's months: commission accrued at 00:30 on the first belongs to
+      // the month that has begun, as it does in targets and the period close.
+      `SELECT to_char(date_trunc('month', ${plateauWallClockSql('c.created_at')}), 'YYYY-MM') AS period,
               count(c.id)::text AS commissions,
               COALESCE(SUM(c.amount_kobo),0)::text AS accrued_kobo,
               COALESCE(SUM(c.amount_kobo) FILTER (WHERE c.status = 'PAID'),0)::text AS paid_kobo,
@@ -2131,8 +2140,8 @@ export async function commissionByPlaceAndPeriod(
          FROM commissions c
          JOIN transactions t ON t.id = c.transaction_id
         WHERE c.created_at BETWEEN $1 AND $2 AND ${transactionScopeSql('t', 3, 4)}
-        GROUP BY date_trunc('month', c.created_at)
-        ORDER BY date_trunc('month', c.created_at) DESC`,
+        GROUP BY date_trunc('month', ${plateauWallClockSql('c.created_at')})
+        ORDER BY date_trunc('month', ${plateauWallClockSql('c.created_at')}) DESC`,
       [from, to, statewide, territoryIds],
     ),
   ]);

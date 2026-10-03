@@ -118,6 +118,14 @@ export function plateauDateSql(column: string): string {
 }
 
 /**
+ * The time on a Plateau wall clock of a `timestamptz` column, as a SQL
+ * `timestamp` — for a label a person reads, or a month to group by.
+ */
+export function plateauWallClockSql(column: string): string {
+  return `(${column} AT TIME ZONE '${PLATEAU_TIME_ZONE}')`;
+}
+
+/**
  * The instant a Plateau calendar day begins, as a SQL `timestamptz`.
  *
  * For comparing a bare `timestamptz` column against a day: converting the

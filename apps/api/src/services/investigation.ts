@@ -51,6 +51,7 @@ import {
   scopeParams,
   transactionScopeSql,
 } from './report-scope';
+import { plateauDateSql } from '../lib/calendar-day';
 
 export interface Viewer {
   userId: string;
@@ -347,7 +348,7 @@ export async function globalSearch(
         db,
         `SELECT 'officer' AS kind, u.id::text AS id, u.role AS reference,
                 u.full_name AS title,
-                u.role || COALESCE(' · last seen ' || to_char(u.last_login_at, 'DD Mon YYYY'), '')
+                u.role || COALESCE(' · last seen ' || to_char(${plateauDateSql('u.last_login_at')}, 'DD Mon YYYY'), '')
                   AS subtitle,
                 '/users?officer=' || u.id AS path,
                 NULL AS amount_kobo, u.status, u.created_at::text AS occurred_at

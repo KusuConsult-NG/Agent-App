@@ -1132,3 +1132,95 @@ describe('the first hour of a Plateau day, everywhere else money is counted by d
     if (moved !== null) assert.equal(moved, 4_321_00n, "the agent's screen put it in yesterday");
   });
 });
+
+/**
+ * And where a person reads the date, or a Council reads a month.
+ *
+ * The officer home screens send their dates and times as finished strings,
+ * which the portal prints as they arrive, and the commission report groups by
+ * month. All three were formatted on UTC's clock.
+ */
+describe('a date or a time a person reads, on Plateau’s clock', () => {
+  const shift = (day: string, days: number) =>
+    new Date(Date.parse(`${day}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+
+  const plateauWallClock = (instant: Date) => {
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Africa/Lagos',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      })
+        .formatToParts(instant)
+        .map((part) => [part.type, part.value]),
+    );
+    return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+  };
+
+  it("gives a refused action the time it happened in Jos, on the auditor's home", async () => {
+    // An auditor reads; setting a target is refused, and the refusal is audited.
+    const refused = await setTarget({}, 'auditor');
+    assert.equal(refused.status, 403, 'the fixture needs a refusal to record');
+    const entry = await queryOne<{ created_at: Date }>(
+      pool,
+      `SELECT created_at FROM audit_logs WHERE result = 'DENIED' ORDER BY created_at DESC LIMIT 1`,
+      [],
+    );
+    assert.ok(entry, 'the refusal was recorded');
+
+    const home = await get('/government/home', auth('auditor'));
+    assert.equal(home.status, 200, JSON.stringify(home.body).slice(0, 300));
+    assert.equal(
+      (home.body.work.refusals as { at: string }[])[0]?.at,
+      plateauWallClock(entry!.created_at),
+      'the auditor is shown UTC under "When", an hour behind Jos',
+    );
+  });
+
+  it("shows an invoice's last day as Plateau's date on the revenue officer's home", async () => {
+    // A bill whose payment window closes at 00:30 tomorrow in Jos: in UTC
+    // that is still today, and the list said so.
+    await collect('1');
+    const tomorrow = shift(todayInPlateau(), 1);
+    const deadline = new Date(`${tomorrow}T00:30:00+01:00`);
+    const unpaid = await queryOne<{ id: string }>(
+      pool,
+      `UPDATE invoices SET status = 'UNPAID', amount_paid_kobo = 0, expires_at = $1
+        WHERE id = (SELECT id FROM invoices ORDER BY created_at LIMIT 1)
+        RETURNING id`,
+      [deadline],
+    );
+    assert.ok(unpaid);
+
+    const home = await get('/government/home', auth('revenue_officer'));
+    assert.equal(home.status, 200, JSON.stringify(home.body).slice(0, 300));
+    const row = (home.body.work.expiring as { id: string; expires_on: string }[]).find(
+      (invoice) => invoice.id === unpaid!.id,
+    );
+    assert.equal(row?.expires_on, tomorrow, 'the officer was told it lapses a day early');
+  });
+
+  it('files commission accrued at 00:30 on the first under the month that began', async () => {
+    const { transactionId } = await collect('1');
+    const firstOfMonth = `${shift(`${todayInPlateau().slice(0, 8)}01`, -40).slice(0, 8)}01`;
+    const stamped = await queryOne<{ id: string }>(
+      pool,
+      'UPDATE commissions SET created_at = $2 WHERE transaction_id = $1 RETURNING id',
+      [transactionId, new Date(`${firstOfMonth}T00:30:00+01:00`)],
+    );
+    assert.ok(stamped, 'the collection earned a commission to stamp');
+
+    const report = await get('/government/commissions/by-place', auth('admin'));
+    assert.equal(report.status, 200, JSON.stringify(report.body).slice(0, 300));
+    const periods = (report.body.byPeriod as { period: string }[]).map((row) => row.period);
+    assert.deepEqual(
+      periods,
+      [firstOfMonth.slice(0, 7)],
+      'it was filed under the month before, which had already ended in Jos',
+    );
+  });
+});
