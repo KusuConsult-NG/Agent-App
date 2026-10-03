@@ -1862,8 +1862,9 @@ async function recordReversal(params: {
     // able to appear successful.
     //
     // Only documents that assert payment succeeded are revoked. An invoice is
-    // a demand notice, not evidence of payment, and the reversal puts the
-    // invoice back to UNPAID — it remains a legitimate thing to present.
+    // a demand notice, not evidence of payment, so its document stands; what
+    // becomes of the demand itself is decided below, by whose doing the
+    // reversal was.
     //
     // The acknowledgement is in that set now, and it is the one that matters
     // most in the window this reversal is most likely to be used in. Before
@@ -1897,12 +1898,33 @@ async function recordReversal(params: {
       [transactionId],
     );
 
+    /*
+     * The bill, by whose doing the reversal was.
+     *
+     * Every reversal used to put it back to UNPAID. For one the State caused —
+     * a duplicate assessment, a bill raised against the wrong record, which
+     * is what `attributable_to` defaults to — that refunded the money and then
+     * demanded it again. Measured on a reversed duplicate: the invoice back at
+     * UNPAID, listed on the agent's collection screen with "Take this payment",
+     * which led to TRANSACTION_NOT_PAYABLE because the transaction is REVERSED
+     * and nothing creates another; the taxpayer on the arrears call list; and
+     * their compliance score docked for "₦3,000.00 outstanding". The remedy
+     * this function offers for a wrong amount — "reverse the payment in full
+     * and re-assess" — then billed them a second time beside the first.
+     *
+     * So a reversal the State caused withdraws the demand, as an upheld
+     * objection does. One the taxpayer's bank or the gateway caused leaves it
+     * owed, because it is: the money never stayed with the State. That debt
+     * still cannot be paid against this transaction, and collecting it means
+     * a fresh assessment — which is a gap, and one this does not close.
+     */
     await client.query(
       `UPDATE invoices i
-          SET amount_paid_kobo = 0, status = 'UNPAID'
+          SET amount_paid_kobo = 0,
+              status = CASE WHEN $2::text = 'GOVERNMENT' THEN 'CANCELLED' ELSE 'UNPAID' END
          FROM transactions t
         WHERE t.id = $1 AND i.id = t.invoice_id`,
-      [transactionId],
+      [transactionId, attributableTo],
     );
 
     const commission = await reverseCommissionForTransaction(client, {

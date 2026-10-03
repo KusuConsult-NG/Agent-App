@@ -481,6 +481,51 @@ describe('A reversal says whose doing it was', () => {
     assert.ok(after.score < before.score, 'and the score they are judged on should fall');
   });
 
+  /*
+   * What becomes of the bill. A reversal the State caused — a duplicate, a
+   * bill raised against the wrong record, and what silence defaults to — put
+   * the invoice back to UNPAID, so the citizen was refunded and then asked
+   * for the same money again, through a transaction no payment could reach.
+   */
+  it('withdraws the bill when the reversal was the State’s own doing', async () => {
+    const collected = await collect('11');
+    assert.equal((await reverse(collected.transactionId)).status, 200);
+
+    const invoice = await queryOne<{ status: string }>(
+      pool,
+      'SELECT i.status FROM invoices i JOIN transactions t ON t.invoice_id = i.id WHERE t.id = $1',
+      [collected.transactionId],
+    );
+    assert.equal(invoice?.status, 'CANCELLED', 'the duplicate was refunded and then demanded again');
+
+    const owed = await get(`/revenue/taxpayers/${collected.taxpayerId}/obligations`, {
+      token: requester,
+    });
+    assert.equal(owed.status, 200, JSON.stringify(owed.body));
+    assert.deepEqual(owed.body, [], 'and still offered to the agent as a payment to take');
+
+    const outstanding = (await scoreFor(collected.taxpayerId)).components.find((c) =>
+      c.factor.toLowerCase().includes('outstanding'),
+    );
+    assert.equal(outstanding?.points, 25, `and still docked on the score: ${outstanding?.detail}`);
+  });
+
+  it('leaves the bill owed when the money was recalled on the taxpayer’s side or by the gateway', async () => {
+    // The control: those debts are real, because the money never stayed with
+    // the State. Withdrawing them would let a chargeback write a bill off.
+    for (const [suffix, attributableTo] of [['12', 'TAXPAYER'], ['13', 'GATEWAY']] as const) {
+      const collected = await collect(suffix);
+      const executed = await reverse(collected.transactionId, { attributableTo });
+      assert.equal(executed.status, 200, JSON.stringify(executed.body));
+      const invoice = await queryOne<{ status: string }>(
+        pool,
+        'SELECT i.status FROM invoices i JOIN transactions t ON t.invoice_id = i.id WHERE t.id = $1',
+        [collected.transactionId],
+      );
+      assert.equal(invoice?.status, 'UNPAID', `${attributableTo}: a real debt was written off`);
+    }
+  });
+
   it('refuses an attribution it does not recognise rather than guessing', async () => {
     const collected = await collect('10');
     const refused = await reverse(collected.transactionId, { attributableTo: 'THE_WEATHER' });
