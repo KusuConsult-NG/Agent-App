@@ -15,6 +15,7 @@ import type { PoolClient } from 'pg';
 import { parseKobo, formatNaira, assertTransactionTransition, type Kobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
+import { UNDER_OPEN_OBJECTION_SQL } from '../lib/enforcement-suspended';
 import { conflict, forbidden, notFound, refused } from '../lib/errors';
 import { generateVerificationCode } from '../lib/crypto';
 import { escapeLike } from '../lib/like';
@@ -756,10 +757,35 @@ export async function transitionTransaction(
  * deliberately exclude it.
  */
 export async function getObligations(db: Db, taxpayerId: string) {
+  /*
+   * AND WHETHER THE STATE HAS AGREED NOT TO PURSUE IT.
+   *
+   * `lib/enforcement-suspended.ts` records four readers of the open-objection
+   * rule, three of them once wrong, and predicts "a fifth reader that forgets
+   * to ask is still possible". This was it. The agent's collection screen
+   * reads this list and shows each invoice with its amount, an UNPAID badge
+   * and a "Take this payment" button — and for an invoice the trader had
+   * formally objected to, the row was identical before and after the
+   * objection. Measured: one obligation, UNPAID, no field mentioning it.
+   *
+   * So an agent at the stall, paid commission on what they collect, was one
+   * tap from collecting money the State had promised not to pursue while the
+   * objection is decided — the most direct form of the enforcement an
+   * objection suspends.
+   *
+   * The invoice stays on this list. Disputed money is still owed, and that
+   * module draws the line at queries that act against the taxpayer rather
+   * than describe the ledger; hiding it would also make "nothing is
+   * outstanding" true, which is what tells an agent to raise a second
+   * assessment for the same debt. What changes is that the row now says it is
+   * under objection, by the same shared fragment every other reader uses — so
+   * this reader cannot come to a different answer than the rest.
+   */
   return query(
     db,
     `SELECT i.id AS invoice_id, i.invoice_number, i.total_amount_kobo, i.amount_paid_kobo,
             i.status, i.expires_at, i.issued_at,
+            ${UNDER_OPEN_OBJECTION_SQL} AS under_objection,
             a.assessment_number, a.period_label,
             ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
             rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,

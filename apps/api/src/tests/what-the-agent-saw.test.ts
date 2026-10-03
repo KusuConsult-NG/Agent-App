@@ -39,6 +39,7 @@ import {
 import { queryOne, query } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
+import { getObligations } from '../services/revenue';
 import {
   assessFromObservation,
   attestObservation,
@@ -746,6 +747,82 @@ describe('objecting to it', () => {
       false,
       'a disputed estimate is not chased while it is disputed',
     );
+  });
+
+  /*
+   * What the agent is shown at the stall, which the case above did not cover.
+   *
+   * The arrears worklist was the only reader this file held to the rule. The
+   * agent's collection screen reads `getObligations`, and before the fix it
+   * returned an identical row before and after the objection — one UNPAID
+   * invoice with nothing on it to say it was disputed — beside a button
+   * offering to take the payment. `lib/enforcement-suspended.ts` predicted a
+   * fifth reader that forgot to ask; this was it.
+   */
+  it('shows the agent a disputed invoice as disputed', async () => {
+    const { taxpayer, assessment } = await assessed('Disputing Trader');
+
+    const before = (await getObligations(pool, taxpayer)) as { under_objection: boolean }[];
+    assert.equal(before.length, 1, 'the fixture must produce an invoice or nothing here means anything');
+    assert.equal(before[0]!.under_objection, false, 'nothing is disputed yet');
+
+    await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'The stall is half the size recorded.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    const after = (await getObligations(pool, taxpayer)) as { under_objection: boolean }[];
+    assert.equal(
+      after[0]!.under_objection,
+      true,
+      'an agent at the stall must be able to see that this one is not to be pressed for',
+    );
+  });
+
+  it('still lists the disputed invoice, so the agent does not raise it again', async () => {
+    /*
+     * The bound in one direction. Hiding the invoice would make "nothing is
+     * outstanding" true — the sentence that tells an agent to raise a new
+     * charge — and the trader would then owe the same levy twice.
+     */
+    const { taxpayer, assessment } = await assessed('Still Listed');
+    await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'There is no apprentice.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    const listed = (await getObligations(pool, taxpayer)) as { status: string }[];
+    assert.equal(listed.length, 1, 'disputed money is still owed, and still on the list');
+    assert.equal(listed[0]!.status, 'UNPAID');
+  });
+
+  it('stops marking it once the objection is rejected', async () => {
+    // The bound in the other direction: the mark follows the objection, not
+    // the invoice, so a rejected objection puts the debt back in reach.
+    const { taxpayer, assessment } = await assessed('Rejected Objector');
+    const objection = await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'The machines are borrowed.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    await decideObjection(pool, {
+      objectionId: objection.id,
+      uphold: false,
+      reason: 'Re-checked on site; the machines are the trader’s own.',
+      actorId: secondOfficerId,
+      actorRole: 'admin',
+    });
+
+    const after = (await getObligations(pool, taxpayer)) as { under_objection: boolean }[];
+    assert.equal(after[0]!.under_objection, false, 'decided, and no longer suspended');
   });
 
   it('marks the assessment objected, and settled again once decided', async () => {

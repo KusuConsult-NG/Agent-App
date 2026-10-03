@@ -68,6 +68,14 @@ interface Quote {
  * one the money was for.
  */
 interface Obligation {
+  /**
+   * The trader has formally objected and the objection is still open.
+   *
+   * Optional so an older API degrades to the screen it had before rather than
+   * marking nothing. When true, PSIRS is not pursuing this invoice while the
+   * objection is decided, and this screen must not invite the agent to.
+   */
+  under_objection?: boolean;
   invoice_id: string;
   invoice_number: string;
   total_amount_kobo: string;
@@ -483,14 +491,38 @@ export function CollectScreen({
                         · <Badge status={row.status} />
                       </p>
                     </div>
-                    {row.transaction_reference && (
-                      <button
-                        type="button"
-                        className="small secondary"
-                        onClick={() => navigate(`/transactions/${row.transaction_reference}`)}
-                      >
-                        {t.colTakeThisPayment}
-                      </button>
+                    {/*
+                      * A disputed invoice is shown, and not offered for
+                      * collection.
+                      *
+                      * It stays in the list because it is still owed, and
+                      * because hiding it is what would push the agent into
+                      * raising a second assessment for the same levy. But
+                      * the trader has formally objected, and while the
+                      * objection is open PSIRS does not pursue it — so the
+                      * one-tap "Take this payment" is replaced by a sentence
+                      * saying so. An agent paid commission on collections is
+                      * the last person the platform should put one tap away
+                      * from a disputed debt.
+                      *
+                      * A trader who wants to pay under protest can still do
+                      * so through an officer. That is a deliberate trade:
+                      * the default at the stall must not be enforcement.
+                      */}
+                    {row.under_objection ? (
+                      <p className="list__meta" style={{ margin: '4px 0 0' }}>
+                        <strong>{t.colUnderObjection}</strong> — {t.colUnderObjectionBody}
+                      </p>
+                    ) : (
+                      row.transaction_reference && (
+                        <button
+                          type="button"
+                          className="small secondary"
+                          onClick={() => navigate(`/transactions/${row.transaction_reference}`)}
+                        >
+                          {t.colTakeThisPayment}
+                        </button>
+                      )
                     )}
                   </li>
                 ))}

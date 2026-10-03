@@ -2750,6 +2750,8 @@ export interface TranslationDictionary {
   colOwesUnknown: string;
   colOwesUnknownBody: string;
   colTakeThisPayment: string;
+  colUnderObjection: string;
+  colUnderObjectionBody: string;
   colChargeRaisedTitle: string;
   colChargeRaisedBody: string;
   colOpenCharge: string;
@@ -6507,6 +6509,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     colOwesUnknown: "Their open invoices could not be read",
     colOwesUnknownBody: "Nothing here says they owe nothing; it says the platform could not tell you. Raising a charge now risks charging twice for the same levy.",
     colTakeThisPayment: "Take this payment",
+    colUnderObjection: "Under objection",
+    colUnderObjectionBody: "the trader has formally disputed this estimate. PSIRS is not pursuing it while the objection is decided, so do not ask for this payment.",
     colChargeRaisedTitle: "The charge was raised. The payment was not.",
     colChargeRaisedBody:
       "Transaction {{reference}} now exists and the taxpayer owes it. Do not work this out again — a second attempt raises a second charge for the same thing, and both would have to be paid. Open the transaction to give them the invoice or to start the payment again.",
@@ -10067,6 +10071,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     colOwesUnknown: "Ba a iya karanta takardun biyansu ba",
     colOwesUnknownBody: "Wannan ba ya nufin ba su da bashi; yana nufin dandalin bai iya gaya maka ba. Yin sabon caji yanzu na iya haifar da cajin abu daya sau biyu.",
     colTakeThisPayment: "Karbi wannan biyan",
+    colUnderObjection: "Ana kalubalanta",
+    colUnderObjectionBody: "mai sana’ar ya kalubalanci wannan kiyasi a hukumance. PSIRS ba ta neman wannan kudi har sai an yanke hukunci kan kalubalen, don haka kada a nemi wannan biyan.",
     colChargeRaisedTitle: "An yi kimantawa, amma ba a fara biyan kudi ba.",
     colChargeRaisedBody:
       "Ma’amala {{reference}} ta wanzu yanzu kuma mai biyan haraji na bin ta. Kada ka sake lissafa wannan — sake gwadawa zai haifar da kimantawa ta biyu a kan abu daya, kuma za a bukaci a biya dukansu. Ka bude ma’amalar domin ba shi takardar biya ko ka sake fara biyan kudin.",
