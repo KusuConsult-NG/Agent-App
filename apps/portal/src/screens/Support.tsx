@@ -22,7 +22,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
 import { Alert, Badge, Empty, ErrorAlert, KeyValue, Loading, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
-import { enumLabel } from '@psirs/shared';
+import { CONDUCT_CATEGORIES, enumLabel } from '@psirs/shared';
 
 interface TicketSummary {
   id: string;
@@ -58,11 +58,33 @@ interface TicketDetail extends TicketSummary {
 
 
 /** Complaints about the collection itself, which need to be seen as such. */
-const CONDUCT_CATEGORIES = new Set(['AGENT_MISCONDUCT', 'UNAUTHORISED_CHARGE']);
+/*
+ * The shared set, not a local one.
+ *
+ * This was a `Set` literal here while the count was done in the browser. It
+ * is counted in SQL now — over every matching ticket rather than the fifty
+ * this list carries — and the server needs the same definition. Two copies of
+ * what counts as a complaint about conduct is how the banner and the figure
+ * above it would come to disagree.
+ */
+const CONDUCT = new Set<string>(CONDUCT_CATEGORIES);
 
 export function SupportScreen({ navigate }: { navigate: (path: string) => void }) {
   const { t } = usePortalI18n();
   const [tickets, setTickets] = useState<TicketSummary[] | null>(null);
+  /**
+   * The figures as the server counted them, over every matching ticket.
+   *
+   * `null` means an API that still answers with a bare array, and the count
+   * falls back to the page. Never to a nought: a zero here removes the
+   * conduct banner entirely, which is the failure
+   * `a-complaint-nobody-saw` was written for.
+   */
+  const [size, setSize] = useState<{
+    matched: number;
+    conductOpen: number;
+    cap: number;
+  } | null>(null);
   const [status, setStatus] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
@@ -71,8 +93,31 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
     setTickets(null);
     setLoadError(null);
     api
-      .get<TicketSummary[]>(`/support/tickets${status ? `?status=${status}` : ''}`)
-      .then(setTickets)
+      .get<
+        | TicketSummary[]
+        | { tickets: TicketSummary[]; matched?: number; conductOpen?: number; cap?: number }
+      >(`/support/tickets${status ? `?status=${status}` : ''}`)
+      .then((answer) => {
+        /*
+         * An array or an envelope. This endpoint answered with a bare array
+         * until the conduct count moved to the server, and a screen that read
+         * only one of the two shapes would print an empty queue against the
+         * other — which is the very failure the catch below exists to prevent.
+         */
+        const list = Array.isArray(answer) ? answer : answer.tickets;
+        setTickets(list);
+        setSize(
+          Array.isArray(answer)
+            ? null
+            : {
+                matched: answer.matched ?? list.length,
+                conductOpen:
+                  answer.conductOpen ??
+                  list.filter((t) => CONDUCT.has(t.category) && t.status !== 'CLOSED').length,
+                cap: answer.cap ?? 0,
+              },
+        );
+      })
       /*
        * `setTickets([])` printed "No tickets match this filter." from a request
        * that failed — and took the conduct banner with it, which is the part
@@ -87,17 +132,41 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
 
   useEffect(load, [load]);
 
+  /*
+   * The complaints on this page, and how many there are altogether.
+   *
+   * `conduct` still drives the list of subjects in the banner — those can only
+   * be the ones on the page, because the page is all the screen has. The
+   * FIGURE is the server's, over every matching ticket: the list is capped at
+   * fifty, and on sixty open tickets with twenty complaints among them this
+   * banner said sixteen.
+   *
+   * So the banner now fires on the count rather than on the page, which is
+   * what makes a complaint beyond the cap visible at all.
+   */
   const conduct = (tickets ?? []).filter(
-    (ticket) => CONDUCT_CATEGORIES.has(ticket.category) && ticket.status !== 'CLOSED',
+    (ticket) => CONDUCT.has(ticket.category) && ticket.status !== 'CLOSED',
   );
+  const conductOpen = size?.conductOpen ?? conduct.length;
+  const unseen = Math.max(0, conductOpen - conduct.length);
 
   return (
     <>
       <ErrorAlert error={error} />
 
-      {conduct.length > 0 && (
-        <Alert kind="warning" title={{ text: t.ofcSpOpenComplaints.replace('{{n}}', String(conduct.length)) }}>
+      {conductOpen > 0 && (
+        <Alert kind="warning" title={{ text: t.ofcSpOpenComplaints.replace('{{n}}', String(conductOpen)) }}>
           <p style={{ margin: 0 }}>{t.ofcSpAboutRevenue}</p>
+          {/*
+            * Where the rest of them are. Without this the banner counts
+            * twenty and the table under it lists sixteen, and the reader is
+            * left to decide which number to believe.
+            */}
+          {unseen > 0 && (
+            <p style={{ margin: '6px 0 0' }}>
+              {t.ofcSpComplaintsBeyondThisPage.replace('{{n}}', String(unseen))}
+            </p>
+          )}
         </Alert>
       )}
 

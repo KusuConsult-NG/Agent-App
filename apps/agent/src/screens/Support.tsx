@@ -74,8 +74,19 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
 
   useEffect(() => {
     api
-      .get<TicketSummary[]>('/support/tickets')
-      .then(setTickets)
+      .get<TicketSummary[] | { tickets: TicketSummary[] }>('/support/tickets')
+      /*
+       * An array or an envelope.
+       *
+       * The officer portal counts open conduct complaints out of this same
+       * endpoint, and did it in the browser over a page capped at fifty — so
+       * the list now travels beside its own totals. An agent has no use for
+       * those figures; what matters here is that the shape change does not
+       * leave this screen showing nothing to an agent checking whether the
+       * problem they reported is being dealt with, which is the failure the
+       * note above is about.
+       */
+      .then((answer) => setTickets(Array.isArray(answer) ? answer : answer.tickets))
       .catch((caught) => {
         setLoadError(asApiError(caught));
       });

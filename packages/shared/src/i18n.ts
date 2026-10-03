@@ -1171,6 +1171,7 @@ export interface TranslationDictionary {
   ofcUsViews: string;
   ofcGpConfirmationLinkFor: string;
   ofcSpOpenComplaints: string;
+  ofcSpComplaintsBeyondThisPage: string;
 
   /**
    * The support desk an agent's report lands in, and the groups and
@@ -4991,6 +4992,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcUsViews: "Views",
     ofcGpConfirmationLinkFor: "Confirmation link for {{group}}",
     ofcSpOpenComplaints: "{{n}} open complaint(s) about conduct or charges",
+    ofcSpComplaintsBeyondThisPage: "{{n}} of them are not in the table below, which shows the most urgent and the most recent. Filter by category to work through the rest.",
     ofcSpAboutRevenue: "These are reports about how revenue was collected, not about the platform. They are listed first below.",
     ofcSpSupportQueue: "Support queue",
     ofcSpQueueIntro: "Ordered by priority. A ticket is answered in its thread — a status change on its own tells the person who reported it nothing.",
@@ -8548,6 +8550,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcUsViews: "Kallo",
     ofcGpConfirmationLinkFor: "Hanyar tabbatarwa ta {{group}}",
     ofcSpOpenComplaints: "Korafe-korafe {{n}} a bude kan hali ko kudi",
+    ofcSpComplaintsBeyondThisPage: "Daga cikinsu, {{n}} ba sa cikin teburin da ke kasa, wanda ke nuna wadanda suka fi gaggawa da na baya-bayan nan. A tace da nau’i domin a bi sauran.",
     ofcSpAboutRevenue: "Wadannan rahotanni ne kan yadda aka karbi haraji, ba kan dandalin ba. An jera su a farko a kasa.",
     ofcSpSupportQueue: "Jerin gwanon taimako",
     ofcSpQueueIntro: "An jera bisa muhimmanci. Ana amsa rahoto a cikin zaren sa — canza matsayi kadai ba ya gaya wa wanda ya kai rahoton komai.",
