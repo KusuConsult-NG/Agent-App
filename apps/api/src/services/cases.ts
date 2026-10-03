@@ -183,13 +183,21 @@ function assertOpen(row: CaseRow): void {
  * Attaching evidence and adding a comment are additive: two landing together
  * is two things happening, which is what the record should say.
  */
-async function lockCase(
-  client: PoolClient,
-  id: string,
-): Promise<{ status: string; case_number: string; assignee_id: string | null }> {
-  const row = await queryOne<{ status: string; case_number: string; assignee_id: string | null }>(
+interface LockedCase {
+  status: string;
+  case_number: string;
+  assignee_id: string | null;
+  department: string | null;
+  department_id: string | null;
+  priority: string;
+  due_at: Date | null;
+}
+
+async function lockCase(client: PoolClient, id: string): Promise<LockedCase> {
+  const row = await queryOne<LockedCase>(
     client,
-    'SELECT status, case_number, assignee_id FROM cases WHERE id = $1 FOR UPDATE',
+    `SELECT status, case_number, assignee_id, department, department_id, priority, due_at
+       FROM cases WHERE id = $1 FOR UPDATE`,
     [id],
   );
   if (!row) throw notFound('That case');
@@ -688,15 +696,18 @@ export async function assign(
   assertMayWork(viewer, row);
   if (input.assigneeId) await assertAssignable(db, input.assigneeId);
 
-  const department = input.department === undefined ? row.department : input.department;
-  const departmentId =
-    input.departmentId === undefined ? row.department_id : input.departmentId;
 
-  if (departmentId && departmentId !== row.department_id) {
+  /*
+   * Whenever the caller names one, rather than when it differs from the row
+   * read above. That comparison skipped the check when the named department
+   * matched a value another request had already moved on from, and naming the
+   * department the case is already in costs one read to confirm it is open.
+   */
+  if (input.departmentId) {
     const target = await queryOne<{ status: string; name: string }>(
       db,
       'SELECT status, name FROM departments WHERE id = $1',
-      [departmentId],
+      [input.departmentId],
     );
     if (!target) throw notFound('That department');
     /*
@@ -710,11 +721,37 @@ export async function assign(
     }
   }
 
-  const routed =
-    (input.department !== undefined && input.department !== row.department) ||
-    (input.departmentId !== undefined && input.departmentId !== row.department_id);
-
   await withTransaction(async (client) => {
+    /*
+     * The fields the caller did not name come from the locked row, not from
+     * the one read before the transaction.
+     *
+     * They were derived from that earlier read, so an officer routing a case
+     * to Finance while another assigned it to a person lost the routing — to a
+     * write that never mentioned it. The audit entry recorded the department
+     * from before the routing too, which is a claim about a state this request
+     * never saw.
+     *
+     * Last-writer-wins stays, and is right: an assignment names its target, so
+     * a case moving under it does not invalidate the intent. What it must not
+     * do is carry a stale value for everything it was silent about.
+     */
+    const current = await lockCase(client, caseId);
+    if (TERMINAL.includes(current.status)) {
+      throw conflict(
+        'CASE_CLOSED',
+        `Case ${current.case_number} is ${current.status.toLowerCase()} and cannot be changed.`,
+        'Open a new case that links to this one.',
+      );
+    }
+
+    const department = input.department === undefined ? current.department : input.department;
+    const departmentId =
+      input.departmentId === undefined ? current.department_id : input.departmentId;
+    const routed =
+      (input.department !== undefined && input.department !== current.department) ||
+      (input.departmentId !== undefined && input.departmentId !== current.department_id);
+
     await client.query(
       `UPDATE cases
           SET assignee_id = $2, department = $3, department_id = $4, updated_at = now()
@@ -725,9 +762,9 @@ export async function assign(
       kind: routed ? 'ROUTED' : 'ASSIGNMENT',
       body: input.reason?.trim() ?? '',
       oldValue: {
-        assigneeId: row.assignee_id,
-        department: row.department,
-        departmentId: row.department_id,
+        assigneeId: current.assignee_id,
+        department: current.department,
+        departmentId: current.department_id,
       },
       newValue: { assigneeId: input.assigneeId, department, departmentId },
     });
@@ -738,9 +775,9 @@ export async function assign(
       entityType: 'case',
       entityId: caseId,
       oldValue: {
-        assigneeId: row.assignee_id,
-        department: row.department,
-        departmentId: row.department_id,
+        assigneeId: current.assignee_id,
+        department: current.department,
+        departmentId: current.department_id,
       },
       newValue: { assigneeId: input.assigneeId, department, departmentId },
       reason: input.reason?.trim() || null,
@@ -963,27 +1000,48 @@ export async function setPriority(
   assertOpen(row);
   assertMayWork(viewer, row);
 
-  const priority = input.priority ?? row.priority;
-  const dueAt = input.dueAt === undefined ? row.due_at : input.dueAt;
-
   await withTransaction(async (client) => {
+    /*
+     * Both fields are written every time, so both must come from the locked
+     * row when the caller named only one of them.
+     *
+     * They came from the read above, which happens on the pool before this
+     * transaction exists. One officer raising the priority and another setting
+     * a due date therefore each wrote the other's field back as they had found
+     * it, and whichever committed second silently undid the first — a change
+     * lost to a request that never mentioned the field it overwrote. The
+     * timeline recorded the stale value as the old one too, which is a claim
+     * about a state the request never saw.
+     */
+    const current = await lockCase(client, caseId);
+    if (TERMINAL.includes(current.status)) {
+      throw conflict(
+        'CASE_CLOSED',
+        `Case ${current.case_number} is ${current.status.toLowerCase()} and cannot be changed.`,
+        'Open a new case that links to this one.',
+      );
+    }
+
+    const priority = input.priority ?? current.priority;
+    const dueAt = input.dueAt === undefined ? current.due_at : input.dueAt;
+
     await client.query(
       'UPDATE cases SET priority = $2, due_at = $3, updated_at = now() WHERE id = $1',
       [caseId, priority, dueAt],
     );
-    if (priority !== row.priority) {
+    if (priority !== current.priority) {
       await append(client, caseId, viewer, {
         kind: 'PRIORITY_CHANGE',
         body: input.reason?.trim() ?? '',
-        oldValue: { priority: row.priority },
+        oldValue: { priority: current.priority },
         newValue: { priority },
       });
     }
-    if (input.dueAt !== undefined && String(dueAt) !== String(row.due_at)) {
+    if (input.dueAt !== undefined && String(dueAt) !== String(current.due_at)) {
       await append(client, caseId, viewer, {
         kind: 'DUE_DATE_CHANGE',
         body: input.reason?.trim() ?? '',
-        oldValue: { dueAt: row.due_at },
+        oldValue: { dueAt: current.due_at },
         newValue: { dueAt },
       });
     }

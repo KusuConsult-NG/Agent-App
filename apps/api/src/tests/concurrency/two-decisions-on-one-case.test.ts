@@ -236,3 +236,230 @@ describe('two escalations of one case, arriving together', () => {
     );
   });
 });
+
+describe('a case routed while it is being assigned', () => {
+  /*
+   * `assign` is right to let the last writer win: an assignment names its
+   * target, so a case moving under it does not invalidate the intent. What it
+   * had wrong is the fields the caller did not name. They were derived from
+   * the stale row —
+   *
+   *     const department = input.department === undefined ? row.department : …
+   *
+   * — so an officer routing a case to Finance while another assigns it to a
+   * person lost the routing, to a write that never mentioned it. A lost
+   * update rather than a guard that failed, and the audit entry recorded
+   * `oldValue.department` as the value before the routing, which is a claim
+   * about a state this request never saw.
+   */
+  it('keeps the routing a concurrent assignment never mentioned', async () => {
+    /*
+     * The window, forced rather than hoped for.
+     *
+     * Two simultaneous requests do not reliably interleave the way this
+     * defect needs — six runs of `Promise.all` never caught it — so the test
+     * holds the case row itself and lets the database do the ordering:
+     *
+     *   1. The test opens a transaction and locks the case.
+     *   2. An assignment naming only an assignee is fired. It reads the case
+     *      on the pool, unblocked, and sees the department as it is now. Its
+     *      UPDATE then waits for the lock.
+     *   3. The test routes the case to Finance and commits.
+     *   4. The assignment's UPDATE proceeds — and wrote back the department it
+     *      read in step 2.
+     *
+     * The wait in step 2 is only there to let the read happen before the
+     * routing; the lock is what makes the write order certain. The audit entry
+     * is asserted as well, because it is what proves the interleaving actually
+     * occurred rather than the test having raced past its own setup.
+     */
+    // Looked up here rather than in a hook: `resetDatabase` recreates the
+    // officers for every test, so an id captured once goes stale.
+    const assignee = await queryOne<{ id: string }>(
+      pool,
+      'SELECT id FROM users WHERE phone = $1',
+      ['+2348089900002'],
+    );
+    const assigneeId = assignee!.id;
+
+    const holder = await pool.connect();
+    let assignment: Promise<unknown>;
+    let settled = false;
+    try {
+      await holder.query('BEGIN');
+      await holder.query('SELECT id FROM cases WHERE id = $1 FOR UPDATE', [caseId]);
+
+      assignment = post(
+        `/government/cases/${caseId}/assign`,
+        { assigneeId },
+        { token: auditorToken },
+      );
+      void assignment.then(() => {
+        settled = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      /*
+       * The interleaving, proved rather than assumed.
+       *
+       * If the assignment had already finished there would be no window and
+       * the outcome below would be meaningless. It cannot have finished: its
+       * write needs the row this test is holding. Asserted because a test that
+       * races past its own setup passes for the wrong reason, which is the
+       * failure mode of every concurrency test in this directory.
+       */
+      assert.equal(
+        settled,
+        false,
+        'the assignment completed before the routing, so this run never opened the window',
+      );
+
+      await holder.query(`UPDATE cases SET department = 'finance_officer' WHERE id = $1`, [
+        caseId,
+      ]);
+      await holder.query('COMMIT');
+    } finally {
+      holder.release();
+    }
+
+    const landed = (await assignment) as { status: number; body: unknown };
+    assert.ok(
+      [200, 204].includes(landed.status),
+      `the assignment itself was refused: ${JSON.stringify(landed)}`,
+    );
+
+    const current = await queryOne<{ department: string | null; assignee_id: string | null }>(
+      pool,
+      'SELECT department, assignee_id FROM cases WHERE id = $1',
+      [caseId],
+    );
+    assert.equal(
+      current!.department,
+      'finance_officer',
+      'the routing was reverted by an assignment that said nothing about it',
+    );
+    assert.equal(current!.assignee_id, assigneeId, 'and the assignment itself still landed');
+  });
+
+  it('does not assign a case that was resolved while it waited', async () => {
+    /*
+     * The same window, with the case closing in it rather than being routed.
+     * `assertOpen` runs on the read taken before the transaction, so without
+     * the locked re-check an assignment could land on a case somebody had
+     * just resolved — and the timeline would carry an assignment after its
+     * own resolution.
+     */
+    const assignee = await queryOne<{ id: string }>(
+      pool,
+      'SELECT id FROM users WHERE phone = $1',
+      ['+2348089900002'],
+    );
+
+    const holder = await pool.connect();
+    let assignment: Promise<unknown>;
+    let settled = false;
+    try {
+      await holder.query('BEGIN');
+      await holder.query('SELECT id FROM cases WHERE id = $1 FOR UPDATE', [caseId]);
+
+      assignment = post(
+        `/government/cases/${caseId}/assign`,
+        { assigneeId: assignee!.id },
+        { token: auditorToken },
+      );
+      void assignment.then(() => {
+        settled = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      assert.equal(settled, false, 'this run never opened the window');
+
+      // `case_resolution_stated` requires all three together, which is the
+      // point of it: a resolved case says what it concluded and when.
+      await holder.query(
+        `UPDATE cases
+            SET status = 'RESOLVED',
+                resolution = 'Closed while an assignment waited.',
+                resolved_at = now()
+          WHERE id = $1`,
+        [caseId],
+      );
+      await holder.query('COMMIT');
+    } finally {
+      holder.release();
+    }
+
+    const refused = (await assignment) as { status: number; body: { error: { code: string } } };
+    assert.equal(
+      refused.status,
+      409,
+      `the assignment landed on a resolved case: ${JSON.stringify(refused)}`,
+    );
+    assert.equal(refused.body.error.code, 'CASE_CLOSED');
+
+    const held = await queryOne<{ assignee_id: string | null }>(
+      pool,
+      'SELECT assignee_id FROM cases WHERE id = $1',
+      [caseId],
+    );
+    assert.equal(held!.assignee_id, null, 'and nobody was given a case that had been closed');
+  });
+});
+
+describe('a due date set while the priority is being raised', () => {
+  /*
+   * `setPriority` writes both columns every time, and took the one the caller
+   * did not name from the read above its transaction. Two officers — one
+   * raising the priority, one setting a due date — each wrote the other's
+   * field back as they had found it, and whichever committed second undid the
+   * first. The change was lost to a request that never mentioned the field it
+   * overwrote, and the timeline recorded the stale value as the old one.
+   *
+   * Forced the same way as the assignment above: the test holds the row, so
+   * the database decides the write order rather than the scheduler.
+   */
+  it('keeps the due date a concurrent priority change never mentioned', async () => {
+    const holder = await pool.connect();
+    let change: Promise<unknown>;
+    let settled = false;
+    const due = '2027-03-31';
+    try {
+      await holder.query('BEGIN');
+      await holder.query('SELECT id FROM cases WHERE id = $1 FOR UPDATE', [caseId]);
+
+      change = post(
+        `/government/cases/${caseId}/priority`,
+        { priority: 'URGENT' },
+        { token: auditorToken },
+      );
+      void change.then(() => {
+        settled = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      assert.equal(settled, false, 'this run never opened the window');
+
+      await holder.query('UPDATE cases SET due_at = $2 WHERE id = $1', [caseId, due]);
+      await holder.query('COMMIT');
+    } finally {
+      holder.release();
+    }
+
+    const landed = (await change) as { status: number; body: unknown };
+    assert.ok(
+      [200, 204].includes(landed.status),
+      `the priority change was refused: ${JSON.stringify(landed)}`,
+    );
+
+    const current = await queryOne<{ priority: string; due_at: Date | null }>(
+      pool,
+      'SELECT priority, due_at FROM cases WHERE id = $1',
+      [caseId],
+    );
+    assert.equal(current!.priority, 'URGENT', 'the priority change itself landed');
+    assert.ok(current!.due_at, 'the due date was erased by a change that never mentioned it');
+    assert.equal(
+      new Date(current!.due_at!).toISOString().slice(0, 10),
+      due,
+      'the due date was reverted by a change that never mentioned it',
+    );
+  });
+});
