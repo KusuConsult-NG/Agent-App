@@ -168,9 +168,19 @@ export async function executiveDashboard(
            WHERE t.status IN ('FAILED','CANCELLED','EXPIRED') AND ${tx}) AS failed_transactions,
          (SELECT count(*)::text FROM transactions t
            WHERE t.status = 'RECONCILIATION_PENDING' AND ${tx}) AS pending_reconciliation,
+         -- ON_HOLD included, and it was not. The tile this feeds is labelled
+         -- "Commission liability" over the hint "Accrued and not yet paid",
+         -- and a held commission is both: a hold moves PENDING and ELIGIBLE
+         -- rows to ON_HOLD and a release moves them back to PENDING, so what
+         -- changes when an investigation opens is whether the money may be
+         -- paid yet, not whether it is owed. Confirming a fraud flag used to
+         -- reduce the State's stated liability by the amount under
+         -- investigation. A commission that proves fraudulent is REVERSED,
+         -- and leaves this figure then.
          (SELECT COALESCE(SUM(c.amount_kobo),0)::text FROM commissions c
            LEFT JOIN transactions t ON t.id = c.transaction_id
-           WHERE c.status IN ('PENDING','ELIGIBLE','APPROVED') AND ${tx}) AS commission_liability_kobo,
+           WHERE c.status IN ('PENDING','ELIGIBLE','ON_HOLD','APPROVED') AND ${tx})
+           AS commission_liability_kobo,
          (SELECT COALESCE(SUM(c.amount_kobo),0)::text FROM commissions c
            LEFT JOIN transactions t ON t.id = c.transaction_id
            WHERE c.status = 'PAID' AND ${tx}) AS commission_paid_kobo,
@@ -1437,8 +1447,12 @@ export async function financeOfficerHome(db: Db) {
        (SELECT count(*)::text FROM settlements WHERE reconciled_at IS NULL) AS settlements_unreconciled,
        (SELECT COALESCE(SUM(expected_amount_kobo - received_amount_kobo),0)::text
           FROM settlements WHERE reconciled_at IS NULL) AS settlement_variance_kobo,
+       -- ON_HOLD included, for the reason written out in executiveDashboard:
+       -- money frozen by an investigation is accrued and unpaid, which is
+       -- what this tile says it counts.
        (SELECT COALESCE(SUM(amount_kobo),0)::text FROM commissions
-         WHERE status IN ('PENDING','ELIGIBLE','APPROVED')) AS commission_liability_kobo,
+         WHERE status IN ('PENDING','ELIGIBLE','ON_HOLD','APPROVED'))
+         AS commission_liability_kobo,
        (SELECT count(*)::text FROM commission_payouts WHERE status = 'REQUESTED')
          AS payouts_awaiting_approval,
        -- Every refund the taxpayer has not had. This read PENDING and
@@ -2075,8 +2089,13 @@ export async function commissionByPlaceAndPeriod(
               count(c.id)::text AS commissions,
               COALESCE(SUM(c.amount_kobo),0)::text AS accrued_kobo,
               COALESCE(SUM(c.amount_kobo) FILTER (WHERE c.status = 'PAID'),0)::text AS paid_kobo,
+              -- ON_HOLD included. Without it this row does not add up: a
+              -- Council reading accrued, paid, outstanding and reversed finds
+              -- a remainder with no column, and the remainder is exactly the
+              -- commission frozen by an open investigation.
               COALESCE(SUM(c.amount_kobo) FILTER (
-                WHERE c.status IN ('PENDING','ELIGIBLE','APPROVED')),0)::text AS outstanding_kobo,
+                WHERE c.status IN ('PENDING','ELIGIBLE','ON_HOLD','APPROVED')),0)::text
+                AS outstanding_kobo,
               COALESCE(SUM(c.amount_kobo) FILTER (WHERE c.status = 'REVERSED'),0)::text
                 AS reversed_kobo
          FROM commissions c
@@ -2092,8 +2111,10 @@ export async function commissionByPlaceAndPeriod(
               count(c.id)::text AS commissions,
               COALESCE(SUM(c.amount_kobo),0)::text AS accrued_kobo,
               COALESCE(SUM(c.amount_kobo) FILTER (WHERE c.status = 'PAID'),0)::text AS paid_kobo,
+              -- ON_HOLD, for the reason on the by-LGA query above.
               COALESCE(SUM(c.amount_kobo) FILTER (
-                WHERE c.status IN ('PENDING','ELIGIBLE','APPROVED')),0)::text AS outstanding_kobo
+                WHERE c.status IN ('PENDING','ELIGIBLE','ON_HOLD','APPROVED')),0)::text
+                AS outstanding_kobo
          FROM commissions c
          JOIN transactions t ON t.id = c.transaction_id
         WHERE c.created_at BETWEEN $1 AND $2 AND ${transactionScopeSql('t', 3, 4)}
