@@ -35,6 +35,7 @@ import { AppError, badRequest, conflict, forbidden, notFound } from '../lib/erro
 import { nextAgentCode, nextApplicationNumber } from '../lib/references';
 import { bankVerification, kycProvider, type BankVerificationOutcome } from '../integrations';
 import { recordAudit } from './audit';
+import { expireLapsedRefereeRequests } from './referees';
 import { queueNotification } from './notifications';
 
 // ---------------------------------------------------------------------------
@@ -100,6 +101,11 @@ async function loadAxes(db: Db, agentId: string): Promise<AgentStatusAxes> {
 
 /** The applicant-facing progress view (Addendum §25, §27). */
 export async function getApplicationStatus(db: Db, agentId: string) {
+  // Before anything is read: a referee request that lapsed unanswered has to
+  // read as expired here, or this screen tells the applicant to keep waiting
+  // and hides the form for naming somebody else. See
+  // `expireLapsedRefereeRequests`.
+  await withTransaction((client) => expireLapsedRefereeRequests(client, agentId));
   const axes = await loadAxes(db, agentId);
   const applicationState = deriveApplicationState(axes);
 
@@ -1770,6 +1776,10 @@ export async function suspend(params: {
 
 /** Government KYC dashboard (Addendum §45). */
 export async function kycDashboard(db: Db, filters: { lgaId?: string; reviewerId?: string } = {}) {
+  // The referee figures below read the derived status on each agent, which
+  // only moves when a lapsed request is expired. See
+  // `expireLapsedRefereeRequests`.
+  await withTransaction((client) => expireLapsedRefereeRequests(client, null));
   const counts = await queryOne(
     db,
     `SELECT

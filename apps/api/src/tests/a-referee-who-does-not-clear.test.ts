@@ -294,6 +294,110 @@ describe('A verification request nobody answered in time', () => {
     const dashboard = await get('/agents/referee-dashboard', { token: adminToken });
     assert.equal(dashboard.body.counts.expired, '1');
   });
+
+  /*
+   * The same deadline, and the referee never opens the link at all — which
+   * is how most unanswered requests go. Only the late open above ever wrote
+   * EXPIRED, so this one stayed INVITED for good: the applicant was told to
+   * wait for a response that could no longer come, could not name anybody
+   * else, and the dashboard counted it pending. Each case below comes in
+   * through a different reader, because each reader has to notice on its own.
+   */
+  describe('and the referee never opened the link', () => {
+    async function lapsedUnopened(phone: string) {
+      const agent = await applicant();
+      const invited = await nominate(agent.token, { category: 'COMMUNITY_LEADER', phone });
+      await pool.query(
+        `UPDATE referee_invitations SET expires_at = now() - interval '1 day' WHERE referee_id = $1`,
+        [invited.refereeId],
+      );
+      assert.equal(
+        (await refereeRow(invited.refereeId))?.status,
+        'INVITED',
+        'the fixture is a request still marked outstanding, with nothing having opened it',
+      );
+      return { agent, invited };
+    }
+
+    it('reads as expired on the applicant’s own screen', async () => {
+      const { agent } = await lapsedUnopened('+2348034000311');
+      const status = await get('/agents/me/application', { token: agent.token });
+      assert.equal(status.status, 200, JSON.stringify(status.body));
+      assert.deepEqual(
+        (status.body.referees as { status: string }[]).map((referee) => referee.status),
+        ['EXPIRED'],
+        'the screen still says to wait for a referee whose link has stopped working',
+      );
+    });
+
+    it('does not refuse the next nomination', async () => {
+      const { agent } = await lapsedUnopened('+2348034000312');
+      // Straight to the nomination, without the status screen in between.
+      const replacement = await nominate(agent.token, {
+        category: 'COMMUNITY_LEADER',
+        phone: '+2348034000313',
+      });
+      assert.ok(replacement.refereeId);
+    });
+
+    it('is counted as expired on the referee dashboard, not as pending', async () => {
+      await lapsedUnopened('+2348034000314');
+      const dashboard = await get('/agents/referee-dashboard', { token: adminToken });
+      assert.equal(dashboard.status, 200, JSON.stringify(dashboard.body));
+      assert.equal(dashboard.body.counts.expired, '1');
+      assert.equal(dashboard.body.counts.pending, '0');
+    });
+
+    it('moves the application out of "referee pending" on the clearance pipeline', async () => {
+      await lapsedUnopened('+2348034000315');
+      const pipeline = await get('/agents/kyc-dashboard', { token: adminToken });
+      assert.equal(pipeline.status, 200, JSON.stringify(pipeline.body));
+      assert.equal(pipeline.body.counts.referee_pending, '0');
+      assert.equal(pipeline.body.counts.referee_failed, '1');
+    });
+
+    it('shows the officer the same on the list of applicants', async () => {
+      const { agent } = await lapsedUnopened('+2348034000316');
+      const list = await get('/agents', { token: adminToken });
+      assert.equal(list.status, 200, JSON.stringify(list.body).slice(0, 300));
+      const row = (list.body as { id: string; referee_status: string }[]).find(
+        (listed) => listed.id === agent.agentId,
+      );
+      assert.equal(row?.referee_status, 'FAILED');
+    });
+  });
+
+  it('expires a referee who opened the request in time and never answered', async () => {
+    /*
+     * Opening the link moves a referee to ACCEPTED, and the late-open path
+     * expired only from INVITED — so somebody who looked at the request and
+     * let it lapse stayed outstanding however often the dead link was opened
+     * again, and the agent's derived status was never brought back in line.
+     */
+    const agent = await applicant();
+    const invited = await nominate(agent.token, {
+      category: 'COMMUNITY_LEADER',
+      phone: '+2348034000321',
+    });
+    const opened = await get(`/referee/${invited.token}`);
+    assert.equal(opened.status, 200, JSON.stringify(opened.body));
+    assert.equal((await refereeRow(invited.refereeId))?.status, 'ACCEPTED', 'opening it accepts it');
+
+    await pool.query(
+      `UPDATE referee_invitations SET expires_at = now() - interval '1 day' WHERE referee_id = $1`,
+      [invited.refereeId],
+    );
+    const late = await get(`/referee/${invited.token}`);
+    assert.equal(late.status, 410, JSON.stringify(late.body));
+
+    assert.equal((await refereeRow(invited.refereeId))?.status, 'EXPIRED');
+    const derived = await queryOne<{ referee_status: string }>(
+      pool,
+      'SELECT referee_status FROM agents WHERE id = $1',
+      [agent.agentId],
+    );
+    assert.equal(derived?.referee_status, 'FAILED', 'and the officer’s pipeline still reads it as pending');
+  });
 });
 
 describe('A referee the platform has flagged', () => {

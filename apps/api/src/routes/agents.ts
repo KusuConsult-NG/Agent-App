@@ -736,6 +736,9 @@ agentRouter.get(
       limit: z.coerce.number().int().min(1).max(200).default(50),
     }),
     async (_req, res, data) => {
+      // `referee_status` is a derived column; bring it up to date before it
+      // is listed. See `expireLapsedRefereeRequests`.
+      await withTransaction((client) => referees.expireLapsedRefereeRequests(client, null));
       res.json(
         await query(
           pool,
