@@ -1067,10 +1067,66 @@ export interface CaseFilter {
   limit?: number;
 }
 
-export async function listCases(db: Db, filter: CaseFilter) {
-  return query(
+/**
+ * The cases a filter matches, and four counts over all of them.
+ *
+ * WHY THE COUNTS COME FROM HERE
+ *
+ * This returned a bare array capped at 100 and the workbench added up its own
+ * four figures — cases, overdue, urgent, nobody-yet — over whatever arrived.
+ * Measured on a 140-case open queue (5 urgent, 20 high, 100 normal, 15 low,
+ * every fourth overdue, every fifth unassigned):
+ *
+ *   the whole queue   140 cases, 35 overdue, 5 urgent, 28 unassigned
+ *   the first 100     100 cases, 31 overdue, 5 urgent, 20 unassigned
+ *
+ * Three of the four are wrong and all three understate, so a work queue reads
+ * as more under control than it is — and the tile carrying the alert variant,
+ * overdue, is one of them.
+ *
+ * `urgent` happened to be exact, because URGENT sorts first and five of them
+ * fit on the page. That is the ordering protecting a figure by luck rather
+ * than by design: it holds only while fewer than a hundred cases are urgent,
+ * and it would stop holding the moment this ORDER BY changed for an unrelated
+ * reason. So all four are computed over the matched set rather than the three
+ * that were visibly wrong.
+ *
+ * `myWork` below already had the right pairing — a capped list of assigned
+ * cases beside unbounded `count(*)` subqueries for its own tiles. The correct
+ * pattern was two hundred lines from the defect.
+ *
+ * `count(*) FILTER (...) OVER ()` is evaluated before LIMIT, so one query
+ * answers both questions and a page cannot drift from its own totals. The
+ * rows go through a derived table because `overdue` is a computed select-list
+ * column and a window cannot reference one by alias.
+ */
+export async function listCases(
+  db: Db,
+  filter: CaseFilter,
+): Promise<{
+  cases: Record<string, unknown>[];
+  matched: number;
+  overdue: number;
+  urgent: number;
+  unassigned: number;
+  cap: number;
+}> {
+  const cap = filter.limit ?? 100;
+  const rows = await query<{
+    matched: string;
+    overdue_total: string;
+    urgent_total: string;
+    unassigned_total: string;
+  }>(
     db,
-    `SELECT c.id, c.case_number, c.subject, c.category, c.status, c.priority,
+    `SELECT page.*,
+            count(*) OVER ()::text AS matched,
+            count(*) FILTER (WHERE page.overdue) OVER ()::text AS overdue_total,
+            count(*) FILTER (WHERE page.priority = 'URGENT') OVER ()::text AS urgent_total,
+            count(*) FILTER (WHERE page.assignee_name IS NULL) OVER ()::text
+              AS unassigned_total
+       FROM (
+     SELECT c.id, c.case_number, c.subject, c.category, c.status, c.priority,
             c.risk_level, c.department, c.due_at, c.created_at, c.updated_at,
             c.transaction_id, c.agent_id, c.taxpayer_id,
             t.transaction_reference,
@@ -1103,10 +1159,11 @@ export async function listCases(db: Db, filter: CaseFilter) {
         AND ($11::boolean IS NOT TRUE
              OR (c.due_at IS NOT NULL AND c.due_at < now()
                  AND c.status NOT IN ('RESOLVED','CLOSED')))
+       ) page
       ORDER BY
-        CASE c.priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'NORMAL' THEN 2 ELSE 3 END,
-        c.due_at NULLS LAST,
-        c.created_at DESC
+        CASE page.priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'NORMAL' THEN 2 ELSE 3 END,
+        page.due_at NULLS LAST,
+        page.created_at DESC
       LIMIT $12`,
     [
       filter.status ?? null,
@@ -1120,9 +1177,21 @@ export async function listCases(db: Db, filter: CaseFilter) {
       filter.agentId ?? null,
       filter.taxpayerId ?? null,
       filter.overdue ?? null,
-      filter.limit ?? 100,
+      cap,
     ],
   );
+
+  const figure = (value: string | undefined) => Number.parseInt(value ?? '0', 10);
+  return {
+    cases: rows.map(
+      ({ matched: _m, overdue_total: _o, urgent_total: _u, unassigned_total: _n, ...row }) => row,
+    ),
+    matched: figure(rows[0]?.matched),
+    overdue: figure(rows[0]?.overdue_total),
+    urgent: figure(rows[0]?.urgent_total),
+    unassigned: figure(rows[0]?.unassigned_total),
+    cap,
+  };
 }
 
 /** One case and its whole history, oldest first — the order it happened in. */
@@ -1248,7 +1317,9 @@ export async function myWork(db: Db, viewer: Viewer) {
 
   const [assigned, opened, mentions, unassigned, counts, approvals, exceptions, flags] =
     await Promise.all([
-      listCases(db, { assigneeId: viewer.userId, open: true, limit: 50 }),
+      // `.cases` — `listCases` carries its own counts now, and this panel has
+      // its own unbounded ones below. Only the rows are wanted here.
+      listCases(db, { assigneeId: viewer.userId, open: true, limit: 50 }).then((r) => r.cases),
       query(
         db,
         `SELECT c.id, c.case_number, c.subject, c.status, c.priority, c.due_at,

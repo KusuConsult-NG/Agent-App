@@ -136,6 +136,21 @@ function CaseQueue({
 }) {
   const { t } = usePortalI18n();
   const [rows, setRows] = useState<CaseRow[] | null>(null);
+  /**
+   * The four figures as the server counted them, over every matched case.
+   *
+   * `null` means this screen is talking to an API that still answers with a
+   * bare array, and the figures fall back to counting the page. Kept apart
+   * from `rows` so "the list is short" and "the counts are of the list" stay
+   * two separate facts.
+   */
+  const [size, setSize] = useState<{
+    matched: number;
+    overdue: number;
+    urgent: number;
+    unassigned: number;
+    cap: number;
+  } | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [filters, setFilters] = useState({
     open: true,
@@ -155,7 +170,36 @@ function CaseQueue({
     if (filters.status) params.set('status', filters.status);
     if (filters.category) params.set('category', filters.category);
     try {
-      setRows(await api.get<CaseRow[]>(`/government/cases?${params.toString()}`));
+      const answer = await api.get<
+        | CaseRow[]
+        | {
+            cases: CaseRow[];
+            matched?: number;
+            overdue?: number;
+            urgent?: number;
+            unassigned?: number;
+            cap?: number;
+          }
+      >(`/government/cases?${params.toString()}`);
+      /*
+       * An array or an envelope. The endpoint answered with a bare array
+       * until the counts moved to the server, and a screen that only
+       * understood one of the two shapes would show an empty queue against
+       * the other.
+       */
+      const list = Array.isArray(answer) ? answer : answer.cases;
+      setRows(list);
+      setSize(
+        Array.isArray(answer)
+          ? null
+          : {
+              matched: answer.matched ?? list.length,
+              overdue: answer.overdue ?? list.filter((row) => row.overdue).length,
+              urgent: answer.urgent ?? list.filter((row) => row.priority === 'URGENT').length,
+              unassigned: answer.unassigned ?? list.filter((row) => !row.assignee_name).length,
+              cap: answer.cap ?? 0,
+            },
+      );
     } catch (caught) {
       setError(asApiError(caught));
     }
@@ -165,15 +209,37 @@ function CaseQueue({
     void load();
   }, [load]);
 
+  /**
+   * The four figures above the table, over every case the filter matched.
+   *
+   * They were counted here, over the rows below them — and the list is capped
+   * at a hundred. On a 140-case open queue that made three of the four wrong,
+   * all three understating: 100 cases of 140, 31 overdue of 35, 20 unassigned
+   * of 28. A work queue that reads as more under control than it is.
+   *
+   * `urgent` was exact, because URGENT sorts first. That was the ordering
+   * protecting one figure by accident, and it is computed on the server now
+   * with the other three rather than left resting on a sort order.
+   *
+   * `null` while unread, and each field falls back to counting the page if an
+   * older API sends no figure — a nought under "Overdue" from a read that did
+   * not happen is the one reading an officer must never be given.
+   */
   const counts = useMemo(() => {
     const list = rows ?? [];
-    return {
-      total: list.length,
-      overdue: list.filter((row) => row.overdue).length,
-      urgent: list.filter((row) => row.priority === 'URGENT').length,
-      unassigned: list.filter((row) => !row.assignee_name).length,
-    };
-  }, [rows]);
+    return (
+      size ?? {
+        matched: list.length,
+        overdue: list.filter((row) => row.overdue).length,
+        urgent: list.filter((row) => row.priority === 'URGENT').length,
+        unassigned: list.filter((row) => !row.assignee_name).length,
+        cap: 0,
+      }
+    );
+  }, [rows, size]);
+
+  /** True when the table stopped at the cap and the figures did not. */
+  const partial = rows !== null && size !== null && rows.length < size.matched;
 
   return (
     <>
@@ -182,11 +248,31 @@ function CaseQueue({
         <p className="muted">{t.ofcCwIntro}</p>
 
         <div className="stat-grid">
-          <Stat label="ofcCwCaseNumber" value={counts.total} />
-          <Stat label="ofcMwOverdue" value={counts.overdue} variant={counts.overdue ? 'alert' : undefined} />
-          <Stat label="ofcCwPriority" value={counts.urgent} />
-          <Stat label="ofcCwNobody" value={counts.unassigned} />
+          <Stat label="ofcCwCaseNumber" value={rows === null ? '—' : counts.matched} />
+          <Stat
+            label="ofcMwOverdue"
+            value={rows === null ? '—' : counts.overdue}
+            variant={counts.overdue ? 'alert' : undefined}
+          />
+          <Stat label="ofcCwPriority" value={rows === null ? '—' : counts.urgent} />
+          <Stat label="ofcCwNobody" value={rows === null ? '—' : counts.unassigned} />
         </div>
+
+        {/*
+          * Said once, above the table, when the figures cover more than the
+          * rows do. The bottom of a capped table is where it was cut off and
+          * not where the work ends, and an officer working down it needs to
+          * know which of the two they are looking at.
+          */}
+        {partial && (
+          <Alert kind="info" title="ofcCwTableStopsShort">
+            <p style={{ margin: 0 }}>
+              {t.ofcCwTableStopsShortBody
+                .replace('{{shown}}', String(rows!.length))
+                .replace('{{matched}}', String(size!.matched))}
+            </p>
+          </Alert>
+        )}
 
         <div className="filters">
           <label>

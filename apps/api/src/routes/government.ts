@@ -3801,6 +3801,8 @@ governmentRouter.get(
       limit: z.coerce.number().int().min(1).max(200).default(100),
     }),
     async (_req, res, data) => {
+      // Spread: the four figures above the table belong beside the page they
+      // describe, and the screen reads `cases` as it read the array before.
       res.json(await cases.listCases(pool, data));
     },
   ),

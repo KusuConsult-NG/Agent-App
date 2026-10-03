@@ -444,7 +444,16 @@ describe('every state a case can be in', () => {
     }
 
     const listed = await get('/government/cases?limit=50', auth('admin'));
-    assert.equal((listed.body as unknown[]).length, categories.length);
+    /*
+     * `matched` as well as the rows. The endpoint answered with a bare array
+     * until the workbench's four figures moved onto the server — they had
+     * been counted in the browser over a page capped at a hundred — so this
+     * reads the envelope now. `matched` is the stronger assertion of the two:
+     * it is every case the filter found, not the ones that fitted.
+     */
+    const body = listed.body as { cases: unknown[]; matched: number };
+    assert.equal(body.cases.length, categories.length);
+    assert.equal(body.matched, categories.length);
   });
 
   /*

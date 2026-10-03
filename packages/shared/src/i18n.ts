@@ -2478,6 +2478,8 @@ export interface TranslationDictionary {
   ofcCwDepartment: string;
   ofcCwAssignee: string;
   ofcCwNobody: string;
+  ofcCwTableStopsShort: string;
+  ofcCwTableStopsShortBody: string;
   ofcCwAnyDepartment: string;
   ofcCwDue: string;
   ofcCwOnlyOpen: string;
@@ -6244,6 +6246,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCwDepartment: "Send to",
     ofcCwAssignee: "Assign to",
     ofcCwNobody: "Nobody yet",
+    ofcCwTableStopsShort: "The table below stops short",
+    ofcCwTableStopsShortBody: "The figures above cover every case this filter matched. The table shows {{shown}} of {{matched}} — the most urgent and the soonest due — so its last row is where it was cut off rather than where the work ends. Narrow the filter to bring the rest into view.",
     ofcCwAnyDepartment: "No department",
     ofcCwDue: "Due",
     ofcCwOnlyOpen: "Only open cases",
@@ -9799,6 +9803,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCwDepartment: "Aika wa",
     ofcCwAssignee: "Ba wa",
     ofcCwNobody: "Babu kowa tukuna",
+    ofcCwTableStopsShort: "Teburin da ke kasa ya tsaya kafin karshe",
+    ofcCwTableStopsShortBody: "Lambobin da ke sama sun rufe duk shari’ar da wannan tacewa ta samu. Teburin yana nuna {{shown}} daga {{matched}} — wadanda suka fi gaggawa da wadanda lokacinsu ya fi kusa — don haka layin karshe shi ne wurin da aka yanke shi ba wurin da aikin ya kare ba. A rage tacewa domin a ga sauran.",
     ofcCwAnyDepartment: "Babu sashe",
     ofcCwDue: "Ranar karshe",
     ofcCwOnlyOpen: "Kararrakin da ba a rufe ba kadai",
