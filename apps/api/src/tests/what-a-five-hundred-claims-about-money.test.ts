@@ -335,6 +335,89 @@ describe('what a 500 claims about the money', () => {
     assert.doesNotMatch(body.error.message, CLAIMS_NOTHING_HAPPENED);
   });
 
+  it('does not promise an agent nothing was taken when two confirmations collided', () => {
+    /*
+     * 40001 and 40P01 are the database saying "this transaction lost a race;
+     * run it again". `CONCURRENT_UPDATE` answered that NOT_DEBITED — "No
+     * payment was attempted".
+     *
+     * On a payment confirmation that is the opposite of what happened. The
+     * gateway is holding the money, the agent is confirming it, and
+     * `verifyPayment` runs with `retryOnConflict` because, in its own words,
+     * "READ COMMITTED still meets 40P01 occasionally". After ten retries the
+     * deadlock surfaces — and the request that beat this one may have just
+     * verified the payment. So the agent, standing in front of somebody who
+     * has handed over cash, was told nothing had been taken.
+     *
+     * UNCONFIRMED is the truthful answer and carries the right instruction
+     * with it: "A payment is in flight and its outcome is not yet known. Do
+     * not retry."
+     */
+    const deadlock = Object.assign(new Error('deadlock detected'), { code: '40P01' });
+    const confirming = five_hundred('POST', '/payments/abc/confirm', deadlock);
+
+    assert.equal(confirming.status, 409);
+    assert.equal(confirming.body.error.code, 'CONCURRENT_UPDATE');
+    assert.equal(confirming.body.error.moneyStatus, 'UNCONFIRMED');
+    assert.doesNotMatch(confirming.body.error.message, CLAIMS_NOTHING_HAPPENED);
+  });
+
+  it('leaves a collision away from the payment path as it was', () => {
+    /*
+     * The bound on the change. Two officers editing one department collide
+     * over nothing a citizen paid, and NOT_DEBITED there is both true and
+     * unread — the portal renders no money sentence at all. Narrowing this to
+     * the payment path is what keeps the change to the reader who has one.
+     */
+    const serialisation = Object.assign(new Error('could not serialize access'), {
+      code: '40001',
+    });
+    const officer = five_hundred('POST', '/government/departments', serialisation);
+    assert.equal(officer.status, 409);
+    assert.equal(officer.body.error.moneyStatus, 'NOT_DEBITED');
+  });
+
+  it('does not tell a reader that looking at a payment put one in flight', () => {
+    /*
+     * The other half of the rule, and the mutation that would otherwise
+     * survive: a read is not a payment. No endpoint can actually get here —
+     * a GET inserts nothing, so it cannot raise 23505, and these reads are
+     * READ COMMITTED so they do not serialise — which is why it is asserted
+     * through the handler rather than driven. The condition is still what
+     * stops a reporting GET under /payments from telling an agent money is
+     * moving when they have only opened a screen.
+     */
+    const deadlock = Object.assign(new Error('deadlock detected'), { code: '40P01' });
+    const reading = five_hundred('GET', '/payments/abc', deadlock);
+    assert.equal(reading.body.error.moneyStatus, 'NOT_DEBITED');
+  });
+
+  it('does not promise it for a duplicate met on the payment path either', () => {
+    /*
+     * The same reasoning one branch along.
+     * `documents_one_acknowledgement_per_transaction` is reached while
+     * confirming, and an acknowledgement exists because the money arrived —
+     * so "no money has been taken" is refuted by the very row that caused the
+     * refusal. It is a backstop behind an advisory lock, which is why it says
+     * UNCONFIRMED rather than RECEIVED: what this request did is what is
+     * unknown.
+     */
+    const duplicate = Object.assign(
+      new Error('duplicate key value violates unique constraint'),
+      { code: '23505', constraint: 'documents_one_acknowledgement_per_transaction' },
+    );
+    const confirming = five_hundred('POST', '/payments/abc/confirm', duplicate);
+
+    assert.equal(confirming.status, 409);
+    assert.equal(confirming.body.error.code, 'DUPLICATE_RECORD');
+    assert.equal(confirming.body.error.moneyStatus, 'UNCONFIRMED');
+    assert.match(
+      confirming.body.error.message,
+      /acknowledgement has already been issued/,
+      'the sentence that says what happened was lost',
+    );
+  });
+
   it('still answers an anticipated error with what that error knows', () => {
     // The second control: this changes the unhandled path only. An AppError
     // thrown deliberately is passed through with its own money status.

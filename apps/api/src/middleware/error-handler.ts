@@ -462,6 +462,32 @@ function refusedTransitionMoney(error: IllegalTransitionError): MoneyStatus {
   return 'NOT_DEBITED';
 }
 
+/**
+ * What a refusal the database raised may claim about the taxpayer's money.
+ *
+ * These five branches answered `NOT_DEBITED` whatever the request was, and on
+ * a write under `/payments` that claim cannot be supported. 40001 and 40P01
+ * are the database saying this transaction lost a race — and the one that beat
+ * it may have been the confirmation that verified the payment. A duplicate met
+ * while confirming is the same: an acknowledgement exists because the money
+ * arrived, so the row that caused the refusal refutes the sentence.
+ *
+ * The rule is `internal()`'s, which `lib/errors.ts` calls "the client's own,
+ * mirrored" — a write under `/payments` whose outcome is unknown says
+ * UNCONFIRMED, and that carries the right instruction with it: "A payment is
+ * in flight and its outcome is not yet known. Do not retry."
+ *
+ * Narrow on purpose. Away from the payment path NOT_DEBITED is both true and
+ * unread: two officers colliding over a department code have moved nobody's
+ * money, and the portal renders no money sentence at all. The reader this
+ * matters to is the agent standing in front of somebody who has handed over
+ * cash.
+ */
+function refusalMoney(req: Request): MoneyStatus {
+  const write = req.method.toUpperCase() !== 'GET';
+  return write && req.path.startsWith('/payments') ? 'UNCONFIRMED' : 'NOT_DEBITED';
+}
+
 export function errorHandler(
   error: unknown,
   req: Request,
@@ -602,7 +628,7 @@ export function errorHandler(
           statusCode: 409,
           code: 'DUPLICATE_RECORD',
           message,
-          moneyStatus: 'NOT_DEBITED',
+          moneyStatus: refusalMoney(req),
         }).toJSON(),
       );
       return;
@@ -641,7 +667,7 @@ export function errorHandler(
           statusCode: 409,
           code: 'OVERLAPPING_PERIOD',
           message,
-          moneyStatus: 'NOT_DEBITED',
+          moneyStatus: refusalMoney(req),
           nextStep:
             'Close the existing record by giving it an end date, then try again.',
         }).toJSON(),
@@ -665,7 +691,7 @@ export function errorHandler(
           message:
             'This action was blocked by a financial integrity rule. ' +
             'Nothing has been changed. Contact support with the reference below if you believe this is wrong.',
-          moneyStatus: 'NOT_DEBITED',
+          moneyStatus: refusalMoney(req),
           reference: req.requestId,
         }).toJSON(),
       );
@@ -681,7 +707,7 @@ export function errorHandler(
           statusCode: 409,
           code: 'FINANCIAL_CONTROL_BLOCKED',
           message: error.message,
-          moneyStatus: 'NOT_DEBITED',
+          moneyStatus: refusalMoney(req),
           reference: req.requestId,
           nextStep: error.hint,
         }).toJSON(),
@@ -697,7 +723,7 @@ export function errorHandler(
           code: 'CONCURRENT_UPDATE',
           message:
             'Another update to this record happened at the same time. Nothing was changed. Try again.',
-          moneyStatus: 'NOT_DEBITED',
+          moneyStatus: refusalMoney(req),
         }).toJSON(),
       );
       return;
