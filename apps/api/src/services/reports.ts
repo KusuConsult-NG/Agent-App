@@ -19,6 +19,7 @@ import { query, queryOne } from '../db/pool';
 import { REVENUE_STATES_SQL } from '../lib/revenue-states';
 import { outstandingExceptionSql } from './reconciliation';
 import { CURRENT_FINDINGS_SQL } from '../lib/reconciliation-findings';
+import { PAYABLE_INVOICE_SQL } from '../lib/payable-invoice';
 import {
   lgaScopeSql,
   scopeParams,
@@ -237,16 +238,16 @@ export async function executiveDashboard(
           * invoiced and owed, which is a fact, and the forecast is a separate
           * figure that says out loud that it is arithmetic.
           */
-         -- Lapsed invoices counted, and this one was weighed rather than
-         -- assumed. "Invoiced and owed" is what the comment above claims and
-         -- a lapsed bill is both; narrowing it to what could be collected
-         -- today would make this a second forecast under a name that says it
-         -- is a fact. The figure that does answer "collectable now" is the
-         -- arrears worklist, which reports lapsed money as its own line.
+         -- Invoiced, owed and still payable, by the deadline. This said
+         -- lapsed invoices were counted, and they were for the hour before the
+         -- expiry sweep wrote EXPIRED; after it the status filter left them
+         -- out, so the floor fell an hour after each deadline with nothing
+         -- collected. Lapsed money is the arrears worklist's own line, and
+         -- lib/payable-invoice.ts says why it is not counted here as well.
          (SELECT COALESCE(SUM(i.total_amount_kobo - i.amount_paid_kobo),0)::text
             FROM invoices i
             JOIN taxpayers tp ON tp.id = i.taxpayer_id
-           WHERE i.status IN ('UNPAID','PARTIALLY_PAID')
+           WHERE ${PAYABLE_INVOICE_SQL}
              AND ($1 OR tp.lga_id = ANY($3::uuid[]))) AS expected_revenue_kobo`,
       [statewide, territoryIds, lgaIds],
     ),
@@ -1408,8 +1409,7 @@ export async function revenueOfficerHome(db: Db) {
        (SELECT count(*)::text FROM approvals
          WHERE status IN ('REQUESTED','REVIEWED') AND approval_type = 'TAXPAYER_CORRECTION')
          AS corrections_awaiting_review,
-       (SELECT count(*)::text FROM invoices WHERE status = 'UNPAID' AND
-         (expires_at IS NULL OR expires_at > now())) AS invoices_unpaid,
+       (SELECT count(*)::text FROM invoices i WHERE ${PAYABLE_INVOICE_SQL}) AS invoices_unpaid,
        (SELECT count(*)::text FROM invoices WHERE status = 'EXPIRED') AS invoices_expired,
        -- The same deadline test as invoices_unpaid above, because these two
        -- are one tile: the money is the figure and that count is its hint.
@@ -1426,8 +1426,11 @@ export async function revenueOfficerHome(db: Db) {
        -- counted, labelled, on the arrears screen this tile links to, whose
        -- lapsed CTE keys on the deadline rather than the status and so is
        -- also right immediately.
-       (SELECT COALESCE(SUM(total_amount_kobo),0)::text FROM invoices
-         WHERE status = 'UNPAID' AND (expires_at IS NULL OR expires_at > now()))
+       --
+       -- Both halves now ask PAYABLE_INVOICE_SQL, which is what the other
+       -- readers of "owed" were found to need as well.
+       (SELECT COALESCE(SUM(i.total_amount_kobo),0)::text FROM invoices i
+         WHERE ${PAYABLE_INVOICE_SQL})
          AS unpaid_kobo`,
   );
 }
@@ -1814,7 +1817,9 @@ export async function defaultersByCategory(
 ) {
   const limit = Math.min(params.limit ?? 100, 500);
   const conditions: string[] = [
-    `i.status IN ('UNPAID','PARTIALLY_PAID')`,
+    // Payable, by the deadline: a collection round is calls that can end in a
+    // payment, which a lapsed invoice cannot. See `lib/payable-invoice.ts`.
+    PAYABLE_INVOICE_SQL,
     'i.total_amount_kobo > i.amount_paid_kobo',
   ];
   const values: unknown[] = [];

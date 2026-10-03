@@ -87,6 +87,7 @@
 
 import type { Db } from '../db/pool';
 import { UNDER_OPEN_OBJECTION_SQL } from '../lib/enforcement-suspended';
+import { PAYABLE_INVOICE_SQL } from '../lib/payable-invoice';
 import { query, queryOne } from '../db/pool';
 import { scopeParams, type ReportScope } from './report-scope';
 
@@ -255,15 +256,15 @@ export async function arrearsWorklist(
         FROM invoices i
         JOIN assessments a    ON a.id = i.assessment_id
         JOIN revenue_items ri ON ri.id = a.revenue_item_id
-       WHERE i.status IN ('UNPAID', 'PARTIALLY_PAID')
+       /*
+        * Still payable. Past its expiry the payment path refuses the money
+        * (INVOICE_EXPIRED), so a lapsed invoice on a call list is a call that
+        * cannot end in a payment. That money is counted in the summary
+        * instead, where it is labelled for what it is. This was the first
+        * reader to get that right, and the shared fragment is its predicate.
+        */
+       WHERE ${PAYABLE_INVOICE_SQL}
          AND i.total_amount_kobo > i.amount_paid_kobo
-         /*
-          * Still payable. Past its expiry the payment path refuses the money
-          * (INVOICE_EXPIRED), so a lapsed invoice on a call list is a call
-          * that cannot end in a payment. That money is counted in the summary
-          * instead, where it is labelled for what it is.
-          */
-         AND (i.expires_at IS NULL OR i.expires_at > now())
          AND NOT EXISTS (
                SELECT 1
                  FROM payments p

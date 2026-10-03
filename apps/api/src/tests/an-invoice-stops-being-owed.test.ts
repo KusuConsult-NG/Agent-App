@@ -48,6 +48,7 @@ import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
 import { expireLapsedInvoices } from '../services/revenue';
 import { computeComplianceScore } from '../services/incentives';
+import { setTaxpayerStatus } from '../services/taxpayers';
 
 let agent = { token: '', device: '' };
 let officerToken = '';
@@ -229,21 +230,6 @@ describe('an invoice whose deadline has passed', () => {
     );
   });
 
-  it('stops counting against the taxpayer as an outstanding balance', async () => {
-    // Compliance decides incentive eligibility, so an invoice the platform
-    // refuses payment for must not go on marking the citizen down for it.
-    await lapse();
-    await expireLapsedInvoices({ actorId: null, actorRole: 'system' });
-
-    const outstanding = await queryOne<{ outstanding_kobo: string }>(
-      pool,
-      `SELECT COALESCE(SUM(total_amount_kobo - amount_paid_kobo), 0)::text AS outstanding_kobo
-         FROM invoices WHERE taxpayer_id = $1 AND status IN ('UNPAID','PARTIALLY_PAID')`,
-      [raised.taxpayerId],
-    );
-    assert.equal(Number(outstanding!.outstanding_kobo), 0);
-  });
-
   it('does not touch one that was already paid', async () => {
     await pool.query(
       `UPDATE invoices SET status = 'PAID', amount_paid_kobo = total_amount_kobo WHERE id = $1`,
@@ -274,121 +260,202 @@ describe('an invoice whose deadline has passed', () => {
 // ===========================================================================
 
 /**
- * One lapsed invoice, and every figure that has an opinion about it.
+ * One lapsed invoice, read three times by every figure that has an opinion
+ * about it: in date, lapsed, and swept.
  *
- * "Outstanding" is two different questions and this platform asks both. What
- * can still be collected is one; what is owed, whether or not this particular
- * bill can still be paid, is the other. A lapsed invoice answers yes to the
- * second and no to the first — the payment path refuses it with
- * INVOICE_EXPIRED — and the liability itself does not lapse with the paper:
- * the bill wants reissuing, not writing off.
+ * This table used to read each figure once, in the window before the sweep,
+ * on the stated belief that it was "the only window in which the two
+ * questions give different answers". It was the only window in which the
+ * figures gave the answers their comments claimed. Five of them said they
+ * counted a lapsed bill as still owed — the compliance score, the taxpayer's
+ * obligations, the only-unpaid filter, expected revenue, the debt reported
+ * when a record is closed — and all five filtered on the status. Once the
+ * hourly sweep wrote EXPIRED they stopped counting it, so every one of them
+ * changed its answer an hour after the deadline, with nothing having happened
+ * but a sweep that says of itself that it decides nothing.
  *
- * Both answers are legitimate and the platform needs both. What it cannot
- * afford is a figure that does not say which one it gives, and that is how the
- * officer's home tile came to disagree with itself: the money filtered on the
- * status alone and the count beside it tested the deadline, so between an
- * invoice lapsing and the hourly sweep writing EXPIRED the tile showed a sum
- * over invoices its own hint did not count.
+ * Measured on this fixture before the change: a compliance score of 20 in
+ * date, 20 lapsed, and 45 swept, the last reading "No unpaid invoices on
+ * record" beside "0 of 1 assessment period(s) settled".
  *
- * So this is the list, written down once. Every figure below is read in the
- * window the sweep has not reached yet, which is the only window in which the
- * two questions give different answers — and therefore the only one in which a
- * figure can be caught not knowing which it was asked.
+ * So the invariant asserted here is the one that holds whichever way the
+ * policy goes: the deadline changes a figure and the sweep does not. Which
+ * way it went — payable, by the deadline — and what that costs is written
+ * out in `lib/payable-invoice.ts`. Each figure must also notice the deadline,
+ * which is what proves it counted the invoice in the first place; a reader
+ * that never saw the invoice would pass "the sweep changed nothing" for free.
  */
-describe('one lapsed invoice, and every figure with an opinion about it', () => {
-  it("is out of the officer's tile, both halves of it", async () => {
-    await lapse();
-    const home = await get('/government/home', { token: officerToken });
-    assert.equal(home.status, 200, JSON.stringify(home.body));
-    assert.equal(Number(home.body.revenue.unpaid_kobo), 0, 'the money on the tile');
-    assert.equal(Number(home.body.revenue.invoices_unpaid), 0, 'and the count in its hint');
-  });
+describe('one lapsed invoice, before the sweep and after it', () => {
+  const score = async () => {
+    const client = await pool.connect();
+    try {
+      return await computeComplianceScore(client, raised.taxpayerId);
+    } finally {
+      client.release();
+    }
+  };
 
-  it('is out of the arrears worklist, and in its lapsed figure beside it', async () => {
+  const ok = <T>(response: { status: number; body: T }, what: string): T => {
+    assert.equal(response.status, 200, `${what}: ${JSON.stringify(response.body).slice(0, 300)}`);
+    return response.body;
+  };
+
+  const readers: { figure: string; read: () => Promise<unknown> }[] = [
+    {
+      figure: "the officer's outstanding tile, both halves of it",
+      read: async () => {
+        const home = ok(await get('/government/home', { token: officerToken }), 'home');
+        return [home.revenue.unpaid_kobo, home.revenue.invoices_unpaid];
+      },
+    },
+    {
+      figure: 'the compliance score',
+      read: async () => {
+        const breakdown = await score();
+        return [breakdown.score, breakdown.components];
+      },
+    },
+    {
+      figure: "the taxpayer's obligations",
+      read: async () => {
+        const owed = ok(
+          await get(`/revenue/taxpayers/${raised.taxpayerId}/obligations`, { token: officerToken }),
+          'obligations',
+        ) as { invoice_id: string }[];
+        return owed.some((row) => row.invoice_id === raised.invoiceId);
+      },
+    },
+    {
+      figure: 'the only-unpaid search filter',
+      read: async () => {
+        // A bare array: `res.json(found)`.
+        const found = ok(
+          await get('/taxpayers/search?outstandingOnly=true', { token: officerToken }),
+          'search',
+        ) as { id: string }[];
+        return found.some((taxpayer) => taxpayer.id === raised.taxpayerId);
+      },
+    },
+    {
+      figure: 'expected revenue on the executive dashboard',
+      read: async () =>
+        ok(await get('/government/dashboard', { token: adminToken }), 'dashboard').counts
+          .expected_revenue_kobo,
+    },
+    {
+      figure: 'defaulters by levy',
+      read: async () => {
+        const report = ok(
+          await get('/government/revenue/defaulters', { token: adminToken }),
+          'defaulters',
+        ) as { outstandingKobo: string; rows: { taxpayer_id: string }[] };
+        return [
+          report.outstandingKobo,
+          report.rows.some((row) => row.taxpayer_id === raised.taxpayerId),
+        ];
+      },
+    },
+    {
+      figure: 'the arrears call list',
+      read: async () =>
+        ok(await get('/government/arrears', { token: adminToken }), 'arrears').summary.totalKobo,
+    },
+  ];
+
+  for (const { figure, read } of readers) {
+    it(`${figure}: the deadline changes it, and the sweep does not`, async () => {
+      const inDate = await read();
+      await lapse();
+      const lapsed = await read();
+      await expireLapsedInvoices({ actorId: null, actorRole: 'system' });
+      assert.equal((await statuses()).invoice, 'EXPIRED', 'the fixture never reached the swept state');
+      const swept = await read();
+
+      assert.notDeepEqual(
+        lapsed,
+        inDate,
+        `${figure} gave the same answer either side of the deadline, so it either never ` +
+          `counted the invoice or kept counting a bill nobody may pay: ${JSON.stringify(inDate)}`,
+      );
+      assert.deepEqual(
+        swept,
+        lapsed,
+        `${figure} changed its answer when the sweep wrote EXPIRED, an hour after the ` +
+          'deadline and with nothing having happened in between',
+      );
+    });
+  }
+
+  it('is still counted where lapsed money is counted on purpose, before the sweep and after', async () => {
     /*
-     * The model the rest of this list is measured against. Its collectable CTE
-     * says why: "Past its expiry the payment path refuses the money
-     * (INVOICE_EXPIRED), so a lapsed invoice on a call list is a call that
-     * cannot end in a payment. That money is counted in the summary instead,
-     * where it is labelled for what it is."
+     * The other half of the policy, and the reason it does not lose money: the
+     * arrears worklist reports lapsed money on its own line, as money needing a
+     * fresh assessment. It must count it at the deadline and go on counting it
+     * once the record says EXPIRED.
      */
+    const lapsedKobo = async () =>
+      ok(await get('/government/arrears', { token: adminToken }), 'arrears').summary.lapsedKobo;
+
+    assert.equal(Number(await lapsedKobo()), 0, 'in date, nothing has lapsed');
     await lapse();
-    const worklist = await get('/government/arrears', { token: adminToken });
-    assert.equal(worklist.status, 200, JSON.stringify(worklist.body).slice(0, 300));
+    assert.equal(Number(await lapsedKobo()), Number(raised.totalKobo), 'counted at the deadline');
+    await expireLapsedInvoices({ actorId: null, actorRole: 'system' });
     assert.equal(
-      Number(worklist.body.summary.totalKobo),
-      0,
-      'a call that cannot end in a payment is on the call list',
-    );
-    assert.equal(
-      Number(worklist.body.summary.lapsedKobo),
+      Number(await lapsedKobo()),
       Number(raised.totalKobo),
-      'and the money is in no figure at all, rather than in the one that names it',
+      'and still counted once the sweep wrote EXPIRED',
     );
   });
 
-  it('is still owed on the compliance score, because lapsing is not paying', async () => {
+  it('is left behind on a closed record by the deadline, not by the sweep', async () => {
     /*
-     * Deliberately in, and the one case where excluding it would be the
-     * defect: a score that improved when a bill lapsed would make letting the
-     * deadline pass the cheapest way to look compliant. The score gates
-     * incentive eligibility, so that is not a presentational point.
-     *
-     * Asserted as equality rather than a direction, because lapse() changes
-     * nothing else the score reads — the transaction was never verified, so
-     * the late-payment count cannot move either way.
+     * Two more readers that are not pure reads, so not in the table above:
+     * the debt `setTaxpayerStatus` reports when a record is closed, and the
+     * queue of records ended while still owing. The record is closed, reopened
+     * and closed again in each state, because the closing debt is only ever
+     * computed by closing.
      */
-    const read = async () => {
-      const client = await pool.connect();
-      try {
-        return await computeComplianceScore(client, raised.taxpayerId);
-      } finally {
-        client.release();
-      }
+    const admin = await queryOne<{ id: string }>(pool, 'SELECT id FROM users WHERE phone = $1', [
+      '+2348030000600',
+    ]);
+    assert.ok(admin);
+    const setStatus = (status: 'ACTIVE' | 'CLOSED') =>
+      setTaxpayerStatus({
+        taxpayerId: raised.taxpayerId,
+        status,
+        reason: 'The stall has closed down',
+        actorId: admin!.id,
+        actorRole: 'admin',
+      });
+    const onEndedQueue = async () => {
+      const ended = ok(
+        await get('/taxpayers/ended-with-arrears', { token: adminToken }),
+        'ended-with-arrears',
+      ) as { taxpayers: { id: string }[] };
+      return ended.taxpayers.some((taxpayer) => taxpayer.id === raised.taxpayerId);
     };
 
-    const before = await read();
+    const inDate = await setStatus('CLOSED');
+    assert.equal(inDate.outstandingKobo, raised.totalKobo, 'in date, the whole bill is left behind');
+    assert.equal(await onEndedQueue(), true, 'and the record is on the queue of ended debts');
+
     await lapse();
-    const after = await read();
+    assert.equal(await onEndedQueue(), false, 'the queue still held a bill nobody may pay');
+    await setStatus('ACTIVE');
+    const lapsed = await setStatus('CLOSED');
+
+    await expireLapsedInvoices({ actorId: null, actorRole: 'system' });
+    assert.equal((await statuses()).invoice, 'EXPIRED', 'the fixture never reached the swept state');
+    assert.equal(await onEndedQueue(), false);
+    await setStatus('ACTIVE');
+    const swept = await setStatus('CLOSED');
+
     assert.equal(
-      after.score,
-      before.score,
-      'the deadline passing moved a compliance score, so a taxpayer who lets a ' +
-        'bill lapse scores differently from one who is simply late',
+      lapsed.outstandingKobo,
+      swept.outstandingKobo,
+      'closing the record a minute after the deadline reported a different debt from ' +
+        'closing it an hour after',
     );
-  });
-
-  it('is still listed to the taxpayer, carrying its own deadline', async () => {
-    /*
-     * In, and it has to be: a citizen asking what they owe is asking the
-     * second question. The row carries `status` and `expires_at`, which is
-     * what lets the screen say "this one needs reissuing" rather than the
-     * platform deciding on the citizen's behalf that the debt is gone.
-     */
-    await lapse();
-    const owed = await get(`/revenue/taxpayers/${raised.taxpayerId}/obligations`, {
-      token: officerToken,
-    });
-    assert.equal(owed.status, 200, JSON.stringify(owed.body).slice(0, 300));
-    const row = (owed.body as { invoice_id: string; expires_at: string }[]).find(
-      (invoice) => invoice.invoice_id === raised.invoiceId,
-    );
-    assert.ok(row, `the lapsed invoice vanished from what the taxpayer owes: ${JSON.stringify(owed.body).slice(0, 300)}`);
-    assert.ok(row!.expires_at, 'and it is listed without the deadline that makes it unpayable');
-  });
-
-  it('still answers the "only unpaid" filter, which asks the second question', async () => {
-    // The checkbox says only unpaid, and a bill whose deadline passed is
-    // unpaid. An officer filtering for it is looking for people who have not
-    // paid, not for people they can take money from this afternoon.
-    await lapse();
-    const found = await get('/taxpayers/search?outstandingOnly=true', { token: officerToken });
-    assert.equal(found.status, 200, JSON.stringify(found.body).slice(0, 300));
-    // A bare array: `res.json(found)`.
-    const ids = (found.body as { id: string }[]).map((taxpayer) => taxpayer.id);
-    assert.ok(
-      ids.includes(raised.taxpayerId),
-      `a taxpayer with an unpaid bill dropped off the unpaid filter when it lapsed: ${JSON.stringify(found.body).slice(0, 300)}`,
-    );
+    assert.equal(lapsed.outstandingKobo, '0');
   });
 });
