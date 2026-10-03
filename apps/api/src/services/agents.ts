@@ -559,6 +559,36 @@ export async function submitKyc(params: {
      */
     await advisoryLock(client, LOCK_NAMESPACE.AGENT_KYC, params.agentId);
 
+    /*
+     * And ask again, now that nobody else can be mid-submission.
+     *
+     * The CLEARED check above runs on the pool before this lock exists, so it
+     * is a read of a value another submission is about to change. Two
+     * submissions that both passed it both proceeded, and the second
+     * superseded the first — including when the first had come back CLEARED.
+     * An identity verification that had succeeded was replaced by one that had
+     * not, and `kyc_status` went back with it, so an agent who was verified
+     * became an agent who was not. `activationBlockers` reads that column.
+     *
+     * The mock provider decides by the last digit of the identity number, so
+     * `concurrency/agent-kyc-race.test.ts` was submitting six clearing numbers
+     * out of eight and asserting only that one check survived — never which.
+     * Whether any of the eight was refused depended on how many had read the
+     * column before the first commit landed, which is why that test failed
+     * about one run in ten and passed on its own every time.
+     *
+     * The read above stays. It answers the ordinary sequential case without
+     * opening a transaction, and it is the one that saves a provider call.
+     */
+    const current = await queryOne<{ kyc_status: string }>(
+      client,
+      'SELECT kyc_status FROM agents WHERE id = $1 FOR UPDATE',
+      [params.agentId],
+    );
+    if (current?.kyc_status === 'CLEARED') {
+      throw conflict('KYC_ALREADY_CLEARED', 'Your identity verification has already been completed.');
+    }
+
     // Resubmission supersedes rather than overwrites, so a failed attempt stays
     // in the record (Addendum §28).
     await client.query(

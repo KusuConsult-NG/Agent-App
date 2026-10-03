@@ -103,9 +103,29 @@ async function liveChecks(): Promise<number> {
   return Number(row!.n);
 }
 
+/*
+ * WHICH NUMBERS THESE TESTS SUBMIT, AND WHY IT DECIDES THE TEST.
+ *
+ * `MockKycProvider` reads the last digit of the identity number: 9 fails, 8 is
+ * unavailable, 7 wants more from the applicant, 0 goes to review, and
+ * everything else comes back CLEARED.
+ *
+ * This file used to submit `22200000001`, `...2`, `...3`, `...4` and then
+ * `2220000010`-`2220000017` — six clearing numbers out of those eight — while
+ * asserting that none of the eight was refused. A submission that cleared the
+ * agent refused every later one whose guard ran after it committed, so the
+ * suite failed about one run in ten and passed on its own every time. The
+ * flake was the defect: the CLEARED guard read the column before the lock
+ * existed, so submissions that got past it superseded a verification that had
+ * already succeeded.
+ *
+ * So the numbering tests below use numbers that end in 0 — UNDER_REVIEW, a
+ * state a resubmission may legitimately supersede — and the clearing case is
+ * tested on its own, for the thing that was actually broken.
+ */
 describe('two identity checks submitted at once', () => {
-  it('leaves exactly one current check and refuses neither', async () => {
-    const results = await Promise.allSettled([submit('22200000001'), submit('22200000002')]);
+  it('refuses neither when neither has completed the verification', async () => {
+    const results = await Promise.allSettled([submit('22200000010'), submit('22200000020')]);
 
     const rejected = results.filter((r) => r.status === 'rejected');
     assert.deepEqual(
@@ -119,7 +139,7 @@ describe('two identity checks submitted at once', () => {
   });
 
   it('gives the two attempts different numbers', async () => {
-    await Promise.allSettled([submit('22200000003'), submit('22200000004')]);
+    await Promise.allSettled([submit('22200000030'), submit('22200000040')]);
 
     const attempts = await query<{ attempt_number: number }>(
       pool,
@@ -144,7 +164,7 @@ describe('two identity checks submitted at once', () => {
    */
   it('holds when eight arrive together', async () => {
     const results = await Promise.allSettled(
-      Array.from({ length: 8 }, (_, i) => submit(`2220000001${i}`)),
+      Array.from({ length: 8 }, (_, i) => submit(`2220000${i}50`)),
     );
     assert.deepEqual(
       results.filter((r) => r.status === 'rejected').map((r) =>
@@ -164,6 +184,61 @@ describe('two identity checks submitted at once', () => {
       new Set(rows.map((r) => r.attempt_number)).size,
       rows.length,
       'and every attempt has its own number',
+    );
+  });
+
+  it('never replaces a verification that has already succeeded', async () => {
+    /*
+     * The defect the flake was pointing at.
+     *
+     * Eight submissions, six of which the provider clears. The CLEARED guard
+     * ran on the pool before the lock, so a submission that read the column
+     * before the first clear committed went on to supersede it — and
+     * `UPDATE agents SET kyc_status` went with it. An agent whose identity had
+     * been verified became an agent whose identity was under review, and
+     * `activationBlockers` reads that column.
+     *
+     * Asserted on the surviving row rather than on the count: one check
+     * survived either way, which is why the old test never saw this.
+     */
+    const results = await Promise.allSettled(
+      Array.from({ length: 8 }, (_, i) => submit(`2220000011${i}`)),
+    );
+
+    const refusals = results
+      .filter((r) => r.status === 'rejected')
+      .map((r) => String((r as PromiseRejectedResult).reason));
+    assert.ok(refusals.length > 0, 'at least one submission arrived after the verification cleared');
+    for (const refusal of refusals) {
+      assert.match(
+        refusal,
+        /identity verification has already been completed/,
+        'a late submission was refused by the index rather than by name: ' + refusal,
+      );
+    }
+
+    const surviving = await query<{ verification_status: string }>(
+      pool,
+      `SELECT verification_status FROM agent_kyc
+        WHERE agent_id = $1 AND superseded_at IS NULL`,
+      [agentId],
+    );
+    assert.equal(surviving.length, 1, 'one agent, one current identity check');
+    assert.equal(
+      surviving[0]!.verification_status,
+      'CLEARED',
+      'a completed identity verification was superseded by one that had not completed',
+    );
+
+    const agent = await queryOne<{ kyc_status: string }>(
+      pool,
+      'SELECT kyc_status FROM agents WHERE id = $1',
+      [agentId],
+    );
+    assert.equal(
+      agent!.kyc_status,
+      'CLEARED',
+      'and the column activation reads went back with it',
     );
   });
 });
