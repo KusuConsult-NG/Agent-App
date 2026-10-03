@@ -49,6 +49,10 @@ import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { outstandingRefunds } from '../services/reconciliation';
 import { taxpayersAwaitingTin, taxpayersEndedWithArrears } from '../services/taxpayers';
+import {
+  outstandingAuthorityNotifications,
+  vehiclesAwaitingAuthority,
+} from '../services/vehicles';
 
 const OFFICER = '+2348089600001';
 const APPROVER = '+2348089600002';
@@ -225,5 +229,40 @@ describe('the two taxpayer queues beside it', () => {
       'the count is of invoices rather than of the people who owe them',
     );
     assert.equal(capped.cap, 2);
+  });
+});
+
+describe('the two vehicle queues, which I first said were not capped', () => {
+  /*
+   * They are. The commit that fixed the other three said "three came from
+   * arrays the API caps", and all five do — these two were asserted rather
+   * than checked. Counted here the same way.
+   */
+  async function vehicle(suffix: string, outcome: string) {
+    const row = await queryOne<{ id: string }>(
+      pool,
+      `INSERT INTO vehicles (registration_number, owner_name, vehicle_type, source,
+                             authority_lookup_outcome, status)
+       VALUES ($1, 'Queue Owner', 'PRIVATE_CAR', 'MANUAL_ENTRY', $2, 'ACTIVE')
+       RETURNING id`,
+      [`PL-Q${suffix}-QQ`, outcome],
+    );
+    return row!.id;
+  }
+
+  it('counts every vehicle captured while the authority was unreachable', async () => {
+    for (const n of ['1', '2', '3']) await vehicle(n, 'UNAVAILABLE');
+    // One that was actually checked, so the predicate is doing work.
+    await vehicle('4', 'FOUND');
+
+    const capped = await vehiclesAwaitingAuthority(pool, 2);
+    assert.equal(capped.vehicles.length, 2);
+    assert.equal(capped.matched, 3, 'the queue is longer than the page and says so');
+    assert.equal(capped.cap, 2);
+  });
+
+  it('answers an empty authority queue with zero', async () => {
+    const none = await outstandingAuthorityNotifications(pool, 2);
+    assert.deepEqual(none, { renewals: [], matched: 0, cap: 2 });
   });
 });

@@ -175,9 +175,18 @@ vehicleRouter.get(
   '/renewals/authority-outstanding',
   requirePermission('vehicle:authority_sync'),
   asyncHandler(async (_req, res) => {
+    const [acknowledgement, awaiting] = await Promise.all([
+      vehicles.outstandingAuthorityNotifications(pool),
+      vehicles.vehiclesAwaitingAuthority(pool),
+    ]);
+    // The keys the screen already reads, plus the size of each queue beside
+    // the page of it.
     res.json({
-      renewals: await vehicles.outstandingAuthorityNotifications(pool),
-      vehiclesAwaitingAuthority: await vehicles.vehiclesAwaitingAuthority(pool),
+      renewals: acknowledgement.renewals,
+      renewalsMatched: acknowledgement.matched,
+      vehiclesAwaitingAuthority: awaiting.vehicles,
+      vehiclesAwaitingAuthorityMatched: awaiting.matched,
+      cap: acknowledgement.cap,
     });
   }),
 );

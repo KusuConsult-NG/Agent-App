@@ -947,12 +947,24 @@ export async function retryAuthorityNotifications(params: {
 }
 
 /** Completed renewals the vehicle authority has not acknowledged. */
-export async function outstandingAuthorityNotifications(db: Db, limit = 100) {
-  return query(
+/**
+ * Renewals the authority has not acknowledged, and how many there are.
+ *
+ * The count is over everything that matches rather than the page returned, for
+ * the reason the refunds queue beside it on `Outstanding.tsx` gives: the screen
+ * showed the array's length, so past the cap the queue reported its own page
+ * size. `count(*) OVER ()` is evaluated before LIMIT.
+ */
+export async function outstandingAuthorityNotifications(
+  db: Db,
+  limit = 100,
+): Promise<{ renewals: Record<string, unknown>[]; matched: number; cap: number }> {
+  const rows = await query<{ matched: string }>(
     db,
     `SELECT r.id, v.registration_number, r.document_number, r.expiry_date,
             r.authority_notification_status, r.authority_notification_reason,
-            r.authority_notification_attempts, r.created_at
+            r.authority_notification_attempts, r.created_at,
+            count(*) OVER ()::text AS matched
        FROM vehicle_renewals r JOIN vehicles v ON v.id = r.vehicle_id
       WHERE r.authority_notification_status <> 'ACCEPTED'
         AND r.status = 'COMPLETED'
@@ -960,6 +972,12 @@ export async function outstandingAuthorityNotifications(db: Db, limit = 100) {
       LIMIT $1`,
     [limit],
   );
+
+  return {
+    renewals: rows.map(({ matched: _matched, ...renewal }) => renewal),
+    matched: Number.parseInt(rows[0]?.matched ?? '0', 10),
+    cap: limit,
+  };
 }
 
 /**
@@ -969,17 +987,28 @@ export async function outstandingAuthorityNotifications(db: Db, limit = 100) {
  * as vehicles the authority confirmed it holds no record of, and this is the
  * list that exists so nobody has to remember the difference.
  */
-export async function vehiclesAwaitingAuthority(db: Db, limit = 100) {
-  return query(
+export async function vehiclesAwaitingAuthority(
+  db: Db,
+  limit = 100,
+): Promise<{ vehicles: Record<string, unknown>[]; matched: number; cap: number }> {
+  // Counted over all of them, as above.
+  const rows = await query<{ matched: string }>(
     db,
     `SELECT v.id, v.registration_number, v.owner_name, v.make, v.model,
-            v.created_at, v.source
+            v.created_at, v.source,
+            count(*) OVER ()::text AS matched
        FROM vehicles v
       WHERE v.authority_lookup_outcome = 'UNAVAILABLE'
       ORDER BY v.created_at
       LIMIT $1`,
     [limit],
   );
+
+  return {
+    vehicles: rows.map(({ matched: _matched, ...vehicle }) => vehicle),
+    matched: Number.parseInt(rows[0]?.matched ?? '0', 10),
+    cap: limit,
+  };
 }
 
 export { parseKobo };
