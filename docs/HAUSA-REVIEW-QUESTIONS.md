@@ -674,9 +674,14 @@ failed, a step-up the officer walked away from. `STEP_UP_REQUIRED` has now been
 added, because it guards every consequential money action in the portal and its
 instruction was already in Hausa under an English heading.
 
-**The scale, counted rather than estimated.** The platform raises **173
+**The scale, counted rather than estimated.** The platform raises **174
 distinct error codes**; the officer portal says 8 of them in Hausa, and the
-agent application says 33. The first version of this section said twenty-six,
+agent application says 33. The 174th is `CASE_MOVED`, raised when two officers
+escalate one case together and the second finds it already with somebody else.
+It is English, like the rest of the administrative row in the table below, and
+for the same reason: whether an officer working a case file needs that sentence
+in Hausa is a question for the reviewer rather than an answer this document can
+assume. The first version of this section said twenty-six,
 from a search that matched `conflict('CODE'` on a single line and missed every
 multi-line call and every `new AppError({ code: … })` literal — which is most
 of them. It understated the gap by a factor of six, on the page this document

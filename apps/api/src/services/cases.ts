@@ -164,6 +164,38 @@ function assertOpen(row: CaseRow): void {
   );
 }
 
+/**
+ * The case again, with its row locked, for the writers that refuse on its state.
+ *
+ * `load` reads on the pool, before any transaction exists, so a refusal
+ * decided on it is decided on a value another request is about to change. Two
+ * officers resolving one case together both read OPEN, both passed "already
+ * resolved", and the case ended with two RESOLUTION entries and two audit
+ * rows, each claiming it moved the case out of OPEN. One of those claims was
+ * false, and the case file is evidence an auditor reads months later.
+ *
+ * The practice is `requestTin`'s, two files away: "The write below re-reads
+ * `FOR UPDATE` and refuses." The read on the pool stays — it answers the
+ * ordinary sequential case and does the permission work before a transaction
+ * is opened — and this is what makes the answer hold when two arrive at once.
+ *
+ * Only the writers whose refusal turns on the case's own state use it.
+ * Attaching evidence and adding a comment are additive: two landing together
+ * is two things happening, which is what the record should say.
+ */
+async function lockCase(
+  client: PoolClient,
+  id: string,
+): Promise<{ status: string; case_number: string; assignee_id: string | null }> {
+  const row = await queryOne<{ status: string; case_number: string; assignee_id: string | null }>(
+    client,
+    'SELECT status, case_number, assignee_id FROM cases WHERE id = $1 FOR UPDATE',
+    [id],
+  );
+  if (!row) throw notFound('That case');
+  return row;
+}
+
 async function load(db: Db, id: string): Promise<CaseRow> {
   const row = await queryOne<CaseRow>(
     db,
@@ -771,6 +803,32 @@ export async function escalate(
   }
 
   await withTransaction(async (client) => {
+    /*
+     * Asked again under the lock, and `assignee_id` as well as the status.
+     *
+     * The target above was computed from `row.assignee_id` — who held the case
+     * when this request started. If another escalation has landed since, the
+     * case is already with somebody else and this one would record a move from
+     * an officer who no longer held it, and notify the person above a second
+     * time for one escalation. The comment below says why that notification is
+     * not a formality.
+     */
+    const current = await lockCase(client, caseId);
+    if (TERMINAL.includes(current.status)) {
+      throw conflict(
+        'CASE_CLOSED',
+        `Case ${current.case_number} is ${current.status.toLowerCase()} and cannot be changed.`,
+        'Open a new case that links to this one.',
+      );
+    }
+    if (current.assignee_id !== row.assignee_id) {
+      throw conflict(
+        'CASE_MOVED',
+        `Case ${current.case_number} has been reassigned since this page was opened.`,
+        'Open the case again to see who holds it now, then escalate from there.',
+      );
+    }
+
     await client.query(
       `UPDATE cases
           SET status = 'ESCALATED', assignee_id = $2, updated_at = now()
@@ -840,6 +898,20 @@ export async function setStatus(
   }
 
   await withTransaction(async (client) => {
+    // Asked again under the lock. Everything decided above was decided on a
+    // read another request may already have overtaken.
+    const current = await lockCase(client, caseId);
+    if (TERMINAL.includes(current.status)) {
+      throw conflict(
+        'CASE_CLOSED',
+        `Case ${current.case_number} is ${current.status.toLowerCase()} and cannot be changed.`,
+        'Open a new case that links to this one.',
+      );
+    }
+    if (input.status === current.status) {
+      throw badRequest(`Case ${current.case_number} is already ${current.status.toLowerCase()}.`);
+    }
+
     await client.query(
       `UPDATE cases
           SET status      = $2,
