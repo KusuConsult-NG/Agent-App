@@ -958,6 +958,12 @@ export async function searchTaxpayers(
    * Outstanding means an invoice with money still on it. Scoped to the same
    * item or category when one was given, so "defaulters on Market Levy" does
    * not return somebody who is square on Market Levy and behind on a shop rate.
+   *
+   * No deadline test. The checkbox says only unpaid, and a bill whose deadline
+   * has passed is unpaid: an officer filtering for it is looking for people
+   * who have not paid, not for people they can take money from this
+   * afternoon. The arrears worklist answers that second question and excludes
+   * lapsed invoices for exactly the reason this includes them.
    */
   if (params.outstandingOnly) {
     if (params.revenueItemId) {
@@ -1465,6 +1471,10 @@ export async function setTaxpayerStatus(params: {
     // Read rather than decided: what is still owed is a fact about the
     // invoices, and it is reported back so the officer closing a record sees
     // the debt they are leaving behind at the moment they leave it.
+    //
+    // Lapsed invoices included, for the same reason: the debt they are
+    // leaving behind is the whole of it, and a bill that needs reissuing is
+    // the part most likely to be forgotten once the record is closed.
     const owed = await queryOne<{ outstanding: string }>(
       client,
       `SELECT COALESCE(SUM(i.total_amount_kobo - i.amount_paid_kobo), 0)::text AS outstanding

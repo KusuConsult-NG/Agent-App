@@ -745,7 +745,16 @@ export async function transitionTransaction(
   );
 }
 
-/** Outstanding obligations for a taxpayer (PRD §5.2 "Know what they owe"). */
+/**
+ * Outstanding obligations for a taxpayer (PRD §5.2 "Know what they owe").
+ *
+ * A lapsed invoice stays on this list, and the row carries its own `status`
+ * and `expires_at` so a screen can say "this one needs reissuing". The debt
+ * does not lapse with the paper, and deciding on the citizen's behalf that it
+ * is gone would be the platform answering a question nobody asked it.
+ * `an-invoice-stops-being-owed.test.ts` holds this against the figures that
+ * deliberately exclude it.
+ */
 export async function getObligations(db: Db, taxpayerId: string) {
   return query(
     db,

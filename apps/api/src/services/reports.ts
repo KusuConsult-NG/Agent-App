@@ -226,6 +226,12 @@ export async function executiveDashboard(
           * invoiced and owed, which is a fact, and the forecast is a separate
           * figure that says out loud that it is arithmetic.
           */
+         -- Lapsed invoices counted, and this one was weighed rather than
+         -- assumed. "Invoiced and owed" is what the comment above claims and
+         -- a lapsed bill is both; narrowing it to what could be collected
+         -- today would make this a second forecast under a name that says it
+         -- is a fact. The figure that does answer "collectable now" is the
+         -- arrears worklist, which reports lapsed money as its own line.
          (SELECT COALESCE(SUM(i.total_amount_kobo - i.amount_paid_kobo),0)::text
             FROM invoices i
             JOIN taxpayers tp ON tp.id = i.taxpayer_id
@@ -1391,7 +1397,23 @@ export async function revenueOfficerHome(db: Db) {
        (SELECT count(*)::text FROM invoices WHERE status = 'UNPAID' AND
          (expires_at IS NULL OR expires_at > now())) AS invoices_unpaid,
        (SELECT count(*)::text FROM invoices WHERE status = 'EXPIRED') AS invoices_expired,
-       (SELECT COALESCE(SUM(total_amount_kobo),0)::text FROM invoices WHERE status = 'UNPAID')
+       -- The same deadline test as invoices_unpaid above, because these two
+       -- are one tile: the money is the figure and that count is its hint.
+       --
+       -- It was not here. The money filtered on the status alone and so
+       -- waited for the hourly expiry sweep to write EXPIRED, while the count
+       -- tested the deadline itself and dropped the invoice at once. For up
+       -- to an hour the tile showed money over a set of invoices its own hint
+       -- did not count -- and jobs.ts names that window for what it is: one
+       -- in which the platform "tells the State it is owed money nobody can
+       -- pay it."
+       --
+       -- Lapsed money is not lost from the officer's view by this. It is
+       -- counted, labelled, on the arrears screen this tile links to, whose
+       -- lapsed CTE keys on the deadline rather than the status and so is
+       -- also right immediately.
+       (SELECT COALESCE(SUM(total_amount_kobo),0)::text FROM invoices
+         WHERE status = 'UNPAID' AND (expires_at IS NULL OR expires_at > now()))
          AS unpaid_kobo`,
   );
 }

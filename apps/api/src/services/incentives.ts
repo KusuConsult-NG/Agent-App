@@ -57,6 +57,11 @@ export async function computeComplianceScore(
          AS paid_count,
        count(*) FILTER (WHERE i.expires_at IS NOT NULL AND t.verified_at > i.expires_at)::text
          AS late_count,
+       -- No deadline test, deliberately: a lapsed bill is unpaid, and a score
+       -- that improved when one lapsed would make letting the deadline pass
+       -- the cheapest way to look compliant. Asserted in
+       -- an-invoice-stops-being-owed.test.ts, which lists every figure that
+       -- has an opinion about a lapsed invoice and why.
        COALESCE((SELECT SUM(total_amount_kobo - amount_paid_kobo) FROM invoices
                   WHERE taxpayer_id = $1 AND status IN ('UNPAID','PARTIALLY_PAID')), 0)::text
          AS outstanding_kobo,
