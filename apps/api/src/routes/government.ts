@@ -81,7 +81,7 @@ import * as officerDevices from '../services/officer-devices';
 import * as inbox from '../services/officer-inbox';
 import { integrationStatus } from '../integrations';
 import { integrationHealth } from '../services/integration-health';
-import { jobHealth } from '../services/jobs';
+import { jobHealth, runOnDemand } from '../services/jobs';
 import { sendDueReminders } from '../services/reminders';
 
 export const governmentRouter = Router();
@@ -316,7 +316,9 @@ governmentRouter.post(
   '/intelligence/rebuild',
   requirePermission('system:configure'),
   asyncHandler(async (req, res) => {
-    const result = await rebuildVehicleConnections(pool);
+    const result = await runOnDemand('connection-graph', 'An intelligence rebuild', () =>
+      rebuildVehicleConnections(pool),
+    );
     await withTransaction(async (client) => {
       await recordAudit(client, {
         actorId: req.auth!.userId,
@@ -1937,10 +1939,17 @@ governmentRouter.post(
   '/refunds/retry',
   requirePermission('payment:reconcile'),
   asyncHandler(async (req, res) => {
-    const result = await reconciliation.retryOutstandingRefunds({
-      actorId: req.auth!.userId,
-      actorRole: req.auth!.role,
-    });
+    const result = await runOnDemand(
+      'refund-retry',
+      'A refund retry',
+      () =>
+        reconciliation.retryOutstandingRefunds({
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      'Wait for it to finish. A second pass asks the gateway to return the same ' +
+        'refunds again, which is the traffic the lock exists to prevent.',
+    );
     res.json({
       ...result,
       // The other two catch-up endpoints say what happened in a sentence; this
@@ -1978,7 +1987,22 @@ governmentRouter.post(
   '/commissions/promote',
   requirePermission('commission:manage'),
   asyncHandler(async (_req, res) => {
-    const promoted = await commission.promoteEligibleCommissions();
+    /*
+     * The one button here that moves money, so it says more than the default.
+     *
+     * A second pass promotes nothing twice — `promoteEligibleCommissions`
+     * selects `FOR UPDATE OF c` and transitions inside the same transaction,
+     * so the second finds nothing PENDING. An officer refused on a payout
+     * button needs telling that, because the alternative reading of "already
+     * running" is that somebody is being paid twice.
+     */
+    const promoted = await runOnDemand(
+      'commission-promotion',
+      'Commission promotion',
+      () => commission.promoteEligibleCommissions(),
+      'Wait for it to finish and reload. No agent is promoted twice: each record is ' +
+        'locked as it moves, so the pass already running will have taken it.',
+    );
     res.json({ promoted, message: `${promoted} commission record(s) became eligible for payout.` });
   }),
 );
@@ -2823,31 +2847,22 @@ governmentRouter.post(
      * than unlikely; this is what stops the second sweep doing the work twice
      * over before discovering that.
      *
-     * `withJobLock` rather than `runJob`: `runJob` records a start against the
-     * job, and the health board decides whether a job is overdue by comparing
-     * its last start against its interval. A manual press recording a
-     * scheduled run would let this button hide a scheduler that had stopped —
-     * the same reasoning the reconcile-now button above gives for the same
-     * choice.
+     * The refusal is a 409 following the reconcile-now button in this file
+     * rather than the timer: "The scheduled path answers contention with
+     * `{ skipped: true }`, which is right for a timer and wrong for a person.
+     * An officer who presses Reconcile and is handed 'skipped' has learned
+     * nothing." `runOnDemand` is where that now lives, along with the reason
+     * it takes `withJobLock` and not `runJob`; the sentence below is this
+     * sweep's own, because what a second pass would and would not send is
+     * particular to the window flags.
      */
-    const outcome = await withJobLock('reminder-sweep', () => sendDueReminders());
-
-    if (!outcome.ran) {
-      /*
-       * A 409, following the reconcile-now button in this file rather than the
-       * timer: "The scheduled path answers contention with `{ skipped: true }`,
-       * which is right for a timer and wrong for a person. An officer who
-       * presses Reconcile and is handed 'skipped' has learned nothing."
-       */
-      throw conflict(
-        'REMINDER_SWEEP_ALREADY_RUNNING',
-        'A reminder sweep is already running.',
-        'Wait for it to finish. Every invoice it has reached is flagged for this window, ' +
-          'so a second sweep would send nothing a taxpayer has not already been sent.',
-      );
-    }
-
-    const result = outcome.value;
+    const result = await runOnDemand(
+      'reminder-sweep',
+      'A reminder sweep',
+      () => sendDueReminders(),
+      'Wait for it to finish. Every invoice it has reached is flagged for this window, ' +
+        'so a second sweep would send nothing a taxpayer has not already been sent.',
+    );
     res.json({
       ...result,
       message: `${result.sent} reminder(s) queued, ${result.skipped} skipped (errors or daily levies).`,

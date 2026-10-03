@@ -3,6 +3,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { serialiseKobo } from '@psirs/shared';
+import { runOnDemand } from '../services/jobs';
 import { pool, queryOne } from '../db/pool';
 import { authenticate, requireActiveAgent, requirePermission, requireSupportedAppVersion } from '../middleware/auth';
 import { idempotent } from '../middleware/idempotency';
@@ -204,11 +205,18 @@ vehicleRouter.post(
   validateBody(
     z.object({ limit: z.number().int().min(1).max(500).optional() }),
     async (req, res, data) => {
-      const result = await vehicles.retryAuthorityNotifications({
-        actorId: req.auth!.userId,
-        actorRole: req.auth!.role,
-        limit: data.limit,
-      });
+      const result = await runOnDemand(
+        'authority-catch-up',
+        'An authority retry',
+        () =>
+          vehicles.retryAuthorityNotifications({
+            actorId: req.auth!.userId,
+            actorRole: req.auth!.role,
+            limit: data.limit,
+          }),
+        'Wait for it to finish. A second pass tells the vehicle authority about the ' +
+          'same renewals again.',
+      );
       res.json({
         ...result,
         message:

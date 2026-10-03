@@ -18,6 +18,7 @@
  */
 
 import { pool, query, withJobLock, type JobOutcome } from '../db/pool';
+import { conflict } from '../lib/errors';
 
 /**
  * Every job that is supposed to be running, declared rather than discovered.
@@ -163,6 +164,73 @@ export const BACKGROUND_JOBS = {
 } as const;
 
 export type JobName = keyof typeof BACKGROUND_JOBS;
+
+/**
+ * A job's work, run because a person pressed a button, behind the job's lock.
+ *
+ * Five routes called their sweep's function directly: refunds retry, TIN
+ * retry, commission promotion, authority retry and the intelligence rebuild.
+ * The scheduled path holds a cross-instance advisory lock; those routes held
+ * nothing, so a press during a sweep — or two presses, having had no feedback
+ * from the first — ran a second full pass alongside it.
+ *
+ * The reminder-sweep button was the sixth and was fixed a commit earlier,
+ * with a refusal code of its own. It is here now too, because a code that
+ * named one sweep among six identical refusals was the thing this helper
+ * exists to avoid — see WHY ONE CODE below. Its advice is the one thing that
+ * really is particular to it, and that is a parameter.
+ *
+ * WHAT THAT COSTS, CHECKED RATHER THAN ASSUMED
+ *
+ * None of them misposts money, and each is worth saying individually:
+ *
+ *   * `promoteEligibleCommissions` selects `FOR UPDATE OF c` and transitions
+ *     in the same transaction, so a second pass finds nothing PENDING.
+ *   * `retryOutstandingTins` calls `requestTin`, which re-reads `FOR UPDATE`
+ *     and refuses — so no taxpayer gets two TINs.
+ *   * `rebuildVehicleConnections` and `retryAuthorityNotifications` are
+ *     documented idempotent, and are.
+ *   * `retryOutstandingRefunds` has no claim of its own: `attemptRefund` goes
+ *     straight to `gateway.refund`.
+ *
+ * What all five do cost is the external call, twice — the gateway, the TIN
+ * service, the vehicle authority. That is exactly what the lock is for: in the
+ * reconcile-now button's own words, "What it does cost is the gateway, and
+ * that is precisely what the lock is for... an officer's button is another
+ * door onto the same harm, one the lock was never told about."
+ *
+ * WHY ONE CODE AND NOT FIVE
+ *
+ * A caller does nothing different per sweep: the answer is always "this is
+ * already running, wait for it", and the officer knows which button they
+ * pressed. Six codes differing only in which sweep they name would be six
+ * translations of one sentence, on a platform where most refusals are still
+ * waiting for their first. The sweep is named in the message, and the advice —
+ * which is the part that differs — is a parameter.
+ *
+ * Two buttons keep codes of their own, for reasons and not by omission.
+ * `RECONCILIATION_ALREADY_RUNNING` builds its message by asking the database
+ * which run is in flight, which a fixed label cannot do.
+ * `EVALUATION_ALREADY_RUNNING` locks on `incentive-evaluate-all:<programme>`
+ * — a lock name per programme, not a `JobName`, so it cannot come through
+ * here at all.
+ *
+ * `withJobLock` rather than `runJob`: a person pressing a button is not the
+ * scheduled sweep, and recording it as one would put a liveness reading
+ * against the job that no worker produced.
+ */
+export async function runOnDemand<T>(
+  name: JobName,
+  label: string,
+  task: () => Promise<T>,
+  nextStep = 'Wait for it to finish, then look at what it produced.',
+): Promise<T> {
+  const outcome = await withJobLock(name, task);
+  if (!outcome.ran) {
+    throw conflict('SWEEP_ALREADY_RUNNING', `${label} is already running.`, nextStep);
+  }
+  return outcome.value;
+}
 
 /**
  * Run a job under its lock, and record that it ran whichever way it ends.

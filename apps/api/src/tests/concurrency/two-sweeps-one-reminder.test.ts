@@ -212,7 +212,13 @@ describe('the button beside the schedule', () => {
         409,
         `the button started a second sweep: ${JSON.stringify(response.body)}`,
       );
-      assert.equal(response.body.error.code, 'REMINDER_SWEEP_ALREADY_RUNNING');
+      /*
+       * The shared code. This button had one of its own for a commit, which
+       * was five more codes than six identical refusals need — see
+       * `runOnDemand`. What stayed particular to the reminder sweep is the
+       * advice, which is why the next line is still here.
+       */
+      assert.equal(response.body.error.code, 'SWEEP_ALREADY_RUNNING');
       assert.match(response.body.error.nextStep, /already been sent/);
       assert.deepEqual(await channelsSent(), [], 'and it sent nothing');
     } finally {

@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { ECONOMIC_SECTORS, draftRefusalSentence, roleHasPermission } from '@psirs/shared';
 import type { Permission } from '@psirs/shared';
+import { runOnDemand } from '../services/jobs';
 import { pool, queryOne, withTransaction, query } from '../db/pool';
 import * as rbacStore from '../services/rbac-store';
 import {
@@ -338,11 +339,18 @@ taxpayerRouter.post(
   validateBody(
     z.object({ limit: z.number().int().min(1).max(500).optional() }),
     async (req, res, data) => {
-      const result = await taxpayers.retryOutstandingTins({
-        actorId: req.auth!.userId,
-        actorRole: req.auth!.role,
-        limit: data.limit,
-      });
+      const result = await runOnDemand(
+        'tin-catch-up',
+        'A TIN retry',
+        () =>
+          taxpayers.retryOutstandingTins({
+            actorId: req.auth!.userId,
+            actorRole: req.auth!.role,
+            limit: data.limit,
+          }),
+        'Wait for it to finish. A second pass asks the TIN service for the same ' +
+          'taxpayers again.',
+      );
       res.json({
         ...result,
         message:

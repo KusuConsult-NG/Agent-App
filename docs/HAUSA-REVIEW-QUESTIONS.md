@@ -678,11 +678,16 @@ instruction was already in Hausa under an English heading.
 distinct error codes**; the officer portal says 8 of them in Hausa, and the
 agent application says 33. The last two are `CASE_MOVED`, raised when two
 officers escalate one case together and the second finds it already with
-somebody else, and `REMINDER_SWEEP_ALREADY_RUNNING`, raised when one presses
-send-due-reminders while a sweep is in flight. Both are English, like the rest
-of the administrative row in the table below, and for the same reason: whether
-an officer working a case file or a sweep needs those sentences in Hausa is a
-question for the reviewer rather than an answer this document can assume. The first version of this section said twenty-six,
+somebody else, and `SWEEP_ALREADY_RUNNING`, raised when one presses any of the
+six buttons that start a background sweep by hand — reminders, refunds, TINs,
+vehicle-authority notices, commission promotion, the connection graph — while
+that sweep is already in flight. One code covers all six because the officer
+knows which button they pressed; what differs between them is the advice, and
+the advice is carried in the message rather than in the code. Both are English,
+like the rest of the administrative row in the table below, and for the same
+reason: whether an officer working a case file or a sweep needs those sentences
+in Hausa is a question for the reviewer rather than an answer this document can
+assume. The first version of this section said twenty-six,
 from a search that matched `conflict('CODE'` on a single line and missed every
 multi-line call and every `new AppError({ code: … })` literal — which is most
 of them. It understated the gap by a factor of six, on the page this document
@@ -690,7 +695,7 @@ exists to keep honest, which is why all three figures are now recomputed by
 `scripts/build-hausa-review.mjs` and the build refuses when this sentence
 disagrees with them.
 
-Not all 171 can reach an officer. Many are the agent's, many are the platform
+Not all 175 can reach an officer. Many are the agent's, many are the platform
 talking to itself — a storage write that did not complete, a malformed body, a
 route that does not exist. The ones below are a **sample, not the set**: those
 an officer meets while doing the work the portal is for, each carrying a code

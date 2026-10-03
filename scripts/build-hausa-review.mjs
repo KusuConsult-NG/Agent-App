@@ -457,6 +457,18 @@ const FIGURES = [
     actual: String(errorCodes.size),
   },
   {
+    /*
+     * The same figure, said twice in two paragraphs — and the second copy had
+     * gone stale at 171 while the first was recomputed on every build. A
+     * number the script writes and a number beside it that nobody checks is
+     * worse than one number, because the unchecked one borrows the checked
+     * one's authority. So both are checked now.
+     */
+    what: 'how many codes cannot reach an officer',
+    pattern: /Not\s+all\s+(\d+)\s+can\s+reach\s+an\s+officer/g,
+    actual: String(errorCodes.size),
+  },
+  {
     what: 'the portal map',
     pattern: /the\s+officer\s+portal\s+says\s+(\d+)\s+of\s+them/g,
     actual: String(portalTranslated.length),
