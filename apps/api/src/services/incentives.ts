@@ -53,7 +53,17 @@ export async function computeComplianceScore(
     client,
     `SELECT
        (SELECT tin IS NOT NULL FROM taxpayers WHERE id = $1) AS has_tin,
-       count(*)::text AS raised_count,
+       /*
+        * What the State asked for and still asks for. A bill it withdrew —
+        * an objection upheld, a PAYE return taken back — is not one, and was
+        * counted as one: a trader with one levy paid scored 100, won an
+        * objection to a presumptive estimate, and scored 90, "1 of 2
+        * assessment period(s) settled". The decision in their favour cost
+        * them ten points and nothing they could do would earn them back.
+        * Paid statuses are untouched by this, because a paid bill is never
+        * withdrawn — it comes back through a refund instead.
+        */
+       count(*) FILTER (WHERE i.status <> 'CANCELLED')::text AS raised_count,
        count(*) FILTER (WHERE t.status IN ('SETTLED','RECEIPT_GENERATED','RECONCILIATION_PENDING'))::text
          AS paid_count,
        count(*) FILTER (WHERE i.expires_at IS NOT NULL AND t.verified_at > i.expires_at)::text
@@ -102,7 +112,8 @@ export async function computeComplianceScore(
        count(DISTINCT COALESCE(a.period_label, a.id::text)) FILTER (
          WHERE t.status IN ('SETTLED','RECEIPT_GENERATED','RECONCILIATION_PENDING')
        )::text AS distinct_periods,
-       count(DISTINCT COALESCE(a.period_label, a.id::text))::text AS assessed_periods,
+       count(DISTINCT COALESCE(a.period_label, a.id::text))
+         FILTER (WHERE i.status <> 'CANCELLED')::text AS assessed_periods,
        max(t.verified_at) AS last_payment_at,
        /*
         * Only reversals the taxpayer is answerable for.

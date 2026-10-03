@@ -54,6 +54,7 @@ import {
 } from './helpers';
 import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
+import { expireLapsedInvoices } from '../services/revenue';
 
 const OFFICER = '+2348083000001';
 let officer = '';
@@ -200,6 +201,32 @@ describe('withdrawing a PAYE return withdraws the bill it raised', () => {
 
     const after = await billsFor();
     assert.equal(after[0]!.status, 'PAID', 'a paid bill is not cancelled by withdrawing the return');
+  });
+
+  /*
+   * The guard this mirrors was meant as "only a bill that has not been paid",
+   * and was written as UNPAID or PARTIALLY_PAID. A bill whose payment window
+   * closed is EXPIRED, which has not been paid either, and was left standing.
+   */
+  it('withdraws a bill whose payment window had already closed', async () => {
+    const filed = await fileReturn();
+    await query(pool, `UPDATE invoices SET expires_at = now() - interval '1 day' WHERE taxpayer_id = $1`, [
+      employerId,
+    ]);
+    assert.equal((await expireLapsedInvoices({ actorId: null, actorRole: 'system' })).expired, 1);
+    assert.equal((await billsFor())[0]!.status, 'EXPIRED', 'the fixture never reached the lapsed state');
+
+    const cancelled = await post(
+      `/government/paye/returns/${filed.scheduleId}/cancel`,
+      { reason: 'Filed for the wrong month; refiling.' },
+      auth(),
+    );
+    assert.equal(cancelled.status, 204, JSON.stringify(cancelled.body));
+    assert.equal(
+      (await billsFor())[0]!.status,
+      'CANCELLED',
+      'the return was withdrawn and its lapsed bill stayed on the books',
+    );
   });
 
   /* The control that the withdrawal itself still happens and is accountable. */

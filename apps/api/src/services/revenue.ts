@@ -698,6 +698,37 @@ export async function expireLapsedInvoices(params: {
   return { expired };
 }
 
+/**
+ * Withdraw the bill behind an assessment the State has taken back.
+ *
+ * Two decisions take a bill back: an objection upheld (`enumeration.ts`) and a
+ * PAYE return withdrawn to be refiled (`paye.ts`). Each cancelled the invoice
+ * with the same guard, the second copied from the first and saying so:
+ * "only a bill that has not been paid is withdrawn". The guard was written as
+ * UNPAID or PARTIALLY_PAID, and an invoice whose payment window has closed is
+ * neither. It is EXPIRED, and it has not been paid either.
+ *
+ * That is not a corner. An objection window and an invoice's payment window
+ * are both thirty days, so an objection raised late in its window is still
+ * open when the expiry sweep reaches the bill. Measured: a trader objects, the
+ * invoice lapses while the objection is open, the objection is upheld. The
+ * presumptive assessment read WITHDRAWN and its invoice read EXPIRED, and the
+ * arrears worklist's lapsed figure and the person's liabilities both went on
+ * listing the ₦48,000 as money that needed a fresh assessment to collect —
+ * for an estimate the State had just agreed was wrong.
+ *
+ * A paid bill is still not withdrawn here, for the reason `paye.ts` gives:
+ * money that has reached a government account comes back through a refund,
+ * with the accountability a refund carries.
+ */
+export async function withdrawUnpaidBill(db: Db, assessmentId: string): Promise<void> {
+  await db.query(
+    `UPDATE invoices SET status = 'CANCELLED'
+      WHERE assessment_id = $1 AND status IN ('UNPAID', 'PARTIALLY_PAID', 'EXPIRED')`,
+    [assessmentId],
+  );
+}
+
 export async function transitionTransaction(
   client: PoolClient,
   params: {

@@ -53,7 +53,7 @@ import type { PoolClient } from 'pg';
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { computeAmount, type RateVersion } from './rate-engine';
-import { createAssessmentIn, resolveRate } from './revenue';
+import { createAssessmentIn, resolveRate, withdrawUnpaidBill } from './revenue';
 import { recordAudit } from './audit';
 import { scopeParams, type ReportScope } from './report-scope';
 import { badRequest, conflict, notFound } from '../lib/errors';
@@ -409,11 +409,7 @@ export async function cancelPayeSchedule(
      * makes the demand disappear.
      */
     if (schedule.assessment_id) {
-      await client.query(
-        `UPDATE invoices SET status = 'CANCELLED'
-          WHERE assessment_id = $1 AND status IN ('UNPAID', 'PARTIALLY_PAID')`,
-        [schedule.assessment_id],
-      );
+      await withdrawUnpaidBill(client, schedule.assessment_id);
     }
 
     await recordAudit(client, {

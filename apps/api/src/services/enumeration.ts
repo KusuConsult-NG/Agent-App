@@ -46,7 +46,7 @@
 
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
-import { createAssessmentIn } from './revenue';
+import { createAssessmentIn, withdrawUnpaidBill } from './revenue';
 import { recordAudit } from './audit';
 import { scopeParams, type ReportScope } from './report-scope';
 import {
@@ -819,14 +819,11 @@ export async function decideObjection(
        * And the invoice goes with it. An upheld objection that left the bill
        * standing would be a decision in the taxpayer's favour that cost them
        * exactly nothing — and the arrears worklist would go on chasing them
-       * for it.
+       * for it. Including a bill that lapsed while the objection was open,
+       * which this used to leave standing: see `withdrawUnpaidBill`.
        */
       if (assessment!.assessment_id) {
-        await client.query(
-          `UPDATE invoices SET status = 'CANCELLED'
-            WHERE assessment_id = $1 AND status IN ('UNPAID', 'PARTIALLY_PAID')`,
-          [assessment!.assessment_id],
-        );
+        await withdrawUnpaidBill(client, assessment!.assessment_id);
       }
     } else {
       await client.query(
