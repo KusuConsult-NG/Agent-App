@@ -153,17 +153,44 @@ describe('two reminder sweeps for one invoice', () => {
         'channel, by two sweeps that both read the window flag before either set it',
     );
 
-    // One sweep did the work and the other found nothing left to do. Which is
-    // which depends on who got the row lock, so this is asserted as a pair.
+    // Exactly one sweep did the work. Which one depends on who got the row
+    // lock, so this is asserted as a pair.
     assert.deepEqual(
       [first.sent, second.sent].sort(),
       [0, 1],
       `both sweeps reported sending: ${JSON.stringify([first, second])}`,
     );
-    assert.deepEqual(
-      [first.skipped, second.skipped].sort(),
-      [0, 1],
-      'the sweep that found the invoice taken did not count it as skipped',
+
+    /*
+     * TWO CORRECT INTERLEAVINGS, AND THIS ONCE ASSERTED ONLY ONE OF THEM.
+     *
+     * It read `[first.skipped, second.skipped].sort()` must be `[0, 1]`, which
+     * holds when both sweeps SELECT the invoice before either writes: the
+     * loser blocks on the row lock, finds the flag already true, and counts a
+     * skip. That is the interleaving this file was written to produce, and it
+     * is the usual one.
+     *
+     * It is not the only one. If the winner finishes its whole transaction
+     * before the loser's SELECT runs, the loser's query returns no unflagged
+     * invoice and `processWindow` returns `{ sent: 0, skipped: 0 }` from its
+     * empty-result branch. Nothing was skipped because nothing was seen, and
+     * that is the honest number.
+     *
+     * So the assertion failed once in a full concurrency run and passed six
+     * times out of six on its own — load decides which interleaving happens.
+     * The flake was in the test, not in the sweep: the taxpayer is texted
+     * exactly once either way, which is what the assertion above this one
+     * measures and what this file is for.
+     *
+     * What is still worth pinning is that the loser does not *invent* work: it
+     * reports at most the one invoice, and never reports having sent it.
+     */
+    const loser = first.sent === 0 ? first : second;
+    assert.equal(loser.sent, 0, 'the sweep that lost the race must not report a send');
+    assert.ok(
+      loser.skipped === 0 || loser.skipped === 1,
+      `the loser accounted for ${loser.skipped} invoices, and there is one: ` +
+        `${JSON.stringify([first, second])}`,
     );
   });
 
