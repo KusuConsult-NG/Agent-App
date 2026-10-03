@@ -314,7 +314,7 @@ taxpayerRouter.get(
   '/ended-with-arrears',
   requirePermission('taxpayer:read:all'),
   asyncHandler(async (_req, res) => {
-    res.json({ taxpayers: await taxpayers.taxpayersEndedWithArrears(pool) });
+    res.json(await taxpayers.taxpayersEndedWithArrears(pool));
   }),
 );
 
@@ -322,7 +322,7 @@ taxpayerRouter.get(
   '/tin-outstanding',
   requirePermission('taxpayer:tin_sync'),
   asyncHandler(async (_req, res) => {
-    res.json({ taxpayers: await taxpayers.taxpayersAwaitingTin(pool) });
+    res.json(await taxpayers.taxpayersAwaitingTin(pool));
   }),
 );
 

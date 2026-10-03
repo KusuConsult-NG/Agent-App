@@ -1487,11 +1487,40 @@ async function markRefund(
 }
 
 /** Refunds a taxpayer is still owed, oldest first. */
-export async function outstandingRefunds(db: Db, limit = 100) {
-  return query(
+/**
+ * Refunds the taxpayer has not had, and how much is owed in total.
+ *
+ * The total is counted and summed over everything that matches, not over the
+ * hundred rows this returns. `Outstanding.tsx` summed the rows it received
+ * into "Owed to taxpayers" and counted their length for "Refunds not made", so
+ * on a backlog past the cap both figures were subtotals presented as totals —
+ * on the screen whose job is to say what the State owes citizens, and in the
+ * direction that understates it.
+ *
+ * `count(*) OVER ()` and `SUM(...) OVER ()` are evaluated before LIMIT, so one
+ * query answers both the page and the size of what it came from. The window
+ * functions ride on the rows and are lifted off here rather than shipped to
+ * the client on every row.
+ *
+ * The same shape was found on the agent performance screen and answered there
+ * by saying what the figures covered — "the endpoint answers with a bare array
+ * and no count of what it matched", which is the part fixed here instead.
+ */
+export async function outstandingRefunds(
+  db: Db,
+  limit = 100,
+): Promise<{
+  refunds: Record<string, unknown>[];
+  matched: number;
+  owedKobo: string;
+  cap: number;
+}> {
+  const rows = await query<{ matched: string; owed_kobo: string | null }>(
     db,
     `SELECT r.id, r.refund_reference, r.amount_kobo, r.status, r.attempts, r.failure_reason,
-            r.last_attempt_at, r.created_at, t.transaction_reference, p.gateway_reference
+            r.last_attempt_at, r.created_at, t.transaction_reference, p.gateway_reference,
+            count(*) OVER ()::text AS matched,
+            SUM(r.amount_kobo) OVER ()::text AS owed_kobo
        FROM refunds r
        JOIN transactions t ON t.id = r.transaction_id
        LEFT JOIN payments p ON p.id = r.payment_id
@@ -1500,6 +1529,13 @@ export async function outstandingRefunds(db: Db, limit = 100) {
       LIMIT $1`,
     [limit],
   );
+
+  return {
+    refunds: rows.map(({ matched: _matched, owed_kobo: _owed, ...refund }) => refund),
+    matched: Number.parseInt(rows[0]?.matched ?? '0', 10),
+    owedKobo: rows[0]?.owed_kobo ?? '0',
+    cap: limit,
+  };
 }
 
 /**

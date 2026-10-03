@@ -1929,7 +1929,7 @@ governmentRouter.get(
   '/refunds/outstanding',
   requirePermission('payment:read:all'),
   asyncHandler(async (_req, res) => {
-    res.json({ refunds: await reconciliation.outstandingRefunds(pool) });
+    res.json(await reconciliation.outstandingRefunds(pool));
   }),
 );
 

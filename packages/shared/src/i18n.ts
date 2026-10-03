@@ -1110,6 +1110,8 @@ export interface TranslationDictionary {
   supNoMessagesYet: string;
   ofcOsQueueUnreadable: string;
   ofcOsQueueUnreadableBody: string;
+  ofcOsListsArePartial: string;
+  ofcOsListsArePartialBody: string;
   ofcUaCoversNothing: string;
   ofcUaCoversTerritories: string;
   ofcFaMinimumNow: string;
@@ -4922,6 +4924,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     supNoMessagesYet: "No messages yet",
     ofcOsQueueUnreadable: "A queue could not be read",
     ofcOsQueueUnreadableBody: "{{n}} of the queues on this page could not be loaded, so what is shown is not the whole picture. An empty section below does not mean that queue is empty — it means nobody can see it. Reload, and raise it if it does not clear.",
+    ofcOsListsArePartial: "Some lists below stop short",
+    ofcOsListsArePartialBody: "The figures above cover everything outstanding. These lists do not: {{queues}}. Each one shows the hundred oldest, so the bottom of the list is where it was cut off rather than where the queue ends. Work it down and reload to see the next hundred.",
     ofcUaCoversNothing: "{{name}} now covers no territory and will see no revenue figures.",
     ofcUaCoversTerritories: "{{name}} now covers {{n}} territory(ies).",
     ofcFaMinimumNow: "Minimum version is now {{version}}.",
@@ -8471,6 +8475,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     supNoMessagesYet: "Babu sako tukuna",
     ofcOsQueueUnreadable: "Ba a iya karanta wani jeri ba",
     ofcOsQueueUnreadableBody: "Ba a iya lodin jeri {{n}} a wannan shafi ba, don haka abin da ake nunawa ba shi ne cikakken hoto ba. Sashe mara komai a kasa ba yana nufin jerin babu komai ba — yana nufin babu wanda ke iya ganin sa. Ka sake lodi, kuma ka daga kara idan bai warware ba.",
+    ofcOsListsArePartial: "Wasu jerin a kasa sun tsaya kafin karshe",
+    ofcOsListsArePartialBody: "Lambobin da ke sama sun rufe duk abin da ya rage. Wadannan jerin ba su rufe ba: {{queues}}. Kowanne yana nuna dari da suka fi tsufa, don haka karshen jerin shi ne wurin da aka yanke shi ba wurin da jerin ya kare ba. Ka yi aiki da shi sannan ka sake lodi domin ka ga dari na gaba.",
     ofcUaCoversNothing: "{{name}} yanzu ba shi da wani yanki kuma ba zai ga lambobin kudaden shiga ba.",
     ofcUaCoversTerritories: "{{name}} yanzu yana rufe yankuna {{n}}.",
     ofcFaMinimumNow: "Mafi karancin sigar yanzu {{version}} ce.",

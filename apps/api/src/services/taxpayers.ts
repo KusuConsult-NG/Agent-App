@@ -854,12 +854,24 @@ export async function retryOutstandingTins(params: {
 }
 
 /** Taxpayers registered without a TIN, and why. */
-export async function taxpayersAwaitingTin(db: Db, limit = 100) {
-  return query(
+/**
+ * Taxpayers still without a TIN, and how many there are.
+ *
+ * The count is over everything that matches rather than over the hundred rows
+ * returned: `Outstanding.tsx` showed the length of the array as "Waiting for a
+ * TIN", which stops at the cap. `count(*) OVER ()` is evaluated before LIMIT,
+ * so the one query answers both.
+ */
+export async function taxpayersAwaitingTin(
+  db: Db,
+  limit = 100,
+): Promise<{ taxpayers: Record<string, unknown>[]; matched: number; cap: number }> {
+  const rows = await query<{ matched: string }>(
     db,
     `SELECT id, tin_status, tin_reason, tin_reference, tin_attempts, created_at,
             COALESCE(business_name, trim(concat_ws(' ', first_name, last_name))) AS display_name,
-            phone
+            phone,
+            count(*) OVER ()::text AS matched
        FROM taxpayers
       WHERE tin IS NULL
         AND tin_status IN ('REQUESTED', 'FAILED')
@@ -868,6 +880,12 @@ export async function taxpayersAwaitingTin(db: Db, limit = 100) {
       LIMIT $1`,
     [limit],
   );
+
+  return {
+    taxpayers: rows.map(({ matched: _matched, ...taxpayer }) => taxpayer),
+    matched: Number.parseInt(rows[0]?.matched ?? '0', 10),
+    cap: limit,
+  };
 }
 
 export interface TaxpayerSearchParams {
@@ -1522,15 +1540,23 @@ export async function setTaxpayerStatus(params: {
  * and a debt that is nobody's job is indistinguishable from one that was
  * written off by somebody who had no authority to write anything off.
  */
-export async function taxpayersEndedWithArrears(db: Db, limit = 100) {
-  return query(
+export async function taxpayersEndedWithArrears(
+  db: Db,
+  limit = 100,
+): Promise<{ taxpayers: Record<string, unknown>[]; matched: number; cap: number }> {
+  // The count is over every ended record that still owes, not over the hundred
+  // this returns: `Outstanding.tsx` showed the array's length as the size of
+  // the queue. `count(*) OVER ()` runs after GROUP BY and before LIMIT, so it
+  // counts taxpayers rather than invoices.
+  const rows = await query<{ matched: string }>(
     db,
     `SELECT t.id, t.tin, t.status, t.status_reason, t.status_changed_at,
             COALESCE(t.business_name, t.first_name || ' ' || COALESCE(t.last_name, '')) AS name,
             t.phone, l.name AS lga_name,
             u.full_name AS ended_by,
             SUM(i.total_amount_kobo - i.amount_paid_kobo)::text AS outstanding_kobo,
-            count(i.id)::int AS unpaid_invoices
+            count(i.id)::int AS unpaid_invoices,
+            count(*) OVER ()::text AS matched
        FROM taxpayers t
        -- An inner join, and that is what selects the queue: a record with no
        -- unpaid invoice has no row to join to and never appears. A HAVING
@@ -1549,4 +1575,10 @@ export async function taxpayersEndedWithArrears(db: Db, limit = 100) {
       LIMIT $1`,
     [limit],
   );
+
+  return {
+    taxpayers: rows.map(({ matched: _matched, ...taxpayer }) => taxpayer),
+    matched: Number.parseInt(rows[0]?.matched ?? '0', 10),
+    cap: limit,
+  };
 }
