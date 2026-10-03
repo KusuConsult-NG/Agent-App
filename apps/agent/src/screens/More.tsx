@@ -813,7 +813,25 @@ export function CommissionScreen() {
 
 export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
   const { lang, t } = useI18n();
-  const [drafts, setDrafts] = useState<Draft[]>([]);
+  /*
+   * `null` until the device has been asked, and a failure kept apart from it.
+   *
+   * This started as `[]` and was read with `listDrafts().then(setDrafts)` —
+   * no catch at all — so a store that could not be read left the list empty
+   * and the card below said "Nothing is waiting to be sent." That is the one
+   * reading an agent must not be given about captures made offline: an
+   * unreadable store is exactly the case in which those captures may not be
+   * saving either, and someone told nothing is pending has no reason to hand
+   * the device back carefully or to report it.
+   *
+   * Signing out does not clear the queue — `logout` leaves IndexedDB alone,
+   * and `a-queue-that-outlived-its-agent` holds that — so the cost is the
+   * false assurance rather than lost work. It is still a false assurance
+   * about the one thing on this screen that is not recoverable from the
+   * server.
+   */
+  const [drafts, setDrafts] = useState<Draft[] | null>(null);
+  const [draftsFailed, setDraftsFailed] = useState(false);
   const [printerState, setPrinterState] = useState(bluetoothPrinter.getState());
   const [printerBusy, setPrinterBusy] = useState(false);
   const [printerMsg, setPrinterMsg] = useState<string | null>(null);
@@ -823,7 +841,9 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
   const device = describeDevice(APP_VERSION);
 
   useEffect(() => {
-    listDrafts().then(setDrafts);
+    listDrafts()
+      .then(setDrafts)
+      .catch(() => setDraftsFailed(true));
     const unsub = bluetoothPrinter.subscribe(setPrinterState);
     return unsub;
   }, []);
@@ -1026,7 +1046,13 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
         <p className="card__hint">
           {t.moreSavedRecordsHint}
         </p>
-        {drafts.length === 0 ? (
+        {draftsFailed ? (
+          <Alert kind="warning" title={t.moreSavedRecordsUnreadable}>
+            {t.moreSavedRecordsUnreadableBody}
+          </Alert>
+        ) : drafts === null ? (
+          <Loading />
+        ) : drafts.length === 0 ? (
           <p className="empty">{t.moreNothingWaiting}</p>
         ) : (
           <ul className="list">

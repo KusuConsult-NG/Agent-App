@@ -3183,6 +3183,8 @@ export interface TranslationDictionary {
   moreNoReceipts: string;
   moreSavedRecords: string;
   moreNothingWaiting: string;
+  moreSavedRecordsUnreadable: string;
+  moreSavedRecordsUnreadableBody: string;
   moreSavedOnPhone: string;
   moreVehicleRenewal: string;
   moreSearchVehicle: string;
@@ -6894,6 +6896,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     moreNoReceipts: "No receipts yet.",
     moreSavedRecords: "Saved records on this device",
     moreNothingWaiting: "Nothing is waiting to be sent.",
+    moreSavedRecordsUnreadable: "The saved records on this device could not be read",
+    moreSavedRecordsUnreadableBody: "This does not mean nothing is waiting. Captures made offline may still be on this device. Keep it, do not clear its data, and report this to PSIRS support.",
     moreSavedOnPhone: "Saved on this phone",
     moreVehicleRenewal: "Vehicle particulars renewal",
     moreSearchVehicle: "Search vehicle",
@@ -10452,6 +10456,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     moreNoReceipts: "Babu rasit tukuna.",
     moreSavedRecords: "Bayanan da aka ajiye a wannan na’ura",
     moreNothingWaiting: "Babu abin da ke jiran a aika.",
+    moreSavedRecordsUnreadable: "Ba a iya karanta bayanan da aka ajiye a wannan na’ura ba",
+    moreSavedRecordsUnreadableBody: "Wannan ba yana nufin babu abin da ke jira ba. Abubuwan da aka dauka ba tare da intanet ba suna iya kasancewa a wannan na’ura. A ajiye ta, kada a goge bayananta, kuma a sanar da tallafin PSIRS.",
     moreSavedOnPhone: "An ajiye a wannan wayar",
     moreVehicleRenewal: "Sabunta takardun mota",
     moreSearchVehicle: "Nemo mota",

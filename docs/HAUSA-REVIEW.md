@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > nineteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,465 strings; that one is two pages and links back
+> because it carries all 3,467 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,465 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,467 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,465 strings is worse than no sheet, because it looks complete; this one cannot
+3,467 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,465 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,467 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,465 strings: where the
+- The glossary below is applied consistently across all 3,467 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -483,7 +483,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3384 strings, grouped by where an agent meets them. Lower stakes
+3386 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -3164,6 +3164,8 @@ instructions — but they are what an agent reads all day.
 | `moreNoReceipts` | No receipts yet. | Babu rasit tukuna. | ☐ | |
 | `moreSavedRecords` | Saved records on this device | Bayanan da aka ajiye a wannan na’ura | ☐ | |
 | `moreNothingWaiting` | Nothing is waiting to be sent. | Babu abin da ke jiran a aika. | ☐ | |
+| `moreSavedRecordsUnreadable` | The saved records on this device could not be read | Ba a iya karanta bayanan da aka ajiye a wannan na’ura ba | ☐ | |
+| `moreSavedRecordsUnreadableBody` | This does not mean nothing is waiting. Captures made offline may still be on this device. Keep it, do not clear its data, and report this to PSIRS support. | Wannan ba yana nufin babu abin da ke jira ba. Abubuwan da aka dauka ba tare da intanet ba suna iya kasancewa a wannan na’ura. A ajiye ta, kada a goge bayananta, kuma a sanar da tallafin PSIRS. | ☐ | |
 | `moreSavedOnPhone` | Saved on this phone | An ajiye a wannan wayar | ☐ | |
 | `moreVehicleRenewal` | Vehicle particulars renewal | Sabunta takardun mota | ☐ | |
 | `moreSearchVehicle` | Search vehicle | Nemo mota | ☐ | |
