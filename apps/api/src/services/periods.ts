@@ -29,6 +29,7 @@ import { query, queryOne, withTransaction } from '../db/pool';
 import { AppError, badRequest, conflict, notFound } from '../lib/errors';
 import { REVENUE_STATES_SQL } from '../lib/revenue-states';
 import { outstandingExceptionSql } from './reconciliation';
+import { CURRENT_FINDINGS_SQL } from '../lib/reconciliation-findings';
 import { recordAudit } from './audit';
 
 /** Revenue is recognised only after independent verification (PRD §17, §95). */
@@ -189,7 +190,10 @@ export async function periodFigures(
         * the close refuses unless the officer says in writing why they are
         * doing it anyway.
         */
-       (SELECT count(*)::text FROM reconciliation_records rr
+       -- The current finding per item, not every run's row. Counting rows,
+       -- a mismatch seen by two sweeps read 2, and resolving the one the
+       -- queue shows left 1 — so the close refused over finished work.
+       (SELECT count(*)::text FROM (${CURRENT_FINDINGS_SQL}) rr
          LEFT JOIN transactions t ON t.id = rr.transaction_id
         WHERE ${outstandingExceptionSql('rr')}
           AND t.created_at::date BETWEEN $1::date AND $2::date) AS unreconciled,

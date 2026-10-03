@@ -26,6 +26,7 @@ import { reverseCommissionForTransaction } from './commission';
 import { transitionTransaction } from './revenue';
 import { queueNotification } from './notifications';
 import { raiseFlag } from './fraud';
+import { CURRENT_FINDINGS_SQL } from '../lib/reconciliation-findings';
 import { log } from '../lib/logger';
 
 /**
@@ -1165,15 +1166,7 @@ export async function exceptionQueue(
 ) {
   return query(
     db,
-    `WITH newest AS (
-       SELECT DISTINCT ON (COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text))
-              r.id, r.run_id, r.status, r.expected_amount_kobo, r.received_amount_kobo,
-              r.variance_kobo, r.gateway_reference, r.settlement_reference, r.detail,
-              r.created_at, r.transaction_id, r.payment_id
-         FROM reconciliation_records r
-        ORDER BY COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text),
-                 r.created_at DESC, r.id DESC
-     )
+    `WITH newest AS (${CURRENT_FINDINGS_SQL})
      SELECT n.id, n.run_id, n.status, n.expected_amount_kobo, n.received_amount_kobo,
             n.variance_kobo, n.gateway_reference, n.settlement_reference, n.detail, n.created_at,
             t.transaction_reference, t.status AS transaction_status,
@@ -1240,14 +1233,7 @@ export async function awaitingSettlement(
 ) {
   return query(
     db,
-    `WITH newest AS (
-       SELECT DISTINCT ON (COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text))
-              r.id, r.status, r.expected_amount_kobo, r.gateway_reference, r.created_at,
-              r.reconciled_at, r.transaction_id, r.payment_id
-         FROM reconciliation_records r
-        ORDER BY COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text),
-                 r.created_at DESC, r.id DESC
-     )
+    `WITH newest AS (${CURRENT_FINDINGS_SQL})
      SELECT n.id, n.expected_amount_kobo, n.gateway_reference, n.created_at,
             ROUND(EXTRACT(EPOCH FROM (now() - money.at)) / 3600)::int AS age_hours,
             (money.at < now() - ($2 || ' hours')::interval) AS overdue,

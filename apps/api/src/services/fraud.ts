@@ -17,6 +17,7 @@ import type { Db } from '../db/pool';
 import { query, queryOne } from '../db/pool';
 import { log } from '../lib/logger';
 import { MONEY_TAKEN_STATES_SQL, RETURNED_STATES_SQL } from '../lib/revenue-states';
+import { CURRENT_FINDINGS_SQL } from '../lib/reconciliation-findings';
 
 interface FlagInput {
   rule: FraudRule | 'AMOUNT_MISMATCH';
@@ -872,7 +873,14 @@ export async function leakageDashboard(db: Db) {
       ),
       queryOne(
         db,
-        `SELECT count(*)::text AS count FROM reconciliation_records WHERE status = 'DUPLICATE_PAYMENT'`,
+        /*
+         * Over the current finding per item, not every run's row. A duplicate
+         * payment is recorded afresh by each of the roughly eight sweeps whose
+         * window covers it, so this read eight for one — and resolving it
+         * marks only the newest row, so the older ones went on counting.
+         */
+        `SELECT count(*)::text AS count FROM (${CURRENT_FINDINGS_SQL}) current_findings
+          WHERE status = 'DUPLICATE_PAYMENT'`,
       ),
       query(
         db,

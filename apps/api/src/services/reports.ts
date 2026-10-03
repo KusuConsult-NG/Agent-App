@@ -18,6 +18,7 @@ import type { Db } from '../db/pool';
 import { query, queryOne } from '../db/pool';
 import { REVENUE_STATES_SQL } from '../lib/revenue-states';
 import { outstandingExceptionSql } from './reconciliation';
+import { CURRENT_FINDINGS_SQL } from '../lib/reconciliation-findings';
 import {
   lgaScopeSql,
   scopeParams,
@@ -423,7 +424,7 @@ export async function executiveDashboard(
          -- The two counts below are deliberately not scoped: a supervisor
          -- holds approval:review and support:read:all, so the approval queue
          -- and the ticket queue really are theirs to see whole.
-         (SELECT count(*)::text FROM reconciliation_records rr
+         (SELECT count(*)::text FROM (${CURRENT_FINDINGS_SQL}) rr
            LEFT JOIN transactions t ON t.id = rr.transaction_id
            WHERE ${outstandingExceptionSql('rr')}
              AND ${tx})
@@ -994,9 +995,12 @@ export async function kpis(db: Db) {
        (SELECT CASE WHEN count(*) = 0 THEN '0'
                ELSE ROUND(100.0 * count(*) FILTER (WHERE status = 'VERIFIED') / count(*), 2)::text END
           FROM payments) AS payment_success_rate_percent,
+       -- Over the current finding per item. Over every row ever written it
+       -- measured how many sweeps each collection waited through before the
+       -- bank settled it: ten that each reconciled perfectly read 37.5%.
        (SELECT CASE WHEN count(*) = 0 THEN '0'
                ELSE ROUND(100.0 * count(*) FILTER (WHERE status = 'MATCHED') / count(*), 2)::text END
-          FROM reconciliation_records) AS reconciliation_rate_percent,
+          FROM (${CURRENT_FINDINGS_SQL}) current_findings) AS reconciliation_rate_percent,
        /*
         * A FILTER over the same rows as the denominator, like the two above.
         *
@@ -1441,7 +1445,7 @@ export async function financeOfficerHome(db: Db) {
   return queryOne(
     db,
     `SELECT
-       (SELECT count(*)::text FROM reconciliation_records rr
+       (SELECT count(*)::text FROM (${CURRENT_FINDINGS_SQL}) rr
          WHERE ${outstandingExceptionSql('rr')})
          AS reconciliation_exceptions,
        (SELECT count(*)::text FROM settlements WHERE reconciled_at IS NULL) AS settlements_unreconciled,
@@ -1593,7 +1597,7 @@ export async function financeOfficerWorkItems(db: Db) {
               r.received_amount_kobo::text AS received_kobo,
               r.variance_kobo::text AS variance_kobo,
               to_char(r.created_at, 'YYYY-MM-DD') AS raised
-         FROM reconciliation_records r
+         FROM (${CURRENT_FINDINGS_SQL}) r
         WHERE ${outstandingExceptionSql('r')}
         ORDER BY r.created_at LIMIT 5`,
     ),
