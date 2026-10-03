@@ -39,6 +39,7 @@
 import './env';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { IllegalTransitionError } from '@psirs/shared';
 import { errorHandler } from '../middleware/error-handler';
 import { internal, paymentFailed, AppError } from '../lib/errors';
 
@@ -237,6 +238,101 @@ describe('what a 500 claims about the money', () => {
     assert.equal(status, 409);
     assert.equal(body.error.code, 'DUPLICATE_RECORD');
     assert.match(body.error.message, /already uses that code/);
+  });
+
+  it('does not claim nothing was taken when a settled transaction refused a move', () => {
+    /*
+     * The same false claim, in the branch next door.
+     *
+     * An `IllegalTransitionError` means this request changed nothing — the
+     * state machine refused it — so the honest money state is whatever the
+     * record already said. The branch answered every one of them
+     * `NOT_DEBITED`, which `MoneyStatus` defines as "No payment was
+     * attempted" and the agent application renders as "No money has been
+     * taken from the taxpayer".
+     *
+     * SETTLED is in `REVENUE_RECOGNISED_STATES` — "States in which government
+     * money is considered actually received". A re-receipt attempt against a
+     * settled transaction was therefore answered with the one sentence that
+     * contradicts the record it was refused by. RECEIVED exists for exactly
+     * this: "Money was received; the failure is downstream of the payment
+     * itself."
+     */
+    const { status, body } = five_hundred(
+      'POST',
+      '/payments/abc/confirm',
+      new IllegalTransitionError('Transaction', 'SETTLED', 'RECEIPT_GENERATED'),
+    );
+    assert.equal(status, 409);
+    assert.equal(body.error.code, 'ILLEGAL_STATE_TRANSITION');
+    assert.equal(body.error.moneyStatus, 'RECEIVED');
+    assert.doesNotMatch(body.error.message, CLAIMS_NOTHING_HAPPENED);
+  });
+
+  it('says the outcome is unknown while the payment is still in flight', () => {
+    const { status, body } = five_hundred(
+      'POST',
+      '/payments/abc/confirm',
+      new IllegalTransitionError('Transaction', 'PAYMENT_PENDING', 'SETTLED'),
+    );
+    assert.equal(status, 409);
+    assert.equal(body.error.moneyStatus, 'UNCONFIRMED');
+  });
+
+  it('keeps the reassurance where it is true', () => {
+    // Before a payment is started, NOT_DEBITED is the thing the agent needs
+    // in order to tell the citizen nothing was taken. It stays.
+    const { body } = five_hundred(
+      'POST',
+      '/payments/initiate',
+      new IllegalTransitionError('Transaction', 'INVOICE_GENERATED', 'SETTLED'),
+    );
+    assert.equal(body.error.moneyStatus, 'NOT_DEBITED');
+  });
+
+  it('reads the payment machine by its own state names, not the transaction\'s', () => {
+    /*
+     * Two machines track the same money under different words: a payment is
+     * VERIFIED where a transaction is PAYMENT_VERIFIED. Mapping one set onto
+     * both would have made every payment refusal read NOT_DEBITED, which is
+     * the defect with an extra step.
+     */
+    const verified = five_hundred(
+      'POST',
+      '/payments/abc/confirm',
+      new IllegalTransitionError('Payment', 'VERIFIED', 'SUCCESSFUL'),
+    );
+    assert.equal(verified.body.error.moneyStatus, 'RECEIVED');
+
+    const pending = five_hundred(
+      'POST',
+      '/payments/abc/confirm',
+      new IllegalTransitionError('Payment', 'PENDING', 'VERIFIED'),
+    );
+    assert.equal(pending.body.error.moneyStatus, 'UNCONFIRMED');
+
+    const failed = five_hundred(
+      'POST',
+      '/payments/abc/confirm',
+      new IllegalTransitionError('Payment', 'FAILED', 'VERIFIED'),
+    );
+    assert.equal(failed.body.error.moneyStatus, 'NOT_DEBITED');
+  });
+
+  it("says nothing about the taxpayer's money when the entity is not theirs", () => {
+    /*
+     * A commission is the agent's fee. An illegal transition on one told the
+     * agent "No money has been taken from the taxpayer", which is an answer
+     * to a question nobody asked — and one an agent requesting a payout could
+     * reach, because `requestPayout` transitions commissions.
+     */
+    const { body } = five_hundred(
+      'POST',
+      '/agents/me/commission/payout',
+      new IllegalTransitionError('Commission', 'PAID', 'ELIGIBLE'),
+    );
+    assert.equal(body.error.moneyStatus, 'NOT_APPLICABLE');
+    assert.doesNotMatch(body.error.message, CLAIMS_NOTHING_HAPPENED);
   });
 
   it('still answers an anticipated error with what that error knows', () => {

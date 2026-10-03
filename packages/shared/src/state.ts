@@ -181,12 +181,24 @@ export const RECONCILIATION_EXCEPTIONS: readonly ReconciliationState[] = [
 ];
 
 export class IllegalTransitionError extends Error {
+  /**
+   * Which state machine refused, kept rather than only interpolated.
+   *
+   * It was in the message and nowhere else, so the one caller that needs it —
+   * the API's error handler, deciding what the refusal may claim about a
+   * taxpayer's money — would have had to parse the sentence back. A
+   * commission's refusal and a transaction's are not the same answer to that
+   * question: one is the agent's fee and the other is the money a citizen
+   * handed over.
+   */
+  readonly entity: string;
   readonly from: string;
   readonly to: string;
 
   constructor(entity: string, from: string, to: string) {
     super(`${entity} cannot move from ${from} to ${to}`);
     this.name = 'IllegalTransitionError';
+    this.entity = entity;
     this.from = from;
     this.to = to;
   }

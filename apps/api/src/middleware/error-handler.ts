@@ -9,8 +9,12 @@
 
 import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
-import { IllegalTransitionError, MoneyError } from '@psirs/shared';
-import { AppError, internal, validationFailed } from '../lib/errors';
+import {
+  IllegalTransitionError,
+  MoneyError,
+  REVENUE_RECOGNISED_STATES,
+} from '@psirs/shared';
+import { AppError, internal, validationFailed, type MoneyStatus } from '../lib/errors';
 import { log } from '../lib/logger';
 import { reportError } from '../services/error-reporting';
 
@@ -416,6 +420,48 @@ export const GENERATED_REFERENCE_CONSTRAINTS: ReadonlySet<string> = new Set(
     .map(([name]) => name),
 );
 
+/**
+ * What a refused transition may say about the taxpayer's money.
+ *
+ * This answered `NOT_DEBITED` for every one of them, which `MoneyStatus`
+ * defines as "No payment was attempted" and the agent application renders as
+ * "No money has been taken from the taxpayer" — in Hausa too, in plain
+ * styling rather than the warning styling it reserves for "do not collect
+ * again".
+ *
+ * A refused transition means this request changed nothing: the state machine
+ * would not move the record. So the honest answer is what the record already
+ * said, and the error carries it. A re-receipt attempt against a SETTLED
+ * transaction was being refused *because* the money had arrived, and answered
+ * with the one sentence that contradicts the state it was refused by.
+ *
+ * The entity matters as much as the state. A commission is the agent's fee;
+ * telling them nothing was taken from the taxpayer answers a question nobody
+ * asked, and `requestPayout` transitions commissions, so an agent could reach
+ * it. Only the two machines that track a citizen's payment say anything here.
+ *
+ * REVERSED, REFUNDED, FAILED, CANCELLED and EXPIRED fall to NOT_DEBITED with
+ * the pre-payment states, which reads oddly for the first two and is right
+ * about the thing the sentence is for: whether the taxpayer is out of pocket
+ * now. They are not.
+ */
+function refusedTransitionMoney(error: IllegalTransitionError): MoneyStatus {
+  const received: Record<string, readonly string[]> = {
+    // "States in which government money is considered actually received."
+    Transaction: REVENUE_RECOGNISED_STATES,
+    Payment: ['SUCCESSFUL', 'VERIFIED'],
+  };
+  const inFlight: Record<string, readonly string[]> = {
+    Transaction: ['PAYMENT_INITIATED', 'PAYMENT_PENDING', 'PAYMENT_SUCCESSFUL'],
+    Payment: ['INITIATED', 'PENDING'],
+  };
+
+  if (!(error.entity in received)) return 'NOT_APPLICABLE';
+  if (received[error.entity]!.includes(error.from)) return 'RECEIVED';
+  if (inFlight[error.entity]!.includes(error.from)) return 'UNCONFIRMED';
+  return 'NOT_DEBITED';
+}
+
 export function errorHandler(
   error: unknown,
   req: Request,
@@ -503,7 +549,7 @@ export function errorHandler(
         statusCode: 409,
         code: 'ILLEGAL_STATE_TRANSITION',
         message: `${error.message}. The record's current state does not allow this action.`,
-        moneyStatus: 'NOT_DEBITED',
+        moneyStatus: refusedTransitionMoney(error),
       }).toJSON(),
     );
     return;
