@@ -43,11 +43,17 @@ import { errorHandler } from '../middleware/error-handler';
 import { internal, paymentFailed, AppError } from '../lib/errors';
 
 interface Body {
-  error: { code: string; message: string; moneyStatus: string; nextStep?: string };
+  error: {
+    code: string;
+    message: string;
+    moneyStatus: string;
+    nextStep?: string;
+    reference?: string;
+  };
 }
 
 /** Drive the real handler, so the wiring is covered and not just `internal`. */
-function five_hundred(method: string, path: string): { status: number; body: Body } {
+function five_hundred(method: string, path: string, thrown?: Error): { status: number; body: Body } {
   const req = {
     method,
     path,
@@ -73,9 +79,17 @@ function five_hundred(method: string, path: string): { status: number; body: Bod
     },
   };
 
-  errorHandler(new Error('something nobody anticipated'), req, res as never, (() => {}) as never);
+  errorHandler(thrown ?? new Error('something nobody anticipated'), req, res as never, (() => {}) as never);
   assert.ok(body, 'the handler sent nothing at all');
   return { status, body: body! };
+}
+
+/** A unique violation as node-postgres reports one. */
+function uniqueViolation(constraint: string): Error {
+  return Object.assign(new Error(`duplicate key value violates unique constraint "${constraint}"`), {
+    code: '23505',
+    constraint,
+  });
 }
 
 /** The sentences that assert a financial outcome this path cannot know. */
@@ -168,6 +182,61 @@ describe('what a 500 claims about the money', () => {
 
     assert.equal(failed.error.moneyStatus, 'NOT_DEBITED');
     assert.match(failed.error.message, /no money has been taken/i);
+  });
+
+  it('says the same about a reference the platform composed twice', () => {
+    /*
+     * The 23505 branch made the identical claim and had not had the identical
+     * correction. A clash on a composed reference — `PSIRS/2026/000123`,
+     * `ASM/2026/000456` — is a generator fault, and it was answered 409
+     * DUPLICATE_RECORD with `moneyStatus: NOT_DEBITED`: "No money has been
+     * taken from the taxpayer", on a write under /payments, at the moment a
+     * receipt was being numbered. A receipt is numbered after the money has
+     * arrived.
+     *
+     * Driven here rather than end to end because the payment reference
+     * carries a random suffix on purpose, so it cannot be made to collide.
+     * `a-reference-the-platform-composed-twice.test.ts` provokes the real
+     * thing on the assessment sequence, which is what a restore without
+     * setval leaves.
+     */
+    const { status, body } = five_hundred(
+      'POST',
+      '/payments/initiate',
+      uniqueViolation('receipts_verification_code_key'),
+    );
+
+    assert.equal(status, 500, `answered ${status}, so the caller was blamed for it`);
+    assert.equal(body.error.moneyStatus, 'UNCONFIRMED');
+    assert.doesNotMatch(body.error.message, CLAIMS_NOTHING_HAPPENED);
+    assert.ok(body.error.reference, 'and nothing for the agent to quote');
+  });
+
+  it('claims nothing about money when the composed reference was not on a payment path', () => {
+    const { status, body } = five_hundred(
+      'POST',
+      '/revenue/assessments',
+      uniqueViolation('assessments_assessment_number_key'),
+    );
+    assert.equal(status, 500);
+    assert.equal(body.error.moneyStatus, 'NOT_APPLICABLE');
+  });
+
+  it('leaves a duplicate somebody really created as a duplicate', () => {
+    /*
+     * The control. `departments_code_key` is a code an officer typed and it
+     * keeps both its 409 and the sentence that names what they typed —
+     * otherwise this change would have turned every collision into a 500 and
+     * taken the actionable refusals with it.
+     */
+    const { status, body } = five_hundred(
+      'POST',
+      '/government/departments',
+      uniqueViolation('departments_code_key'),
+    );
+    assert.equal(status, 409);
+    assert.equal(body.error.code, 'DUPLICATE_RECORD');
+    assert.match(body.error.message, /already uses that code/);
   });
 
   it('still answers an anticipated error with what that error knows', () => {

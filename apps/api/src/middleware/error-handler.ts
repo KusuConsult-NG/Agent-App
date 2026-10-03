@@ -290,11 +290,10 @@ export const OVERLAP_CONSTRAINT_MESSAGES: Record<string, string> = {
  *   SEEDED         nothing inserts into the table outside `db/seed.ts`, so no
  *                  request can reach the constraint at all.
  *   GENERATED      the column is a reference the platform composes. A clash is
- *                  a fault in a generator, not something the person did, and
- *                  the generic sentence is wrong about whose mistake it is —
- *                  recorded here rather than fixed, because making these
- *                  internal errors is a change to what the caller is told and
- *                  belongs in its own commit.
+ *                  a fault in a generator, not something the person did. These
+ *                  no longer answer with the duplicate sentence: see
+ *                  `GENERATED_REFERENCE_CONSTRAINTS` below, which is the commit
+ *                  this entry used to say it was waiting for.
  *   INTERNAL       the row belongs to the platform talking to itself.
  */
 export const UNIQUE_CONSTRAINT_NOT_SHOWN: Record<string, string> = {
@@ -381,6 +380,41 @@ export const UNIQUE_CONSTRAINT_NOT_SHOWN: Record<string, string> = {
     'INTERNAL. A token hash, generated.',
   referee_invitations_invitation_token_hash_key: 'INTERNAL. Same.',
 };
+
+/**
+ * The GENERATED entries above, as a set the handler can read.
+ *
+ * A clash on one of these is a fault in a generator — two composed references
+ * meeting — and until now it was answered with the duplicate sentence: 409,
+ * "That record already exists. No duplicate has been created.", and
+ * `moneyStatus: NOT_DEBITED`.
+ *
+ * All three parts are wrong here, and the third is the one that matters.
+ * NOT_DEBITED means "no payment was attempted", and the agent application
+ * renders it as "No money has been taken from the taxpayer" — in Hausa too.
+ * `receipts_verification_code_key` and `documents_verification_code_key` are
+ * reached while issuing a receipt, which happens after the money has arrived;
+ * `payments_payment_reference_key` is reached inside `initiatePayment`, which
+ * may already have called the gateway. So the sentence was a reassurance
+ * offered at the one moment the platform could not support it, to the person
+ * standing in front of somebody who has just handed over cash. `internal()`
+ * carries the identical correction in its own header, for the identical
+ * reason; this branch had not had it.
+ *
+ * So these answer as what they are: a fault on our side, with a reference to
+ * quote, and the money state `internal()` derives from the request — which is
+ * UNCONFIRMED for a write under `/payments` and NOT_APPLICABLE elsewhere.
+ *
+ * Derived from the map rather than typed twice:
+ * `a-message-nobody-would-ever-see.test.ts` asserts this set is exactly the
+ * entries whose reason begins GENERATED, so a new one cannot be classified in
+ * the comment and missed here.
+ */
+export const GENERATED_REFERENCE_CONSTRAINTS: ReadonlySet<string> = new Set(
+  Object.entries(UNIQUE_CONSTRAINT_NOT_SHOWN)
+    .filter(([, reason]) => reason.startsWith('GENERATED'))
+    .map(([name]) => name),
+);
 
 export function errorHandler(
   error: unknown,
@@ -478,6 +512,42 @@ export function errorHandler(
   if (isPostgresError(error)) {
     // 23505 unique_violation
     if (error.code === '23505') {
+      /*
+       * A composed reference met another, which is ours to answer for.
+       *
+       * Nobody did anything twice: the generator produced a value the table
+       * already held. Answering 409 "That record already exists" blames the
+       * caller for a fault they cannot see, offers them no action, and — the
+       * part that matters — says NOT_DEBITED on paths where money has already
+       * moved. `internal()` says the true thing instead and derives the money
+       * state from the request.
+       *
+       * Logged and reported as well, because this is the one branch here whose
+       * firing means a generator wants looking at, and a 500 nobody is told
+       * about is the hole the rest of this file exists to close.
+       */
+      if (error.constraint && GENERATED_REFERENCE_CONSTRAINTS.has(error.constraint)) {
+        log.error('generated reference collided', {
+          requestId: req.requestId,
+          component: 'http',
+          method: req.method,
+          path: req.path,
+          constraint: error.constraint,
+          error,
+        });
+        reportError({
+          message: `Generated reference collided on ${error.constraint}`,
+          error,
+          requestId: req.requestId,
+          component: 'http',
+          context: { method: req.method, path: req.path, constraint: error.constraint },
+        });
+        res
+          .status(500)
+          .json(internal(req.requestId, { method: req.method, path: req.path }).toJSON());
+        return;
+      }
+
       const message =
         (error.constraint && UNIQUE_CONSTRAINT_MESSAGES[error.constraint]) ??
         'That record already exists. No duplicate has been created.';
