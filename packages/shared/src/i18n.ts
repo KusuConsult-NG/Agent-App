@@ -823,6 +823,8 @@ export interface TranslationDictionary {
   ofcFnTransferFailed: string;
   ofcFnMakerChecker: string;
   ofcFnMakerCheckerBody: string;
+  ofcFnQueueStopsShort: string;
+  ofcFnQueueStopsShortBody: string;
   ofcFnApproved: string;
   ofcFnRejected: string;
   ofcFnExecuted: string;
@@ -4686,6 +4688,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFnTransferFailed: "Transfer failed",
     ofcFnMakerChecker: "Maker-checker approvals",
     ofcFnMakerCheckerBody: "The officer who raises a request can never review or authorise it. Reversals need a third officer to execute, with step-up authentication.",
+    ofcFnQueueStopsShort: "This list stops short",
+    ofcFnQueueStopsShortBody: "{{matched}} requests match this filter and the list shows the newest {{shown}}, so the oldest — the ones that have waited longest — are not on it. Filter by type to bring them into view.",
     ofcFnApproved: "Approved",
     ofcFnRejected: "Rejected",
     ofcFnExecuted: "Executed",
@@ -8248,6 +8252,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFnTransferFailed: "Turawa ta gaza",
     ofcFnMakerChecker: "Amincewar mai yi da mai duba",
     ofcFnMakerCheckerBody: "Jami’in da ya daga bukata ba zai taba duba ta ko ba ta izini ba. Juyarwa tana bukatar jami’i na uku ya aiwatar, tare da karin tantancewa.",
+    ofcFnQueueStopsShort: "Wannan jerin ya tsaya kafin karshe",
+    ofcFnQueueStopsShortBody: "Bukatu {{matched}} sun dace da wannan tacewa, kuma jerin yana nuna sababbi {{shown}} kawai, don haka mafi dadewa — wadanda suka fi jira — ba sa cikinsa. A tace bisa nau’i domin a gan su.",
     ofcFnApproved: "An amince",
     ofcFnRejected: "An ki",
     ofcFnExecuted: "An aiwatar",

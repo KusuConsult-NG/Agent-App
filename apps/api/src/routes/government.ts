@@ -1448,14 +1448,26 @@ governmentRouter.post(
 // Maker-checker approvals (PRD §69, §70)
 // ---------------------------------------------------------------------------
 
+/** How many approvals the queue returns at once. */
+export const APPROVAL_QUEUE_CAP = 200;
+
 governmentRouter.get(
   '/approvals',
   requirePermission('approval:review', 'approval:authorise', 'audit:read'),
   validateQuery(
     z.object({ status: z.string().optional(), type: z.string().optional() }),
     async (_req, res, data) => {
-      res.json(
-        await query(
+      /*
+       * With how many matched, not only the two hundred that fit.
+       *
+       * This answered a bare array cut at two hundred, newest first, and the
+       * screen filters it to REQUESTED by default. In a backlog that is
+       * exactly the wrong end to lose: the requests that drop off are the
+       * ones that have waited longest, and nothing on the screen said any had
+       * dropped. `count(*) OVER ()` runs before the LIMIT, so `matched` is
+       * the whole of what the filter found.
+       */
+      const rows = await query<{ matched: string }>(
           pool,
           `SELECT a.id, a.approval_type, a.entity_type, a.entity_id, a.payload, a.status,
                   a.requested_reason, a.requested_at, a.review_note, a.decision_reason,
@@ -1467,17 +1479,22 @@ governmentRouter.get(
                   a.requested_by AS requested_by_user_id,
                   requester.full_name AS requested_by_name,
                   reviewer.full_name AS reviewed_by_name,
-                  approver.full_name AS approved_by_name
+                  approver.full_name AS approved_by_name,
+                  count(*) OVER ()::text AS matched
              FROM approvals a
              JOIN users requester ON requester.id = a.requested_by
              LEFT JOIN users reviewer ON reviewer.id = a.reviewed_by
              LEFT JOIN users approver ON approver.id = a.approved_by
             WHERE ($1::text IS NULL OR a.status = $1)
               AND ($2::text IS NULL OR a.approval_type = $2)
-            ORDER BY a.requested_at DESC LIMIT 200`,
-          [data.status ?? null, data.type ?? null],
-        ),
+            ORDER BY a.requested_at DESC LIMIT $3`,
+          [data.status ?? null, data.type ?? null, APPROVAL_QUEUE_CAP],
       );
+      res.json({
+        approvals: rows.map(({ matched: _matched, ...row }) => row),
+        matched: Number.parseInt(rows[0]?.matched ?? '0', 10),
+        cap: APPROVAL_QUEUE_CAP,
+      });
     },
   ),
 );

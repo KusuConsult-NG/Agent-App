@@ -913,6 +913,8 @@ function CommissionByPlace() {
 export function ApprovalsScreen({ user }: { user: User }) {
   const { t } = usePortalI18n();
   const [approvals, setApprovals] = useState<any[] | null>(null);
+  /** How many the filter matched, which can be more than the queue returned. */
+  const [matched, setMatched] = useState(0);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('REQUESTED');
@@ -921,8 +923,13 @@ export function ApprovalsScreen({ user }: { user: User }) {
     const params = new URLSearchParams();
     if (statusFilter) params.set('status', statusFilter);
     api
-      .get<any[]>(`/government/approvals?${params.toString()}`)
-      .then(setApprovals)
+      .get<{ approvals: any[]; matched: number; cap: number }>(
+        `/government/approvals?${params.toString()}`,
+      )
+      .then((queue) => {
+        setApprovals(queue.approvals);
+        setMatched(queue.matched);
+      })
       .catch((caught) => {
         setError(asApiError(caught));
       });
@@ -1002,6 +1009,19 @@ export function ApprovalsScreen({ user }: { user: User }) {
 
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
+      {approvals && matched > approvals.length && (
+        /*
+         * Said, because the requests that fall off are the oldest: newest
+         * first, cut at the cap, they are the ones that have waited longest.
+         */
+        <Alert kind="info" title="ofcFnQueueStopsShort">
+          <p style={{ margin: 0 }}>
+            {t.ofcFnQueueStopsShortBody
+              .replace('{{matched}}', matched.toLocaleString())
+              .replace('{{shown}}', approvals.length.toLocaleString())}
+          </p>
+        </Alert>
+      )}
 
       <div className="card card--flush">
         {!approvals ? (

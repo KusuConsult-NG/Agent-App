@@ -165,7 +165,7 @@ describe('Every approval type the endpoint accepts can actually be raised', () =
 
     const queue = await get('/government/approvals', { token: reviewer });
     assert.equal(queue.status, 200, JSON.stringify(queue.body));
-    const seen = new Set(queue.body.map((row: { approval_type: string }) => row.approval_type));
+    const seen = new Set(queue.body.approvals.map((row: { approval_type: string }) => row.approval_type));
     for (const request of everyType()) {
       assert.ok(seen.has(request.approvalType), `${request.approvalType} is missing from the queue`);
     }
@@ -174,9 +174,10 @@ describe('Every approval type the endpoint accepts can actually be raised', () =
     // finds the reversals among ninety agent activations.
     const filtered = await get('/government/approvals?type=REVENUE_RATE_CHANGE', { token: reviewer });
     assert.equal(filtered.status, 200);
-    assert.equal(filtered.body.length, 1);
-    assert.equal(filtered.body[0].approval_type, 'REVENUE_RATE_CHANGE');
-    assert.equal(filtered.body[0].requested_by_name, 'Queue Requester');
+    assert.equal(filtered.body.approvals.length, 1);
+    assert.equal(filtered.body.matched, 1);
+    assert.equal(filtered.body.approvals[0].approval_type, 'REVENUE_RATE_CHANGE');
+    assert.equal(filtered.body.approvals[0].requested_by_name, 'Queue Requester');
   });
 
   it('refuses a type it does not know rather than storing it', async () => {
@@ -239,8 +240,8 @@ describe('A request that has been looked at but not yet authorised', () => {
     // The queue shows the reviewer by name, so the second officer knows whose
     // reading they are relying on before they authorise.
     const queue = await get(`/government/approvals?status=REVIEWED`, { token: authoriser });
-    assert.equal(queue.body.length, 1);
-    assert.equal(queue.body[0].reviewed_by_name, 'Queue Reviewer');
+    assert.equal(queue.body.approvals.length, 1);
+    assert.equal(queue.body.approvals[0].reviewed_by_name, 'Queue Reviewer');
 
     // Still open, and a different officer can carry it.
     const authorised = await post(
@@ -273,5 +274,36 @@ describe('A request that has been looked at but not yet authorised', () => {
       [approvalId],
     );
     assert.equal(row?.status, 'REVIEWED', 'it stays where it was');
+  });
+});
+
+describe('A queue longer than one page', () => {
+  it('says how many requests matched, not only how many fit', async () => {
+    /*
+     * Newest first and cut at two hundred, so in a backlog the requests that
+     * fall off are the ones that have waited longest. Two hundred and one
+     * waiting: the queue must say so rather than look complete.
+     */
+    const requesterId = (
+      await queryOne<{ id: string }>(pool, 'SELECT id FROM users WHERE phone = $1', ['+2348030000301'])
+    )!.id;
+    await pool.query(
+      `INSERT INTO approvals
+         (approval_type, entity_type, entity_id, payload, requested_by, requested_reason, requested_at)
+       SELECT 'MANUAL_CORRECTION', 'taxpayer', gen_random_uuid()::text, '{}'::jsonb, $1,
+              'Backlog item ' || g, now() - (g || ' minutes')::interval
+         FROM generate_series(1, 201) AS g`,
+      [requesterId],
+    );
+
+    const queue = await get('/government/approvals?status=REQUESTED', { token: reviewer });
+    assert.equal(queue.status, 200, JSON.stringify(queue.body).slice(0, 300));
+    assert.equal(queue.body.approvals.length, 200);
+    assert.equal(queue.body.cap, 200);
+    assert.equal(
+      queue.body.matched,
+      201,
+      'the request that had waited longest fell off the queue, and nothing said one had',
+    );
   });
 });

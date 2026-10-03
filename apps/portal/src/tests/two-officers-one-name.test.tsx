@@ -63,7 +63,7 @@ function mockApprovals(rows: unknown[]) {
   vi.spyOn(api, 'get').mockImplementation(async (path: string) => {
     // The bank-change card above the queue loads on mount as well.
     if (path.startsWith('/agents/bank-changes')) return { changes: [] } as never;
-    return rows as never;
+    return { approvals: rows, matched: rows.length, cap: 200 } as never;
   });
 }
 
@@ -186,5 +186,27 @@ describe('executing an approved reversal', () => {
       expect(body).toMatch(/RFD-2026-000012/);
       expect(body).toMatch(/3 commission/);
     });
+  });
+});
+
+describe('a queue longer than the page', () => {
+  it('says that the oldest requests are not on it', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (path: string) => {
+      if (path.startsWith('/agents/bank-changes')) return { changes: [] } as never;
+      return { approvals: [NAMESAKE_REQUEST], matched: 340, cap: 200 } as never;
+    });
+    render(<ApprovalsScreen user={ME as never} />);
+
+    await waitFor(() => expect(screen.getByText(/paid twice/i)).toBeTruthy());
+    expect(screen.getByText('This list stops short')).toBeTruthy();
+    expect(screen.getByText(/^340 requests match this filter/)).toBeTruthy();
+  });
+
+  it('says nothing when the list is all of it', async () => {
+    mockApprovals([NAMESAKE_REQUEST]);
+    render(<ApprovalsScreen user={ME as never} />);
+
+    await waitFor(() => expect(screen.getByText(/paid twice/i)).toBeTruthy());
+    expect(screen.queryByText('This list stops short')).toBeNull();
   });
 });
