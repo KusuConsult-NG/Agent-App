@@ -2228,6 +2228,10 @@ export interface TranslationDictionary {
   ofcWbAltered: string;
   ofcWbAlteredTitle: string;
   ofcWbAlteredBody: string;
+  ofcWbChecksumReachTitle: string;
+  ofcWbChecksumReach: string;
+  ofcWbListsStopShort: string;
+  ofcWbListsStopShortBody: string;
   ofcWbNoReports: string;
   ofcWbGenerate: string;
   ofcWbGenerateHint: string;
@@ -5990,6 +5994,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcWbAltered: "Altered",
     ofcWbAlteredTitle: "A report on this page no longer matches its checksum",
     ofcWbAlteredBody: "{{n}} report(s) below hold figures that no longer hash to the checksum recorded when they were generated. A signature on such a report does not cover what it now shows. This is a change made in the database rather than through the platform — do not rely on those figures, and raise it.",
+    ofcWbChecksumReachTitle: "The checksum check covers this page only",
+    ofcWbChecksumReach: "{{n}} further report(s) were not examined. The check recomputes the checksum of the reports listed below, which are the most recent ones, so a report altered further back raises nothing here. Filter by type, or open an older report directly, to cover it.",
+    ofcWbListsStopShort: "The tables below stop short",
+    ofcWbListsStopShortBody: "The figures above cover everything. These tables do not: {{lists}}. Each shows the {{cap}} most recent, so the bottom of the table is where it was cut off rather than where the work ends. Filter to narrow it, or open what you need directly.",
     ofcWbNoReports: "No report has been generated yet.",
     ofcWbGenerate: "Generate a report",
     ofcWbGenerateHint: "Generating freezes the figures. Signing is a separate step, and often a different officer.",
@@ -9541,6 +9549,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcWbAltered: "An sauya",
     ofcWbAlteredTitle: "Wani rahoto a wannan shafi bai sake dacewa da lambar tantancewarsa ba",
     ofcWbAlteredBody: "Rahotanni {{n}} da ke kasa suna dauke da lambobin da ba su sake dacewa da lambar tantancewar da aka rubuta lokacin da aka kirkire su ba. Sa hannu a kan irin wannan rahoto bai shafi abin da yake nunawa yanzu ba. Wannan sauyi ne da aka yi a cikin bayanan kai tsaye, ba ta hanyar dandalin ba — kada ka dogara da wadannan lambobin, kuma ka daga kara.",
+    ofcWbChecksumReachTitle: "Binciken lambar tantancewa ya rufe wannan shafi kadai",
+    ofcWbChecksumReach: "Akwai wasu rahotanni {{n}} da ba a bincika ba. Binciken yana sake lissafin lambar tantancewar rahotannin da ke kasa, wadanda su ne na baya-bayan nan, don haka rahoton da aka sauya tun da can ba ya tada wani abu a nan. A tace da nau’i, ko a bude tsohon rahoto kai tsaye, domin a rufe shi.",
+    ofcWbListsStopShort: "Teburan da ke kasa sun tsaya kafin karshe",
+    ofcWbListsStopShortBody: "Lambobin da ke sama sun rufe komai. Wadannan teburan ba su rufe ba: {{lists}}. Kowanne yana nuna {{cap}} na baya-bayan nan, don haka karshen teburin shi ne wurin da aka yanke shi ba wurin da aikin ya kare ba. A tace domin a rage shi, ko a bude abin da ake bukata kai tsaye.",
     ofcWbNoReports: "Ba a samar da rahoto ba tukuna.",
     ofcWbGenerate: "Samar da rahoto",
     ofcWbGenerateHint: "Samar da rahoto yana daskarar da lambobin. Sa hannu mataki ne daban, kuma sau da yawa jami’i ne daban.",

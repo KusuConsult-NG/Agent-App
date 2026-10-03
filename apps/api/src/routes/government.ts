@@ -4053,7 +4053,9 @@ governmentRouter.get(
       limit: z.coerce.number().int().min(1).max(200).default(50),
     }),
     async (_req, res, data) => {
-      res.json({ samples: await workbench.listSamples(pool, data) });
+      // Spread, not nested: the four figures above the table belong beside the
+      // page they describe, and the screen reads `samples` exactly as before.
+      res.json(await workbench.listSamples(pool, data));
     },
   ),
 );
@@ -4127,7 +4129,7 @@ governmentRouter.get(
       limit: z.coerce.number().int().min(1).max(200).default(50),
     }),
     async (_req, res, data) => {
-      res.json({ reports: await workbench.listReports(pool, data) });
+      res.json(await workbench.listReports(pool, data));
     },
   ),
 );

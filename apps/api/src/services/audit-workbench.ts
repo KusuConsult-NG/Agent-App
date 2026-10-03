@@ -435,24 +435,82 @@ export async function completeSample(
   });
 }
 
-export async function listSamples(db: Db, filters: { status?: string | null; limit?: number }) {
+/**
+ * The newest samples, and the size of the work they were taken from.
+ *
+ * WHY THE TOTALS COME FROM HERE AND NOT FROM THE BROWSER
+ *
+ * The workbench shows four figures above its table: samples drawn, items
+ * still to examine, exceptions found, reports on file. All four were added up
+ * in the browser over the rows this function returned — fifty of them, newest
+ * first — and presented as totals. Measured on three samples with a cap of
+ * two: the set held three samples, three exceptions and nine pending items,
+ * and the screen was in a position to say two, two and six.
+ *
+ * On a live register the cap is reached in months, and then "Exceptions
+ * found" is the exceptions of the newest fifty samples. That figure is the
+ * screen's whole purpose. An auditor reading a low one concludes the
+ * sampling programme is clean, which is the one conclusion a partial count
+ * must never be able to support.
+ *
+ * So the figures are computed over everything that matched and travel beside
+ * the page. `count(*) OVER ()` and `SUM(...) OVER ()` are evaluated before
+ * `LIMIT`, so one query answers both questions and the two cannot drift.
+ * `cap` is returned so the screen can say which lists stopped short without
+ * knowing this function's defaults.
+ *
+ * The windows sit outside a derived table because `exceptions` and `pending`
+ * are correlated subqueries: a window function cannot reference a select-list
+ * alias, and repeating the subqueries inside `SUM` would be the same count
+ * written twice with nothing keeping the two copies in step.
+ */
+export async function listSamples(
+  db: Db,
+  filters: { status?: string | null; limit?: number },
+): Promise<{
+  samples: Record<string, unknown>[];
+  matched: number;
+  exceptionsTotal: number;
+  pendingTotal: number;
+  cap: number;
+}> {
   const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
-  return query(
+  const rows = await query<{
+    matched: string;
+    exceptions_total: string | null;
+    pending_total: string | null;
+  }>(
     db,
-    `SELECT s.id, s.sample_number, s.title, s.method, s.criteria, s.seed,
-            s.population_size, s.sample_size, s.status, s.drawn_at, s.completed_at,
-            u.full_name AS drawn_by_name,
-            (SELECT count(*)::int FROM audit_sample_items i
-              WHERE i.sample_id = s.id AND i.outcome = 'EXCEPTION') AS exceptions,
-            (SELECT count(*)::int FROM audit_sample_items i
-              WHERE i.sample_id = s.id AND i.outcome = 'PENDING') AS pending
-       FROM audit_samples s
-       LEFT JOIN users u ON u.id = s.drawn_by
-      WHERE ($1::text IS NULL OR s.status = $1)
+    `SELECT s.*,
+            count(*) OVER ()::text AS matched,
+            SUM(s.exceptions) OVER ()::text AS exceptions_total,
+            SUM(s.pending) OVER ()::text AS pending_total
+       FROM (
+         SELECT s.id, s.sample_number, s.title, s.method, s.criteria, s.seed,
+                s.population_size, s.sample_size, s.status, s.drawn_at, s.completed_at,
+                u.full_name AS drawn_by_name,
+                (SELECT count(*)::int FROM audit_sample_items i
+                  WHERE i.sample_id = s.id AND i.outcome = 'EXCEPTION') AS exceptions,
+                (SELECT count(*)::int FROM audit_sample_items i
+                  WHERE i.sample_id = s.id AND i.outcome = 'PENDING') AS pending
+           FROM audit_samples s
+           LEFT JOIN users u ON u.id = s.drawn_by
+          WHERE ($1::text IS NULL OR s.status = $1)
+       ) s
       ORDER BY s.drawn_at DESC
       LIMIT $2`,
     [filters.status ?? null, limit],
   );
+
+  return {
+    samples: rows.map(
+      ({ matched: _m, exceptions_total: _e, pending_total: _p, ...sample }) => sample,
+    ),
+    matched: Number.parseInt(rows[0]?.matched ?? '0', 10),
+    exceptionsTotal: Number.parseInt(rows[0]?.exceptions_total ?? '0', 10),
+    pendingTotal: Number.parseInt(rows[0]?.pending_total ?? '0', 10),
+    cap: limit,
+  };
 }
 
 export async function getSample(db: Db, sampleId: string) {
@@ -795,9 +853,27 @@ export async function withdrawReport(
  * one: nobody clicks "verify" on the report they have no reason to suspect,
  * which leaves the tampered one exactly as invisible as it was before.
  */
-export async function listReports(db: Db, filters: { reportType?: string | null; limit?: number }) {
+/**
+ * The newest reports, with their checksums recomputed, and how many there are.
+ *
+ * `matched` matters more here than on any other capped list in the platform.
+ * `checksumMatches` is recomputed per row, and the screen raises an alarm when
+ * a stored report no longer hashes to the checksum signed with it — a signed
+ * government report whose figures were changed underneath the signature. That
+ * check only ever looks at the rows this function returns. Fifty of them,
+ * newest first, out of however many exist.
+ *
+ * The screen was honest about the shape of what it had: its alert says "a
+ * report on this page". What it could not say was how much it had not looked
+ * at, because nothing told it. Now it can, and an alarm that reports the
+ * limits of its own reach is the only kind worth having on this screen.
+ */
+export async function listReports(
+  db: Db,
+  filters: { reportType?: string | null; limit?: number },
+): Promise<{ reports: Record<string, unknown>[]; matched: number; cap: number }> {
   const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
-  const rows = await query<StoredReport>(
+  const rows = await query<StoredReport & { matched: string }>(
     db,
     `SELECT r.id, r.report_number, r.report_type, r.title, r.parameters,
             r.period_start, r.period_end, r.row_count, r.checksum, r.coverage_complete,
@@ -805,7 +881,8 @@ export async function listReports(db: Db, filters: { reportType?: string | null;
             r.generated_at, r.signed_at, r.signature_note, r.withdrawn_reason,
             r.payload,
             g.full_name AS generated_by_name,
-            s.full_name AS signed_by_name
+            s.full_name AS signed_by_name,
+            count(*) OVER ()::text AS matched
        FROM audit_reports r
        LEFT JOIN users g ON g.id = r.generated_by
        LEFT JOIN users s ON s.id = r.signed_by
@@ -815,10 +892,14 @@ export async function listReports(db: Db, filters: { reportType?: string | null;
     [filters.reportType ?? null, limit],
   );
 
-  return rows.map(({ payload, ...row }) => ({
-    ...row,
-    checksumMatches: reportChecksum(row.parameters, payload) === row.checksum,
-  }));
+  return {
+    reports: rows.map(({ payload, matched: _matched, ...row }) => ({
+      ...row,
+      checksumMatches: reportChecksum(row.parameters, payload) === row.checksum,
+    })),
+    matched: Number.parseInt(rows[0]?.matched ?? '0', 10),
+    cap: limit,
+  };
 }
 
 /**

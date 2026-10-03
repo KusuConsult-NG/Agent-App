@@ -171,15 +171,56 @@ export function WorkbenchScreen({ user }: { user: User }) {
    */
   const [loadError, setLoadError] = useState<ApiError | null>(null);
 
+  /**
+   * The size of what the two lists were taken from.
+   *
+   * The four figures above the table were added up over the rows below them,
+   * which are the newest fifty. Three samples behind a cap of two reported
+   * two samples, two exceptions and six items outstanding — and "Exceptions
+   * found" is the figure this screen exists to show. An auditor reading a low
+   * one concludes the programme is clean, which is the one conclusion a
+   * partial count must not be able to support.
+   *
+   * So the figures come from the server now, computed over everything that
+   * matched. Each read falls back to the page's own length, because a mock or
+   * an older API that sends no total must degrade to the old arithmetic
+   * rather than to a nought — a false zero on this screen reads as "nothing
+   * was found", which is the same lie in the opposite direction.
+   */
+  const [size, setSize] = useState({
+    samples: 0,
+    exceptions: 0,
+    pending: 0,
+    reports: 0,
+    cap: 0,
+  });
+
   const load = useCallback(async () => {
     setLoadError(null);
     try {
       const [drawn, generated] = await Promise.all([
-        api.get<{ samples: SampleRow[] }>('/government/audit/samples'),
-        api.get<{ reports: ReportRow[] }>('/government/audit/reports'),
+        api.get<{
+          samples: SampleRow[];
+          matched?: number;
+          exceptionsTotal?: number;
+          pendingTotal?: number;
+          cap?: number;
+        }>('/government/audit/samples'),
+        api.get<{ reports: ReportRow[]; matched?: number; cap?: number }>(
+          '/government/audit/reports',
+        ),
       ]);
       setSamples(drawn.samples);
       setReports(generated.reports);
+      const tally = (rows: { exceptions: number; pending: number }[] | undefined, key: 'exceptions' | 'pending') =>
+        (rows ?? []).reduce((total, row) => total + Number(row[key]), 0);
+      setSize({
+        samples: drawn.matched ?? drawn.samples?.length ?? 0,
+        exceptions: drawn.exceptionsTotal ?? tally(drawn.samples, 'exceptions'),
+        pending: drawn.pendingTotal ?? tally(drawn.samples, 'pending'),
+        reports: generated.matched ?? generated.reports?.length ?? 0,
+        cap: drawn.cap ?? generated.cap ?? 0,
+      });
     } catch (caught) {
       setLoadError(asApiError(caught));
       // Unknown, not empty. One `Promise.all`, so a single refusal leaves
@@ -231,6 +272,25 @@ export function WorkbenchScreen({ user }: { user: User }) {
   const maySign = can('audit:sign');
   // Reports on this page whose stored rows no longer hash to their checksum.
   const altered = (reports ?? []).filter((row) => row.checksumMatches === false);
+  /*
+   * How many reports the checksum alarm did not look at.
+   *
+   * `checksumMatches` is recomputed per row by the server, over the rows it
+   * returned — the newest fifty. The alarm below has always said "a report on
+   * this page", which was honest about its shape and silent about its reach:
+   * a report altered in the database and sitting on page two raises nothing
+   * at all, and nothing on the screen said how many that could be.
+   *
+   * An alarm is only worth having if it reports the edge of its own reach, so
+   * the sentence now carries this figure whether or not anything was found.
+   */
+  const unexamined = Math.max(0, size.reports - (reports?.length ?? 0));
+
+  /** Which tables stopped at the cap, named as the reader sees them. */
+  const partial = [
+    (samples?.length ?? 0) < size.samples ? t.ofcWbSamplesDrawn : null,
+    (reports?.length ?? 0) < size.reports ? t.ofcWbReportsHeld : null,
+  ].filter((label): label is string => label !== null);
 
   return (
     <>
@@ -241,21 +301,42 @@ export function WorkbenchScreen({ user }: { user: User }) {
         </Alert>
       )}
 
+      {/*
+        * Em dash while unread, rather than a nought.
+        *
+        * `samples` is null until the first read returns and null again if it
+        * is refused, and the figures beside it are the whole audit programme.
+        * "Exceptions found: 0" from a read that never happened is the worst
+        * sentence this screen could print.
+        */}
       <div className="stat-grid">
-        <Stat label="ofcWbSamplesDrawn" value={String(samples?.length ?? 0)} />
+        <Stat label="ofcWbSamplesDrawn" value={samples === null ? '—' : String(size.samples)} />
         <Stat
           label="ofcWbItemsOutstanding"
-          value={String((samples ?? []).reduce((total, row) => total + Number(row.pending), 0))}
+          value={samples === null ? '—' : String(size.pending)}
         />
         <Stat
           label="ofcWbExceptionsFound"
-          value={String((samples ?? []).reduce((total, row) => total + Number(row.exceptions), 0))}
-          variant={
-            (samples ?? []).some((row) => Number(row.exceptions) > 0) ? 'alert' : undefined
-          }
+          value={samples === null ? '—' : String(size.exceptions)}
+          variant={size.exceptions > 0 ? 'alert' : undefined}
         />
-        <Stat label="ofcWbReportsHeld" value={String(reports?.length ?? 0)} />
+        <Stat label="ofcWbReportsHeld" value={reports === null ? '—' : String(size.reports)} />
       </div>
+
+      {/*
+        * Which of the two lists stopped short, said once and above both of
+        * them. The figures are whole; the tables are not, and the bottom of a
+        * capped table is where it was cut off rather than where the work ends.
+        */}
+      {partial.length > 0 && (
+        <Alert kind="info" title="ofcWbListsStopShort">
+          <p style={{ margin: 0 }}>
+            {t.ofcWbListsStopShortBody
+              .replace('{{lists}}', partial.join(', '))
+              .replace('{{cap}}', String(size.cap))}
+          </p>
+        </Alert>
+      )}
 
       <DrawForm
         onDrawn={async (message) => {
@@ -467,6 +548,24 @@ export function WorkbenchScreen({ user }: { user: User }) {
             <Alert kind="error" title="ofcWbAlteredTitle">
               <p style={{ margin: 0 }}>
                 {t.ofcWbAlteredBody.replace('{{n}}', String(altered.length))}
+              </p>
+              {unexamined > 0 && (
+                <p style={{ margin: '6px 0 0' }}>
+                  {t.ofcWbChecksumReach.replace('{{n}}', String(unexamined))}
+                </p>
+              )}
+            </Alert>
+          </div>
+        )}
+        {/*
+          * And when nothing was found, which is not the same as nothing being
+          * wrong. A clean page out of two hundred reports is a clean page.
+          */}
+        {altered.length === 0 && unexamined > 0 && reports !== null && (
+          <div style={{ padding: '0 18px 12px' }}>
+            <Alert kind="info" title="ofcWbChecksumReachTitle">
+              <p style={{ margin: 0 }}>
+                {t.ofcWbChecksumReach.replace('{{n}}', String(unexamined))}
               </p>
             </Alert>
           </div>
