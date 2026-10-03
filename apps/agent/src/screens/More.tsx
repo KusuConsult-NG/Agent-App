@@ -128,11 +128,28 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
   const [offlineCapture, setOfflineCapture] = useState(false);
   const [manual, setManual] = useState({ ownerName: '', vehicleType: 'PRIVATE', ownerPhone: '' });
 
-  useEffect(() => {
+  /*
+   * Whether the renewal services could be read at all.
+   *
+   * The catch used to be `setItems([])`, which left the required "Renewal
+   * service" menu holding only its placeholder and said nothing. An agent at a
+   * motor park on a patchy signal could not complete the renewal, and could
+   * not tell a menu that failed to load from a renewal the platform does not
+   * offer. `Collect.tsx` reads the same catalogue and says when it cannot —
+   * "a failed read must not be able to say it", in its own words — and this
+   * screen now does the same, with a way to try again.
+   */
+  const [itemsFailed, setItemsFailed] = useState(false);
+  const loadItems = () => {
+    setItemsFailed(false);
     api
       .get<{ id: string; name: string; name_ha: string | null; code: string }[]>('/revenue/items?search=Vehicle')
       .then(setItems)
-      .catch(() => setItems([]));
+      .catch(() => setItemsFailed(true));
+  };
+
+  useEffect(() => {
+    loadItems();
   }, []);
 
   async function find() {
@@ -368,7 +385,9 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
 
               <Field label={t.moreRenewalService} required>
                 <select value={revenueItemId} onChange={(event) => setRevenueItemId(event.target.value)}>
-                  <option value="">{t.moreSelectRenewalType}</option>
+                  <option value="">
+                    {itemsFailed ? t.tpListCouldNotLoad : t.moreSelectRenewalType}
+                  </option>
                   {items.map((item) => (
                     <option key={item.id} value={item.id}>
                       {localName(lang, item.name, item.name_ha)}
@@ -376,6 +395,11 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
                   ))}
                 </select>
               </Field>
+              {itemsFailed && (
+                <button type="button" className="secondary" onClick={loadItems}>
+                  {t.actionTryAgain}
+                </button>
+              )}
 
               <Field label={t.moreRenewalPeriod} required>
                 <select
