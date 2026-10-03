@@ -41,6 +41,7 @@ import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
 import { forecast, resolvePeriod } from '../services/targets';
+import { todayInPlateau } from '../lib/calendar-day';
 
 const tokens: Record<string, string> = {};
 let lgaId = '';
@@ -956,5 +957,178 @@ describe('how far into a period a forecast thinks it is', () => {
     assert.equal(result.days_elapsed, 30);
     assert.equal(result.confidence, 'HIGH');
     assert.equal(result.projected_kobo, result.collected_kobo);
+  });
+});
+
+// ===========================================================================
+
+/**
+ * The same hour, in every other figure that buckets money by day.
+ *
+ * The describe above fixed the targets. The rest of the platform went on
+ * asking the database session's calendar, which is UTC: the period a month's
+ * close freezes, the executive dashboard's today, week, month and year and its
+ * per-category month, the thirty-day trend, an agent's month against the last
+ * and the agent's own "today". Each case below stamps one collection at 00:30
+ * in Jos on the day its figure begins — an instant whose UTC date is the day
+ * before — and asserts the figure moved by exactly that amount.
+ *
+ * The period close is read against a month long past, like the targets above,
+ * so it is the same every hour. The rest are "now" figures and have to use
+ * this week's, month's and year's own first day; each skips itself in the one
+ * half-hour a year, month, week or day when that instant is still to come.
+ */
+describe('the first hour of a Plateau day, everywhere else money is counted by day', () => {
+  /** A settled collection by the demonstration agent, stamped at an exact instant. */
+  async function collectionAt(instant: Date, amountKobo: bigint): Promise<void> {
+    await query(
+      pool,
+      `INSERT INTO transactions (
+         transaction_reference, taxpayer_id, invoice_id, assessment_id, revenue_item_id,
+         lga_id, amount_kobo, total_amount_kobo, status, created_by, created_at, territory_id,
+         agent_id
+       )
+       SELECT 'TXN-TZ-' || gen_random_uuid()::text, t.taxpayer_id, t.invoice_id,
+              t.assessment_id, t.revenue_item_id, t.lga_id, $1, $1,
+              'SETTLED', t.created_by, $2, t.territory_id, t.agent_id
+         FROM transactions t
+        WHERE t.status = 'SETTLED' ORDER BY t.created_at LIMIT 1`,
+      [amountKobo.toString(), instant],
+    );
+  }
+
+  /** 00:30 in Jos on a Plateau calendar day — 23:30Z on the day before. */
+  const halfPastMidnight = (day: string) => new Date(`${day}T00:30:00+01:00`);
+
+  const plateauToday = () => todayInPlateau();
+  const shift = (day: string, days: number) =>
+    new Date(Date.parse(`${day}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+  const mondayOf = (day: string) => shift(day, -((new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7));
+
+  /** Read a figure, stamp a collection, read it again: the difference. */
+  async function moves(
+    day: string,
+    read: () => Promise<bigint>,
+    amountKobo = 4_321_00n,
+  ): Promise<bigint | null> {
+    const instant = halfPastMidnight(day);
+    if (instant.getTime() > Date.now()) return null; // that half-hour is still to come
+    await collect('1');
+    const before = await read();
+    await collectionAt(instant, amountKobo);
+    return (await read()) - before;
+  }
+
+  const dashboard = async () => {
+    const response = await get('/government/dashboard', auth('admin'));
+    assert.equal(response.status, 200, JSON.stringify(response.body).slice(0, 300));
+    return response.body;
+  };
+
+  it('puts it in the month a period close freezes, not the month before', async () => {
+    const figures = async (start: string, end: string) => {
+      const response = await get(
+        `/government/periods/figures?periodStart=${start}&periodEnd=${end}`,
+        auth('admin'),
+      );
+      assert.equal(response.status, 200, JSON.stringify(response.body));
+      return response.body as { collected_kobo: string; transaction_count: string };
+    };
+    await collect('1');
+    const [marchBefore, aprilBefore] = [
+      await figures('2026-03-01', '2026-03-31'),
+      await figures('2026-04-01', '2026-04-30'),
+    ];
+
+    await collectionAt(new Date('2026-03-31T23:30:00Z'), 7_000_00n);
+
+    const [march, april] = [
+      await figures('2026-03-01', '2026-03-31'),
+      await figures('2026-04-01', '2026-04-30'),
+    ];
+    assert.equal(
+      BigInt(april.collected_kobo) - BigInt(aprilBefore.collected_kobo),
+      7_000_00n,
+      "money taken at 00:30 on 1 April in Jos was left out of April's close",
+    );
+    assert.equal(Number(april.transaction_count) - Number(aprilBefore.transaction_count), 1);
+    assert.equal(
+      BigInt(march.collected_kobo),
+      BigInt(marchBefore.collected_kobo),
+      "and was frozen into March's instead",
+    );
+  });
+
+  it('counts it in today on the executive dashboard', async () => {
+    const moved = await moves(plateauToday(), async () => BigInt((await dashboard()).collections.today_kobo));
+    if (moved !== null) assert.equal(moved, 4_321_00n, "it was counted in yesterday's figure");
+  });
+
+  it('counts it in this week, from its Monday', async () => {
+    const moved = await moves(mondayOf(plateauToday()), async () =>
+      BigInt((await dashboard()).collections.week_kobo),
+    );
+    if (moved !== null) assert.equal(moved, 4_321_00n);
+  });
+
+  it('counts it in this month, from its first day', async () => {
+    const moved = await moves(`${plateauToday().slice(0, 8)}01`, async () =>
+      BigInt((await dashboard()).collections.month_kobo),
+    );
+    if (moved !== null) assert.equal(moved, 4_321_00n);
+  });
+
+  it('counts it in the year to date, from 1 January', async () => {
+    const moved = await moves(`${plateauToday().slice(0, 4)}-01-01`, async () =>
+      BigInt((await dashboard()).collections.ytd_kobo),
+    );
+    if (moved !== null) assert.equal(moved, 4_321_00n);
+  });
+
+  it("counts it in its category's month", async () => {
+    const moved = await moves(`${plateauToday().slice(0, 8)}01`, async () =>
+      ((await dashboard()).revenueByCategory as { month_kobo: string }[]).reduce(
+        (total, row) => total + BigInt(row.month_kobo),
+        0n,
+      ),
+    );
+    if (moved !== null) assert.equal(moved, 4_321_00n);
+  });
+
+  it("puts it on today's bar of the thirty-day trend", async () => {
+    const today = plateauToday();
+    const moved = await moves(today, async () => {
+      const bar = ((await dashboard()).dailyTrend as { day: string; amount_kobo: string }[]).find(
+        (row) => row.day === today,
+      );
+      return BigInt(bar?.amount_kobo ?? '0');
+    });
+    if (moved !== null) assert.equal(moved, 4_321_00n);
+  });
+
+  it("counts it in the agent's month on the performance report", async () => {
+    const moved = await moves(`${plateauToday().slice(0, 8)}01`, async () => {
+      const rows = await get('/agents/performance', auth('admin'));
+      assert.equal(rows.status, 200, JSON.stringify(rows.body).slice(0, 300));
+      return (rows.body as { month_kobo: string }[]).reduce(
+        (total, row) => total + BigInt(row.month_kobo),
+        0n,
+      );
+    });
+    if (moved !== null) assert.equal(moved, 4_321_00n);
+  });
+
+  it("counts it in the agent's own today", async () => {
+    const moved = await moves(plateauToday(), async () => {
+      const demo = await seedDemoAgent();
+      const session = await loginAs(demo!.phone, demo!.password, demo!.deviceIdentifier);
+      const home = await get('/agents/me/home', {
+        token: session.accessToken,
+        deviceId: demo!.deviceIdentifier,
+      });
+      assert.equal(home.status, 200, JSON.stringify(home.body).slice(0, 300));
+      return BigInt(home.body.today.collected_kobo);
+    });
+    if (moved !== null) assert.equal(moved, 4_321_00n, "the agent's screen put it in yesterday");
   });
 });

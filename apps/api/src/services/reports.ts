@@ -17,6 +17,7 @@
 import type { Db } from '../db/pool';
 import { query, queryOne } from '../db/pool';
 import { REVENUE_STATES_SQL } from '../lib/revenue-states';
+import { PLATEAU_TODAY_SQL, plateauDateSql, plateauMidnightSql } from '../lib/calendar-day';
 import { outstandingExceptionSql } from './reconciliation';
 import { CURRENT_FINDINGS_SQL } from '../lib/reconciliation-findings';
 import { PAYABLE_INVOICE_SQL } from '../lib/payable-invoice';
@@ -26,6 +27,9 @@ import {
   transactionScopeSql,
   type ReportScope,
 } from './report-scope';
+
+/** The first day of this month on Plateau's calendar, as a SQL `date`. */
+const PLATEAU_MONTH_START_SQL = `date_trunc('month', ${PLATEAU_TODAY_SQL})::date`;
 
 
 /**
@@ -86,41 +90,41 @@ export async function executiveDashboard(
        */
       `WITH windows AS (
          SELECT
-           CURRENT_DATE                                   AS today,
-           CURRENT_DATE - 1                               AS yesterday,
-           date_trunc('week', CURRENT_DATE)::date         AS week_start,
-           (date_trunc('week', CURRENT_DATE) - interval '7 days')::date  AS prev_week_start,
-           date_trunc('month', CURRENT_DATE)::date        AS month_start,
-           (date_trunc('month', CURRENT_DATE) - interval '1 month')::date AS prev_month_start,
-           (date_trunc('month', CURRENT_DATE) - interval '1 day')::date   AS prev_month_end,
-           date_trunc('year', CURRENT_DATE)::date         AS year_start,
-           (date_trunc('year', CURRENT_DATE) - interval '1 year')::date   AS prev_year_start,
-           (CURRENT_DATE - date_trunc('week', CURRENT_DATE)::date)  AS days_into_week,
-           (CURRENT_DATE - date_trunc('month', CURRENT_DATE)::date) AS days_into_month
+           ${PLATEAU_TODAY_SQL}                                   AS today,
+           ${PLATEAU_TODAY_SQL} - 1                               AS yesterday,
+           date_trunc('week', ${PLATEAU_TODAY_SQL})::date         AS week_start,
+           (date_trunc('week', ${PLATEAU_TODAY_SQL}) - interval '7 days')::date  AS prev_week_start,
+           date_trunc('month', ${PLATEAU_TODAY_SQL})::date        AS month_start,
+           (date_trunc('month', ${PLATEAU_TODAY_SQL}) - interval '1 month')::date AS prev_month_start,
+           (date_trunc('month', ${PLATEAU_TODAY_SQL}) - interval '1 day')::date   AS prev_month_end,
+           date_trunc('year', ${PLATEAU_TODAY_SQL})::date         AS year_start,
+           (date_trunc('year', ${PLATEAU_TODAY_SQL}) - interval '1 year')::date   AS prev_year_start,
+           (${PLATEAU_TODAY_SQL} - date_trunc('week', ${PLATEAU_TODAY_SQL})::date)  AS days_into_week,
+           (${PLATEAU_TODAY_SQL} - date_trunc('month', ${PLATEAU_TODAY_SQL})::date) AS days_into_month
        ),
        sums AS (
          SELECT
-           COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.created_at::date = w.today),0) AS today,
-           COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.created_at::date = w.yesterday),0) AS yesterday,
+           COALESCE(SUM(t.amount_kobo) FILTER (WHERE ${plateauDateSql('t.created_at')} = w.today),0) AS today,
+           COALESCE(SUM(t.amount_kobo) FILTER (WHERE ${plateauDateSql('t.created_at')} = w.yesterday),0) AS yesterday,
 
-           COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.created_at::date >= w.week_start),0) AS week,
+           COALESCE(SUM(t.amount_kobo) FILTER (WHERE ${plateauDateSql('t.created_at')} >= w.week_start),0) AS week,
            COALESCE(SUM(t.amount_kobo) FILTER (
-             WHERE t.created_at::date >= w.prev_week_start
-               AND t.created_at::date <= w.prev_week_start + w.days_into_week),0) AS prev_week,
+             WHERE ${plateauDateSql('t.created_at')} >= w.prev_week_start
+               AND ${plateauDateSql('t.created_at')} <= w.prev_week_start + w.days_into_week),0) AS prev_week,
 
-           COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.created_at::date >= w.month_start),0) AS month,
+           COALESCE(SUM(t.amount_kobo) FILTER (WHERE ${plateauDateSql('t.created_at')} >= w.month_start),0) AS month,
            COALESCE(SUM(t.amount_kobo) FILTER (
-             WHERE t.created_at::date >= w.prev_month_start
-               AND t.created_at::date <= LEAST(
+             WHERE ${plateauDateSql('t.created_at')} >= w.prev_month_start
+               AND ${plateauDateSql('t.created_at')} <= LEAST(
                      w.prev_month_start + w.days_into_month, w.prev_month_end)),0) AS prev_month,
            COALESCE(SUM(t.amount_kobo) FILTER (
-             WHERE t.created_at::date BETWEEN w.prev_month_start AND w.prev_month_end),0)
+             WHERE ${plateauDateSql('t.created_at')} BETWEEN w.prev_month_start AND w.prev_month_end),0)
              AS prev_month_whole,
 
-           COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.created_at::date >= w.year_start),0) AS ytd,
+           COALESCE(SUM(t.amount_kobo) FILTER (WHERE ${plateauDateSql('t.created_at')} >= w.year_start),0) AS ytd,
            COALESCE(SUM(t.amount_kobo) FILTER (
-             WHERE t.created_at::date >= w.prev_year_start
-               AND t.created_at::date <= (w.today - interval '1 year')::date),0) AS prev_ytd,
+             WHERE ${plateauDateSql('t.created_at')} >= w.prev_year_start
+               AND ${plateauDateSql('t.created_at')} <= (w.today - interval '1 year')::date),0) AS prev_ytd,
 
            COALESCE(SUM(t.amount_kobo),0) AS total
          FROM transactions t CROSS JOIN windows w
@@ -155,7 +159,7 @@ export async function executiveDashboard(
          (SELECT count(*)::text FROM taxpayers tp
            WHERE tp.status = 'ACTIVE' AND ($1 OR tp.lga_id = ANY($3::uuid[]))) AS taxpayers,
          (SELECT count(*)::text FROM taxpayers tp
-           WHERE tp.status = 'ACTIVE' AND tp.created_at >= date_trunc('month', CURRENT_DATE)
+           WHERE tp.status = 'ACTIVE' AND tp.created_at >= ${plateauMidnightSql(PLATEAU_MONTH_START_SQL)}
              AND ($1 OR tp.lga_id = ANY($3::uuid[]))) AS new_taxpayers_this_month,
          (SELECT count(*)::text FROM agents a
            WHERE a.operational_status = 'ACTIVE'
@@ -265,20 +269,20 @@ export async function executiveDashboard(
        * it, and the monthly pair is added beside it rather than replacing it.
        */
       `WITH bounds AS (
-         SELECT date_trunc('month', CURRENT_DATE)::date AS month_start,
-                (date_trunc('month', CURRENT_DATE) - interval '1 month')::date AS prev_start,
-                (date_trunc('month', CURRENT_DATE) - interval '1 day')::date AS prev_end,
-                (CURRENT_DATE - date_trunc('month', CURRENT_DATE)::date) AS days_in
+         SELECT date_trunc('month', ${PLATEAU_TODAY_SQL})::date AS month_start,
+                (date_trunc('month', ${PLATEAU_TODAY_SQL}) - interval '1 month')::date AS prev_start,
+                (date_trunc('month', ${PLATEAU_TODAY_SQL}) - interval '1 day')::date AS prev_end,
+                (${PLATEAU_TODAY_SQL} - date_trunc('month', ${PLATEAU_TODAY_SQL})::date) AS days_in
        ),
        rows AS (
          SELECT rc.name AS category, rc.name_ha AS category_ha,
                 count(t.id) AS transactions,
                 COALESCE(SUM(t.amount_kobo),0) AS amount,
                 COALESCE(SUM(t.amount_kobo) FILTER (
-                  WHERE t.created_at::date >= b.month_start),0) AS this_month,
+                  WHERE ${plateauDateSql('t.created_at')} >= b.month_start),0) AS this_month,
                 COALESCE(SUM(t.amount_kobo) FILTER (
-                  WHERE t.created_at::date >= b.prev_start
-                    AND t.created_at::date <= LEAST(b.prev_start + b.days_in, b.prev_end)),0)
+                  WHERE ${plateauDateSql('t.created_at')} >= b.prev_start
+                    AND ${plateauDateSql('t.created_at')} <= LEAST(b.prev_start + b.days_in, b.prev_end)),0)
                   AS prev_month
            FROM transactions t
            JOIN revenue_items ri ON ri.id = t.revenue_item_id
@@ -401,9 +405,9 @@ export async function executiveDashboard(
       `SELECT to_char(day, 'YYYY-MM-DD') AS day,
               COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo,
               count(t.id)::text AS transactions
-         FROM generate_series(CURRENT_DATE - interval '29 days', CURRENT_DATE, interval '1 day') AS day
+         FROM generate_series(${PLATEAU_TODAY_SQL} - interval '29 days', ${PLATEAU_TODAY_SQL}, interval '1 day') AS day
          LEFT JOIN transactions t
-                ON t.created_at::date = day::date AND t.status IN ${REVENUE_STATES_SQL}
+                ON ${plateauDateSql('t.created_at')} = day::date AND t.status IN ${REVENUE_STATES_SQL}
                AND ${tx}
         GROUP BY day ORDER BY day`,
       scoped,
@@ -634,7 +638,7 @@ export async function agentPerformance(
               WHERE c.agent_id = a.id AND c.status <> 'REVERSED') AS commission_earned_kobo,
             (SELECT count(*)::text FROM fraud_flags f
               WHERE f.agent_id = a.id AND f.status IN ('OPEN','UNDER_REVIEW')) AS open_fraud_flags,
-            count(DISTINCT t.created_at::date)::text AS active_days,
+            count(DISTINCT ${plateauDateSql('t.created_at')})::text AS active_days,
             /*
              * The two columns that turn a ranking into a management tool.
              *
@@ -655,15 +659,15 @@ export async function agentPerformance(
               AS categories_processed,
             COALESCE(SUM(t.amount_kobo) FILTER (
               WHERE t.status IN ${REVENUE_STATES_SQL}
-                AND t.created_at::date >= date_trunc('month', CURRENT_DATE)::date),0)::text
+                AND ${plateauDateSql('t.created_at')} >= date_trunc('month', ${PLATEAU_TODAY_SQL})::date),0)::text
               AS month_kobo,
             COALESCE(SUM(t.amount_kobo) FILTER (
               WHERE t.status IN ${REVENUE_STATES_SQL}
-                AND t.created_at::date >= (date_trunc('month', CURRENT_DATE) - interval '1 month')::date
-                AND t.created_at::date <= LEAST(
-                      (date_trunc('month', CURRENT_DATE) - interval '1 month')::date
-                        + (CURRENT_DATE - date_trunc('month', CURRENT_DATE)::date),
-                      (date_trunc('month', CURRENT_DATE) - interval '1 day')::date)),0)::text
+                AND ${plateauDateSql('t.created_at')} >= (date_trunc('month', ${PLATEAU_TODAY_SQL}) - interval '1 month')::date
+                AND ${plateauDateSql('t.created_at')} <= LEAST(
+                      (date_trunc('month', ${PLATEAU_TODAY_SQL}) - interval '1 month')::date
+                        + (${PLATEAU_TODAY_SQL} - date_trunc('month', ${PLATEAU_TODAY_SQL})::date),
+                      (date_trunc('month', ${PLATEAU_TODAY_SQL}) - interval '1 day')::date)),0)::text
               AS previous_month_kobo
        FROM agents a
        JOIN users u ON u.id = a.user_id
@@ -711,7 +715,7 @@ export async function agentToday(db: Db, agentId: string) {
          count(*)::text AS total,
          count(*) FILTER (WHERE status IN ('PAYMENT_PENDING','PAYMENT_INITIATED'))::text AS pending
        FROM transactions
-      WHERE agent_id = $1 AND created_at::date = CURRENT_DATE`,
+      WHERE agent_id = $1 AND ${plateauDateSql('created_at')} = ${PLATEAU_TODAY_SQL}`,
       [agentId],
     ),
     queryOne(
@@ -719,7 +723,7 @@ export async function agentToday(db: Db, agentId: string) {
       `SELECT COALESCE(SUM(amount_kobo) FILTER (WHERE status <> 'REVERSED'),0)::text AS lifetime_kobo,
               COALESCE(SUM(amount_kobo) FILTER (WHERE status = 'ELIGIBLE'),0)::text AS available_kobo,
               COALESCE(SUM(c.amount_kobo) FILTER (
-                WHERE c.status <> 'REVERSED' AND c.created_at::date = CURRENT_DATE),0)::text AS today_kobo
+                WHERE c.status <> 'REVERSED' AND ${plateauDateSql('c.created_at')} = ${PLATEAU_TODAY_SQL}),0)::text AS today_kobo
          FROM commissions c WHERE agent_id = $1`,
       [agentId],
     ),
@@ -742,7 +746,7 @@ export async function agentToday(db: Db, agentId: string) {
   const onboarded = await queryOne(
     db,
     `SELECT count(*)::text AS today, (SELECT count(*)::text FROM taxpayers WHERE registered_by_agent_id = $1) AS total
-       FROM taxpayers WHERE registered_by_agent_id = $1 AND created_at::date = CURRENT_DATE`,
+       FROM taxpayers WHERE registered_by_agent_id = $1 AND ${plateauDateSql('created_at')} = ${PLATEAU_TODAY_SQL}`,
     [agentId],
   );
 
@@ -988,7 +992,7 @@ export async function kpis(db: Db) {
     `SELECT
        (SELECT COALESCE(SUM(amount_kobo),0)::text FROM transactions WHERE status IN ${REVENUE_STATES_SQL})
          AS total_collection_kobo,
-       (SELECT count(*)::text FROM taxpayers WHERE created_at >= date_trunc('month', CURRENT_DATE))
+       (SELECT count(*)::text FROM taxpayers WHERE created_at >= ${plateauMidnightSql(PLATEAU_MONTH_START_SQL)})
          AS new_taxpayers_this_month,
        (SELECT count(*)::text FROM taxpayers WHERE tin_status IN ('ASSIGNED','EXISTING'))
          AS taxpayers_with_tin,
@@ -1399,7 +1403,7 @@ export async function revenueOfficerHome(db: Db) {
     `SELECT
        (SELECT count(*)::text FROM taxpayers WHERE status = 'ACTIVE') AS taxpayers,
        (SELECT count(*)::text FROM taxpayers
-         WHERE status = 'ACTIVE' AND created_at >= date_trunc('week', CURRENT_DATE))
+         WHERE status = 'ACTIVE' AND created_at >= ${plateauMidnightSql(`date_trunc('week', ${PLATEAU_TODAY_SQL})::date`)})
          AS registered_this_week,
        -- A taxpayer without a TIN cannot be tracked across years, so this is
        -- the queue that matters most here.
@@ -1499,17 +1503,17 @@ export async function auditorHome(db: Db) {
     db,
     `SELECT
        (SELECT count(*)::text FROM audit_logs) AS audit_entries,
-       (SELECT count(*)::text FROM audit_logs WHERE created_at >= CURRENT_DATE) AS entries_today,
+       (SELECT count(*)::text FROM audit_logs WHERE created_at >= ${plateauMidnightSql(PLATEAU_TODAY_SQL)}) AS entries_today,
        (SELECT count(*)::text FROM audit_logs WHERE result = 'DENIED'
-          AND created_at >= CURRENT_DATE - interval '7 days') AS refused_this_week,
+          AND created_at >= ${plateauMidnightSql(`${PLATEAU_TODAY_SQL} - 7`)}) AS refused_this_week,
        (SELECT count(*)::text FROM transactions WHERE status IN ('REVERSED','REFUNDED'))
          AS reversed_or_refunded,
        (SELECT count(*)::text FROM fraud_flags WHERE status IN ('OPEN','UNDER_REVIEW'))
          AS fraud_flags_open,
        (SELECT count(*)::text FROM revenue_item_rates
-         WHERE created_at >= CURRENT_DATE - interval '30 days') AS rate_changes_this_month,
+         WHERE created_at >= ${plateauMidnightSql(`${PLATEAU_TODAY_SQL} - 30`)}) AS rate_changes_this_month,
        (SELECT count(*)::text FROM verification_attempts
-          WHERE created_at >= CURRENT_DATE - interval '7 days') AS receipt_checks_this_week,
+          WHERE created_at >= ${plateauMidnightSql(`${PLATEAU_TODAY_SQL} - 7`)}) AS receipt_checks_this_week,
        (SELECT count(*)::text FROM taxpayers WHERE status = 'ACTIVE') AS taxpayers_on_record`,
   );
 }
@@ -1943,10 +1947,10 @@ export async function taxpayerAnalytics(
          count(*)::text AS total,
          count(*) FILTER (WHERE taxpayer_type = 'INDIVIDUAL')::text AS individuals,
          count(*) FILTER (WHERE taxpayer_type = 'BUSINESS')::text AS businesses,
-         count(*) FILTER (WHERE created_at >= date_trunc('month', CURRENT_DATE))::text
+         count(*) FILTER (WHERE created_at >= ${plateauMidnightSql(PLATEAU_MONTH_START_SQL)})::text
            AS new_this_month,
-         count(*) FILTER (WHERE created_at >= date_trunc('month', CURRENT_DATE) - interval '1 month'
-                            AND created_at < date_trunc('month', CURRENT_DATE))::text
+         count(*) FILTER (WHERE created_at >= ${plateauMidnightSql(`(date_trunc('month', ${PLATEAU_TODAY_SQL}) - interval '1 month')::date`)}
+                            AND created_at < ${plateauMidnightSql(PLATEAU_MONTH_START_SQL)})::text
            AS new_last_month,
          -- Paying within the window, not merely on the register.
          count(*) FILTER (WHERE last_paid_at > now() - interval '90 days')::text AS active,
@@ -1964,7 +1968,7 @@ export async function taxpayerAnalytics(
       db,
       `SELECT l.name AS lga,
               count(tp.id)::text AS taxpayers,
-              count(tp.id) FILTER (WHERE tp.created_at >= date_trunc('month', CURRENT_DATE))::text
+              count(tp.id) FILTER (WHERE tp.created_at >= ${plateauMidnightSql(PLATEAU_MONTH_START_SQL)})::text
                 AS new_this_month,
               count(tp.id) FILTER (WHERE EXISTS (
                 SELECT 1 FROM transactions t

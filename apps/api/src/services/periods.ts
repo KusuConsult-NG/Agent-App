@@ -31,6 +31,7 @@ import { REVENUE_STATES_SQL } from '../lib/revenue-states';
 import { outstandingExceptionSql } from './reconciliation';
 import { CURRENT_FINDINGS_SQL } from '../lib/reconciliation-findings';
 import { recordAudit } from './audit';
+import { plateauDateSql } from '../lib/calendar-day';
 
 /** Revenue is recognised only after independent verification (PRD §17, §95). */
 
@@ -172,15 +173,15 @@ export async function periodFigures(
     `SELECT
        (SELECT COALESCE(SUM(amount_kobo),0)::text FROM transactions
          WHERE status IN ${REVENUE_STATES_SQL}
-           AND created_at::date BETWEEN $1::date AND $2::date) AS collected_kobo,
+           AND ${plateauDateSql('created_at')} BETWEEN $1::date AND $2::date) AS collected_kobo,
        (SELECT COALESCE(SUM(received_amount_kobo),0)::text FROM settlements
          WHERE settlement_date BETWEEN $1::date AND $2::date) AS settled_kobo,
        (SELECT COALESCE(SUM(amount_kobo),0)::text FROM commissions
-         WHERE created_at::date BETWEEN $1::date AND $2::date AND status <> 'REVERSED')
+         WHERE ${plateauDateSql('created_at')} BETWEEN $1::date AND $2::date AND status <> 'REVERSED')
          AS commission_kobo,
        (SELECT count(*)::text FROM transactions
          WHERE status IN ${REVENUE_STATES_SQL}
-           AND created_at::date BETWEEN $1::date AND $2::date) AS transaction_count,
+           AND ${plateauDateSql('created_at')} BETWEEN $1::date AND $2::date) AS transaction_count,
        /*
         * The two figures that say whether the month is ready to close.
         *
@@ -196,10 +197,10 @@ export async function periodFigures(
        (SELECT count(*)::text FROM (${CURRENT_FINDINGS_SQL}) rr
          LEFT JOIN transactions t ON t.id = rr.transaction_id
         WHERE ${outstandingExceptionSql('rr')}
-          AND t.created_at::date BETWEEN $1::date AND $2::date) AS unreconciled,
+          AND ${plateauDateSql('t.created_at')} BETWEEN $1::date AND $2::date) AS unreconciled,
        (SELECT count(*)::text FROM payments
          WHERE status IN ('INITIATED','PENDING')
-           AND initiated_at::date BETWEEN $1::date AND $2::date) AS pending_payments`,
+           AND ${plateauDateSql('initiated_at')} BETWEEN $1::date AND $2::date) AS pending_payments`,
     [periodStart, periodEnd],
   );
   return row!;
