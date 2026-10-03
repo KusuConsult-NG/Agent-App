@@ -51,6 +51,7 @@
 
 import type { Db } from '../db/pool';
 import { query, queryOne } from '../db/pool';
+import { RETURNED_STATES } from '@psirs/shared';
 import { badRequest } from '../lib/errors';
 
 /** The statuses that mean money arrived. Kept in step with the score. */
@@ -61,7 +62,15 @@ function asDate(value: string | Date | null): string | null {
 }
 
 const PAID_STATUSES = ['SETTLED', 'RECEIPT_GENERATED', 'RECONCILIATION_PENDING'] as const;
-const RETURNED_STATUSES = ['REVERSED', 'REFUNDED'] as const;
+/*
+ * The shared definition rather than a fourth copy of the pair.
+ *
+ * `PAID_STATUSES` above stays local and deliberately narrower than the
+ * platform's recognised set, for the reason `lib/revenue-states.ts` records.
+ * This one had no such reason — it was the same two values the state machine
+ * declares, written out again.
+ */
+const RETURNED_STATUSES = RETURNED_STATES;
 
 export interface PaymentHistoryRow {
   transactionReference: string;

@@ -38,14 +38,46 @@
  * Those are documented where they are defined and are not copies of this.
  */
 
-import { REVENUE_RECOGNISED_STATES } from '@psirs/shared';
+import { RETURNED_STATES, REVENUE_RECOGNISED_STATES } from '@psirs/shared';
 
 /**
- * The recognised states as a SQL list, for interpolation into an `IN (...)`.
+ * A closed set of states, rendered for interpolation into an `IN (...)`.
  *
  * Derived, never written out. The values are a closed set of upper-case
  * identifiers declared in the shared package, so there is no user input
- * anywhere near this and nothing to escape; what matters is that it cannot
- * say anything the shared constant does not.
+ * anywhere near this and nothing to escape; what matters is that these lists
+ * cannot say anything the shared constants do not.
  */
-export const REVENUE_STATES_SQL = `(${REVENUE_RECOGNISED_STATES.map((state) => `'${state}'`).join(',')})`;
+const asSqlList = (states: readonly string[]) =>
+  `(${states.map((state) => `'${state}'`).join(',')})`;
+
+/** The states in which the State has the money. */
+export const REVENUE_STATES_SQL = asSqlList(REVENUE_RECOGNISED_STATES);
+
+/** The states that mean money went back to the payer, as a SQL list. */
+export const RETURNED_STATES_SQL = asSqlList(RETURNED_STATES);
+
+/**
+ * Every transaction where money reached the State, returned or not.
+ *
+ * The denominator for "how much of what we took went back", and the reason
+ * this constant exists at all. The fraud sweep's reversal rule divided its
+ * reversals by every transaction an agent had touched in thirty days —
+ * which is mostly assessments nobody paid, a thing no reversal can ever
+ * happen to and a thing the agent raises as many of as they like.
+ *
+ * Measured: eight settled collections and two reversed is a twenty per cent
+ * rate and raises the flag. The same eight, the same two, plus twenty
+ * unpaid assessments is six point seven per cent and raises nothing. So an
+ * agent reversing a fifth of their collections stayed under a fraud rule by
+ * doing more of the ordinary part of their job.
+ *
+ * A rate needs both of its halves drawn from the same population. This is
+ * that population: recognised, plus returned — because a reversed collection
+ * was recognised once, and leaving it out would drop the numerator's own rows
+ * from the denominator and overstate the rate instead.
+ */
+export const MONEY_TAKEN_STATES_SQL = asSqlList([
+  ...REVENUE_RECOGNISED_STATES,
+  ...RETURNED_STATES,
+]);

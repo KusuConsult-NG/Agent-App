@@ -78,6 +78,22 @@ export const REVENUE_RECOGNISED_STATES: readonly TransactionState[] = [
   'SETTLED',
 ];
 
+/**
+ * States that mean money the State had went back to the payer.
+ *
+ * A subset of `TERMINAL_STATES`, which also holds CANCELLED and EXPIRED —
+ * and the distinction is the whole point of having this. A cancelled
+ * assessment is money that was never taken; a reversed one is money that was
+ * taken and returned. Anything measuring how much came back has to tell those
+ * apart, and `TERMINAL_STATES` cannot.
+ *
+ * Declared here because four modules in the API had written the pair out by
+ * hand. That is the same drift `lib/revenue-states.ts` was written to stop,
+ * for the same reason: a hand-written copy of a definition reads as plausible
+ * whatever it says.
+ */
+export const RETURNED_STATES: readonly TransactionState[] = ['REVERSED', 'REFUNDED'];
+
 /** States from which no further financial movement is expected. */
 export const TERMINAL_STATES: readonly TransactionState[] = [
   'CANCELLED',
