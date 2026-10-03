@@ -107,7 +107,21 @@ async function clone(count: number, status: string, prefix: string): Promise<voi
 /** The seeded collection counts as one of the settled ones. */
 const settled = (n: number) => clone(n - 1, 'SETTLED', 'TXN-SET');
 const reversed = (n: number) => clone(n, 'REVERSED', 'TXN-REV');
-const unpaid = (n: number) => clone(n, 'ASSESSMENT_CREATED', 'TXN-UNP');
+
+/**
+ * An assessment nobody paid rests at INVOICE_GENERATED.
+ *
+ * The first version of this used ASSESSMENT_CREATED, which is not a state a
+ * transaction ever rests in: the row is created already INVOICE_GENERATED,
+ * because the assessment and the invoice are made together, and
+ * ASSESSMENT_CREATED exists as an event in `transaction_events` instead. The
+ * enum-coverage guard said so — it keeps a list of states the platform cannot
+ * produce and fails when the suite writes one, which is the whole point:
+ * every test passed and the fixture was describing a world that does not
+ * exist. The dilution behaves identically with the real state, which was
+ * re-measured rather than assumed.
+ */
+const unpaid = (n: number) => clone(n, 'INVOICE_GENERATED', 'TXN-UNP');
 
 async function reversalFlag(): Promise<{ detail: Record<string, number> } | undefined> {
   const rows = await query<{ detail: Record<string, number> }>(
@@ -155,16 +169,23 @@ describe('an agent reversing a fifth of what they collect', () => {
     assert.equal(flag!.detail.sample, 10, 'the unpaid assessments are not part of the sample');
   });
 
-  it('is flagged the same whether the assessments are raised or invoiced', async () => {
-    // The states before payment are several, and a fix that excluded only
-    // ASSESSMENT_CREATED would pass the case above and leak through the rest.
+  it('is flagged the same whatever unpaid state the transactions rest in', async () => {
+    /*
+     * Every resting state before money arrives, and the two ways it does not.
+     * A fix that named one of them would pass the case above and leak the
+     * rest back into the denominator.
+     *
+     * ASSESSMENT_CREATED and CANCELLED are deliberately absent: the
+     * enum-coverage guard declares them unreachable on this column, and a
+     * fixture writing a state the platform cannot produce proves nothing
+     * about it.
+     */
     await settled(8);
     await reversed(2);
-    await clone(6, 'ASSESSMENT_CREATED', 'TXN-A');
     await clone(6, 'INVOICE_GENERATED', 'TXN-I');
     await clone(6, 'PAYMENT_INITIATED', 'TXN-P');
+    await clone(6, 'PAYMENT_PENDING', 'TXN-D');
     await clone(6, 'FAILED', 'TXN-F');
-    await clone(6, 'CANCELLED', 'TXN-C');
     await clone(6, 'EXPIRED', 'TXN-E');
 
     await sweep();
