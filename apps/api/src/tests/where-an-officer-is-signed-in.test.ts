@@ -135,6 +135,59 @@ describe('an officer can see where they are signed in', () => {
    * officer whose role somebody narrowed could no longer see that their old
    * laptop is still signed in.
    */
+  it('marks a session that lapsed without being ended, wherever sessions are counted', async () => {
+    /*
+     * Signing in refuses a session that is revoked, idle past its expiry, or
+     * past its absolute lifetime. Only the first writes anything, and the
+     * readers asked about less than that: the list called all three active,
+     * the device count missed the absolute lifetime, and so did the
+     * administrator's view of where the officer is signed in.
+     */
+    await signInFromDevice(PHONES.officer, 'Mozilla/5.0 (Windows NT 10.0) Chrome/120', 'dev-idle');
+    await signInFromDevice(PHONES.officer, 'Mozilla/5.0 (Macintosh) Safari/17', 'dev-abs');
+    const rows = await query<{ id: string; officer_device_id: string | null }>(
+      pool,
+      'SELECT id, officer_device_id FROM sessions WHERE user_id = $1 ORDER BY issued_at',
+      [ids.officer],
+    );
+    assert.equal(rows.length, 3, 'one session from beforeEach and two from here');
+    const [current, idle, absolute] = rows as [typeof rows[0], typeof rows[0], typeof rows[0]];
+    assert.ok(idle.officer_device_id && absolute.officer_device_id, 'both recorded a machine');
+    await pool.query(`UPDATE sessions SET expires_at = now() - interval '1 hour' WHERE id = $1`, [idle.id]);
+    await pool.query(
+      `UPDATE sessions SET absolute_expires_at = now() - interval '1 hour' WHERE id = $1`,
+      [absolute.id],
+    );
+
+    const mine = await get('/government/sessions/mine', auth('officer'));
+    assert.equal(mine.status, 200, JSON.stringify(mine.body));
+    const live = Object.fromEntries(
+      (mine.body.sessions as { id: string; live: boolean }[]).map((row) => [row.id, row.live]),
+    );
+    assert.deepEqual(
+      live,
+      { [current.id]: true, [idle.id]: false, [absolute.id]: false },
+      'a session the platform would refuse is listed as one somebody could be using',
+    );
+
+    const liveOn = Object.fromEntries(
+      (mine.body.devices as { id: string; live_sessions: number }[]).map((device) => [
+        device.id,
+        device.live_sessions,
+      ]),
+    );
+    assert.equal(liveOn[absolute.officer_device_id!], 0, 'the absolute lifetime was not counted');
+    assert.equal(liveOn[idle.officer_device_id!], 0);
+
+    const activity = await get(`/government/users/${ids.officer}/activity`, auth('admin'));
+    assert.equal(activity.status, 200, JSON.stringify(activity.body));
+    assert.deepEqual(
+      (activity.body.sessions as { id: string }[]).map((row) => row.id),
+      [current.id],
+      'and the administrator is told the officer is signed in where they cannot be',
+    );
+  });
+
   it('shows an officer their own sessions whatever their role holds', async () => {
     await query(pool, `DELETE FROM role_permissions WHERE role = 'revenue_officer'`);
     const stripped = await loginAs(PHONES.officer);

@@ -23,6 +23,7 @@ import type { PoolClient } from 'pg';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { notFound } from '../lib/errors';
+import { LIVE_SESSION_SQL } from '../lib/live-session';
 import { jobHealth, type JobReport } from './jobs';
 
 export type NotificationKind =
@@ -506,7 +507,7 @@ export async function activityFor(db: Db, userId: string, days = 7) {
               d.label AS device_label
          FROM sessions s
          LEFT JOIN officer_devices d ON d.id = s.officer_device_id
-        WHERE s.user_id = $1 AND s.revoked_at IS NULL AND s.expires_at > now()
+        WHERE s.user_id = $1 AND ${LIVE_SESSION_SQL}
         ORDER BY s.last_used_at DESC NULLS LAST`,
       [userId],
     ),

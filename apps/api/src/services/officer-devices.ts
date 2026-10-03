@@ -32,6 +32,7 @@ import type { PoolClient } from 'pg';
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { conflict, forbidden, notFound } from '../lib/errors';
+import { LIVE_SESSION_SQL } from '../lib/live-session';
 import { recordAudit } from './audit';
 
 export interface Actor {
@@ -253,6 +254,12 @@ export interface SessionRow {
   expires_at: string;
   revoked_at: string | null;
   revoked_reason: string | null;
+  /**
+   * Whether it can still be used. Not the same as "not revoked": a session
+   * that went idle or reached its absolute lifetime is over without anybody
+   * having ended it. See `lib/live-session.ts`.
+   */
+  live: boolean;
   full_name?: string;
 }
 
@@ -262,6 +269,8 @@ export interface SessionRow {
  * Revoked sessions are included and marked rather than filtered out, because
  * "I ended that one on Tuesday" is exactly what somebody checking their own
  * account needs to see, and an administrator investigating needs it more.
+ * So are sessions that lapsed without being ended, marked by `live` — which
+ * the screen used to infer from `revoked_at` alone, and so showed as active.
  */
 export async function sessionsFor(
   db: Db,
@@ -272,11 +281,12 @@ export async function sessionsFor(
     db,
     `SELECT s.id, s.ip_address::text AS ip_address, s.user_agent,
             s.issued_at, s.last_used_at, s.expires_at, s.revoked_at, s.revoked_reason,
+            ${LIVE_SESSION_SQL} AS live,
             d.label AS device_label, d.status AS device_status
        FROM sessions s
        LEFT JOIN officer_devices d ON d.id = s.officer_device_id
       WHERE s.user_id = $1
-      ORDER BY (s.revoked_at IS NULL) DESC, s.last_used_at DESC NULLS LAST, s.issued_at DESC
+      ORDER BY ${LIVE_SESSION_SQL} DESC, s.last_used_at DESC NULLS LAST, s.issued_at DESC
       LIMIT 100`,
     [userId],
   );
@@ -341,8 +351,7 @@ export async function devicesFor(db: Db, userId: string) {
             d.blocked_at, d.block_reason,
             b.full_name AS blocked_by_name,
             (SELECT count(*)::int FROM sessions s
-              WHERE s.officer_device_id = d.id AND s.revoked_at IS NULL
-                AND s.expires_at > now()) AS live_sessions
+              WHERE s.officer_device_id = d.id AND ${LIVE_SESSION_SQL}) AS live_sessions
        FROM officer_devices d
        LEFT JOIN users b ON b.id = d.blocked_by
       WHERE d.user_id = $1

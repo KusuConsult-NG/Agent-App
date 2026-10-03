@@ -65,6 +65,8 @@ interface SessionRow {
   expires_at: string;
   revoked_at: string | null;
   revoked_reason: string | null;
+  /** Whether it can still be used: not revoked, and not lapsed either. */
+  live: boolean;
   is_current: boolean;
 }
 
@@ -258,15 +260,22 @@ export function MyAccessScreen({
                     <span className="muted">
                       {t.ofcAcEnded} · {row.revoked_reason ?? ''}
                     </span>
-                  ) : (
+                  ) : row.live ? (
                     <Badge status="ACTIVE" />
+                  ) : (
+                    /*
+                     * Lapsed without anybody ending it: idle past its expiry,
+                     * or past its absolute lifetime. This read ACTIVE, on the
+                     * screen an officer opens to check who is in their account.
+                     */
+                    <Badge status="EXPIRED" />
                   ),
               },
               {
                 key: 'actions',
                 label: 'ofcWbActions',
                 render: (row: SessionRow) =>
-                  row.revoked_at ? null : (
+                  !row.live ? null : (
                     <button
                       type="button"
                       className="small secondary"
