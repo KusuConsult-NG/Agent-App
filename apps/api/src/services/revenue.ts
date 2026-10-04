@@ -19,7 +19,7 @@ import { UNDER_OPEN_OBJECTION_SQL } from '../lib/enforcement-suspended';
 import { conflict, forbidden, notFound, refused } from '../lib/errors';
 import { generateVerificationCode } from '../lib/crypto';
 import { escapeLike } from '../lib/like';
-import { OWED_INVOICE_SQL, PAYABLE_INVOICE_SQL } from '../lib/payable-invoice';
+import { CHARGE_PERIOD_SHUT_SQL, OWED_INVOICE_SQL, PAYABLE_INVOICE_SQL } from '../lib/payable-invoice';
 import {
   nextAssessmentNumber,
   nextInvoiceNumber,
@@ -566,6 +566,8 @@ interface RaiseInvoiceParams {
   serviceChargeKobo: Kobo;
   totalKobo: Kobo;
   validityDays: number;
+  /** A deadline to keep rather than one `validityDays` from now. */
+  expiresAt?: Date;
   actorId: string;
   agentId: string | null;
   territoryId: string | null;
@@ -596,7 +598,7 @@ interface RaisedInvoice {
  * a first one except by the link the reissue records.
  */
 async function raiseInvoiceIn(client: PoolClient, params: RaiseInvoiceParams): Promise<RaisedInvoice> {
-  const expiresAt = new Date(Date.now() + params.validityDays * 86_400_000);
+  const expiresAt = params.expiresAt ?? new Date(Date.now() + params.validityDays * 86_400_000);
   const invoiceNumber = await nextInvoiceNumber(client);
   const verificationCode = generateVerificationCode();
 
@@ -1064,7 +1066,29 @@ export async function reissueInvoice(params: ReissueParams): Promise<ReissueResu
     const payable = transactions.some((t) =>
       (PAYABLE_TRANSACTION_STATES as readonly string[]).includes(t.status),
     );
-    if (!lapsed && payable) {
+    /*
+     * Or raised in a month that has since been closed.
+     *
+     * Still in date, and still not payable as it stands: paying it would add
+     * to the revenue the close froze for that month, so the payment path
+     * refuses it with INVOICE_PERIOD_CLOSED. Issuing it again raises it in an
+     * open month — for the same amount and, unlike a lapsed bill, the same
+     * deadline, because nothing about what the taxpayer owes or when has
+     * changed; only which month's books it will be counted in.
+     */
+    const monthClosed =
+      !lapsed && payable
+        ? ((
+            await queryOne<{ shut: string | null }>(
+              client,
+              `SELECT ${CHARGE_PERIOD_SHUT_SQL} AS shut FROM transactions t
+                WHERE t.invoice_id = $1 AND t.status = ANY($2::text[])
+                ORDER BY t.created_at DESC LIMIT 1`,
+              [old.id, PAYABLE_TRANSACTION_STATES],
+            )
+          )?.shut ?? null)
+        : null;
+    if (!lapsed && payable && !monthClosed) {
       throw conflict(
         'INVOICE_STILL_PAYABLE',
         `Invoice ${old.invoice_number} can still be paid` +
@@ -1113,6 +1137,7 @@ export async function reissueInvoice(params: ReissueParams): Promise<ReissueResu
       serviceChargeKobo: parseKobo(old.service_charge_kobo),
       totalKobo: parseKobo(old.total_amount_kobo),
       validityDays: 30,
+      expiresAt: monthClosed && old.expires_at ? old.expires_at : undefined,
       actorId: params.actorId,
       agentId: params.agentId ?? null,
       territoryId: params.territoryId ?? null,
@@ -1125,7 +1150,9 @@ export async function reissueInvoice(params: ReissueParams): Promise<ReissueResu
 
     const why = lapsed
       ? `Invoice ${old.invoice_number} passed its payment deadline unpaid`
-      : `The payment against invoice ${old.invoice_number} was reversed`;
+      : monthClosed
+        ? `Invoice ${old.invoice_number} was raised in ${monthClosed}, which has been closed`
+        : `The payment against invoice ${old.invoice_number} was reversed`;
 
     await client.query(`UPDATE invoices SET status = 'CANCELLED', reissued_as = $2 WHERE id = $1`, [
       old.id,
@@ -1134,9 +1161,12 @@ export async function reissueInvoice(params: ReissueParams): Promise<ReissueResu
 
     // The old transactions are closed, so nothing can be collected on them.
     for (const transaction of transactions) {
+      // A charge moved out of a closed month did not lapse; it is cancelled.
       const to =
         transaction.status === 'INVOICE_GENERATED' || transaction.status === 'ASSESSMENT_CREATED'
-          ? 'EXPIRED'
+          ? monthClosed
+            ? 'CANCELLED'
+            : 'EXPIRED'
           : transaction.status === 'FAILED'
             ? 'CANCELLED'
             : null;
@@ -1469,11 +1499,19 @@ export async function getObligations(db: Db, taxpayerId: string) {
             rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
             t.id AS transaction_id, t.transaction_reference, t.status AS transaction_status,
             /*
-             * Owed but not collectable as it stands: past its deadline, or its
-             * charge has ended (a reversal, an expiry). Issued again, it is.
+             * In date, but raised in a month since closed: issued again into an
+             * open month before it is paid. See INVOICE_PERIOD_CLOSED.
              */
-            NOT (${PAYABLE_INVOICE_SQL}
-                 AND COALESCE(t.status, '') NOT IN ('REVERSED', 'REFUNDED', 'EXPIRED', 'CANCELLED'))
+            CASE WHEN t.status IN ('INVOICE_GENERATED', 'FAILED') THEN ${CHARGE_PERIOD_SHUT_SQL} END
+              AS period_closed,
+            /*
+             * Owed but not collectable as it stands: past its deadline, or its
+             * charge has ended (a reversal, an expiry), or its month has been
+             * closed. Issued again, it is.
+             */
+            (NOT (${PAYABLE_INVOICE_SQL}
+                  AND COALESCE(t.status, '') NOT IN ('REVERSED', 'REFUNDED', 'EXPIRED', 'CANCELLED'))
+             OR (t.status IN ('INVOICE_GENERATED', 'FAILED') AND ${CHARGE_PERIOD_SHUT_SQL} IS NOT NULL))
               AS needs_reissue
        FROM invoices i
        JOIN assessments a ON a.id = i.assessment_id

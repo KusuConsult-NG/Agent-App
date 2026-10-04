@@ -165,6 +165,7 @@ export interface TranslationDictionary {
   errNoTaxPayable: string;
   errAssessmentAmountZero: string;
   errTransactionNotPayable: string;
+  errInvoicePeriodClosed: string;
   errPaymentAlreadyVerified: string;
   errNoEffectiveRate: string;
   errInvoiceNotPayable: string;
@@ -2792,6 +2793,9 @@ export interface TranslationDictionary {
   colOwesUnknownBody: string;
   colTakeThisPayment: string;
   colNeedsReissue: string;
+  colPeriodClosedReissue: string;
+  colPeriodClosedTitle: string;
+  colPeriodClosedBody: string;
   colIssueAgain: string;
   colIssuingAgain: string;
   colLapsedTitle: string;
@@ -4212,6 +4216,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     errTinNotFound: 'TIN {{tin}} could not be found in the PSIRS TIN service.',
     errInvoiceExpired:
       "This bill has expired. Issue it again from the taxpayer's list of bills.",
+    errInvoicePeriodClosed:
+      "This bill was raised in a month that has been closed. No money has been taken. Issue it again from the taxpayer's list of bills, then take the payment.",
     errInvoiceStillPayable: 'This bill can still be paid. Take the payment against it.',
     errInvoiceUnderObjection:
       'This bill is under objection, and collection is suspended until the objection is decided.',
@@ -6613,6 +6619,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     colOwesUnknownBody: "Nothing here says they owe nothing; it says the platform could not tell you. Raising a charge now risks charging twice for the same levy.",
     colTakeThisPayment: "Take this payment",
     colNeedsReissue: "Lapsed — it has to be issued again before it can be paid.",
+    colPeriodClosedReissue: "Raised in a month that has been closed — it has to be issued again before it can be paid.",
+    colPeriodClosedTitle: "This bill’s month has been closed",
+    colPeriodClosedBody: "No money has been taken. The month it was raised in has been closed, so it cannot be paid as it stands — issue it again, for the same amount and the same deadline, to take the payment.",
     colIssueAgain: "Issue this bill again",
     colIssuingAgain: "Issuing…",
     colLapsedTitle: "This bill has lapsed",
@@ -7836,6 +7845,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     errTinNotFound: 'Ba a sami TIN {{tin}} a sabis din TIN na PSIRS ba.',
     errInvoiceExpired:
       'Wannan takardar biya ta kare. A sake fitar da ita daga jerin takardun biyan mai biyan haraji.',
+    errInvoicePeriodClosed:
+      'An fitar da wannan takardar biya a watan da aka rufe. Ba a karbi kudi ba. A sake fitar da ita daga jerin takardun biyan mai biyan haraji, sannan a karbi biyan.',
     errInvoiceStillPayable: 'Har yanzu ana iya biyan wannan takardar biya. A karbi biya a kanta.',
     errInvoiceUnderObjection:
       'Ana kalubalantar wannan takardar biya, kuma an dakatar da karba har sai an yanke hukunci kan kalubalen.',
@@ -10237,6 +10248,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     colOwesUnknownBody: "Wannan ba ya nufin ba su da bashi; yana nufin dandalin bai iya gaya maka ba. Yin sabon caji yanzu na iya haifar da cajin abu daya sau biyu.",
     colTakeThisPayment: "Karbi wannan biyan",
     colNeedsReissue: "Ta kare — sai an sake fitar da ita kafin a iya biyanta.",
+    colPeriodClosedReissue: "An fitar da ita a watan da aka rufe — sai an sake fitar da ita kafin a iya biyanta.",
+    colPeriodClosedTitle: "An rufe watan wannan takardar biya",
+    colPeriodClosedBody: "Ba a karbi kudi ba. An rufe watan da aka fitar da ita, don haka ba za a iya biyanta yadda take ba — a sake fitar da ita, a kan adadin kudi daya da wa’adi daya, don a karbi biyan.",
     colIssueAgain: "Sake fitar da wannan takardar biya",
     colIssuingAgain: "Ana fitarwa…",
     colLapsedTitle: "Wannan takardar biya ta kare",

@@ -69,3 +69,13 @@ export const PAYABLE_INVOICE_SQL = `(i.status IN ('UNPAID', 'PARTIALLY_PAID')
  * which question each fragment answers. Same alias, same reason.
  */
 export const OWED_INVOICE_SQL = `(i.status IN ('UNPAID', 'PARTIALLY_PAID', 'EXPIRED'))`;
+
+/**
+ * The closed period a charge was raised in, or NULL while its month is open.
+ *
+ * Read on Plateau's calendar, as the close and its lock read it (migration
+ * 093). A bill raised in a month since closed cannot be paid as it stands:
+ * paying it would add to the figure the close froze. It is issued again into
+ * an open month first. Written against the alias `t` for `transactions`.
+ */
+export const CHARGE_PERIOD_SHUT_SQL = `period_is_shut((t.created_at AT TIME ZONE 'Africa/Lagos')::date)`;

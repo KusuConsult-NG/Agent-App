@@ -21,6 +21,7 @@
  *     apart from the money.
  */
 
+import { CHARGE_PERIOD_SHUT_SQL } from '../lib/payable-invoice';
 import type { PoolClient } from 'pg';
 import {
   assertPaymentTransition,
@@ -87,11 +88,12 @@ export async function initiatePayment(
       email: string | null;
       invoice_status: string;
       invoice_expires_at: Date | null;
+      period_shut: string | null;
     }>(
       client,
       `SELECT t.id, t.transaction_reference, t.status, t.total_amount_kobo, t.taxpayer_id,
               t.invoice_id, tp.phone, tp.email, i.status AS invoice_status,
-              i.expires_at AS invoice_expires_at
+              i.expires_at AS invoice_expires_at, ${CHARGE_PERIOD_SHUT_SQL} AS period_shut
          FROM transactions t
          JOIN taxpayers tp ON tp.id = t.taxpayer_id
          JOIN invoices i ON i.id = t.invoice_id
@@ -201,6 +203,31 @@ export async function initiatePayment(
      * single declined card made the bill unpayable. See FAILED in
      * `TRANSACTION_TRANSITIONS`.
      */
+    /*
+     * A bill raised in a month since closed is issued again before it is paid.
+     *
+     * The close froze the month's revenue, counted by the month a bill was
+     * raised in, so this payment would add to a figure an officer has signed
+     * off; the database refuses the move into revenue (migration 093). It used
+     * to refuse at this transaction's first transition, which at least came
+     * before any money moved. Now that the lock lets an attempt start, the
+     * refusal has to be made here instead — before the gateway is asked for
+     * anything — or the money would be taken and then could not be recorded.
+     * Issuing the bill again raises it in an open month, for the same amount
+     * and the same deadline.
+     */
+    if (transaction.period_shut) {
+      throw paymentRefused({
+        code: 'INVOICE_PERIOD_CLOSED',
+        message:
+          `This bill was raised in ${transaction.period_shut}, which has been closed, so it cannot be paid ` +
+          "as it stands. Issue it again from the taxpayer's list of bills, then take the payment against " +
+          'the new invoice.',
+        moneyStatus: 'NOT_DEBITED',
+        details: [{ field: 'period', issue: transaction.period_shut, code: 'STATE' }],
+      });
+    }
+
     if (!['INVOICE_GENERATED', 'PAYMENT_INITIATED', 'FAILED'].includes(transaction.status)) {
       throw paymentRefused({
         code: 'TRANSACTION_NOT_PAYABLE',
@@ -1208,6 +1235,14 @@ export async function getTransactionStatus(db: Db, transactionReference: string)
             t.total_amount_kobo, t.created_at, t.verified_at, t.settled_at, t.agent_id,
             i.id AS invoice_id, i.invoice_number, i.status AS invoice_status, i.expires_at,
             i.reissued_as AS invoice_reissued_as,
+            /*
+             * The closed month this charge was raised in, if it is closed and
+             * the charge is still waiting for a payment. The agent's screen
+             * offers to issue the bill again rather than a start button the
+             * payment path refuses with INVOICE_PERIOD_CLOSED.
+             */
+            CASE WHEN t.status IN ('INVOICE_GENERATED', 'FAILED') THEN ${CHARGE_PERIOD_SHUT_SQL} END
+              AS period_closed,
             ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
             rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
             tp.first_name, tp.last_name, tp.business_name, tp.tin,

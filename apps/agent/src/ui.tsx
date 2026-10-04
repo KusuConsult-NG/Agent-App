@@ -148,6 +148,8 @@ export const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   INVOICE_NOT_PAYABLE: 'errInvoiceNotPayable',
   INVOICE_EXPIRED: 'errInvoiceExpired',
   TRANSACTION_NOT_PAYABLE: 'errTransactionNotPayable',
+  // A bill from a month whose figures have been signed off is issued again first.
+  INVOICE_PERIOD_CLOSED: 'errInvoicePeriodClosed',
   /*
    * Issuing a lapsed bill again (`POST /revenue/invoices/:id/reissue`), from
    * the trader's list of bills and the transaction screen. Each refusal names

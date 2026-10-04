@@ -118,6 +118,27 @@ describe("the trader's list of bills", () => {
     expect(screen.queryByRole('button', { name: /Issue this bill again/i })).toBeNull();
   });
 
+  it('says a bill from a closed month has to be issued again, without calling it lapsed', async () => {
+    // In date, but its month's figures have been signed off: the payment path
+    // refuses it with INVOICE_PERIOD_CLOSED, and "Lapsed" would be untrue.
+    owes = [
+      {
+        ...LAPSED,
+        status: 'UNPAID',
+        transaction_status: 'INVOICE_GENERATED',
+        expires_at: new Date(Date.now() + 5 * 86_400_000).toISOString(),
+        needs_reissue: true,
+        period_closed: 'August 2026',
+      },
+    ];
+    await chooseTheTrader();
+    expect(screen.getByText(/Raised in a month that has been closed/i)).toBeTruthy();
+    expect(screen.queryByText(/^Lapsed/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Take this payment/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Issue this bill again/i }));
+    await waitFor(() => expect(posted).toEqual(['/revenue/invoices/inv-1/reissue']));
+  });
+
   it('offers neither on a bill under objection', async () => {
     owes = [{ ...LAPSED, under_objection: true }];
     await chooseTheTrader();
@@ -138,6 +159,7 @@ describe('the transaction screen behind an old bill', () => {
     invoice_number: 'INV-2026-000412',
     invoice_status: 'EXPIRED',
     invoice_reissued_as: null as string | null,
+    period_closed: null as string | null,
     expires_at: '2026-09-01T09:00:00.000Z' as string | null,
     revenue_item: 'Market stall levy',
     revenue_item_ha: null,
@@ -193,6 +215,20 @@ describe('the transaction screen behind an old bill', () => {
     await screen.findByText(/This bill was issued again/i);
     expect(screen.queryByRole('button', { name: /Issue this bill again/i })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Open the new bill/i }));
+    await waitFor(() => expect(navigated).toEqual(['/transactions/TXN-2026-000999']));
+  });
+
+  it('says the month a bill was raised in has been closed, and issues it again', async () => {
+    show({
+      status: 'INVOICE_GENERATED',
+      invoice_status: 'UNPAID',
+      expires_at: new Date(Date.now() + 5 * 86_400_000).toISOString(),
+      period_closed: 'August 2026',
+    });
+    await screen.findByText(/This bill’s month has been closed/i);
+    expect(screen.queryByText(/This bill has lapsed/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Start the payment/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Issue this bill again/i }));
     await waitFor(() => expect(navigated).toEqual(['/transactions/TXN-2026-000999']));
   });
 

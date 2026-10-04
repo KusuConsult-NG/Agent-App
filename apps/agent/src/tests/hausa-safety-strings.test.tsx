@@ -43,6 +43,7 @@ const SAFETY_KEYS: (keyof TranslationDictionary)[] = [
   'paymentFailedBody',
   'paymentEndedBody',
   'colLapsedBody',
+  'colPeriodClosedBody',
   'colReplacedBody',
   'errInvoicePaymentInProgress',
   'colReversedOwedBody',

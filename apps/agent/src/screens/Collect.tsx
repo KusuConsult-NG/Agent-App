@@ -98,6 +98,12 @@ interface Obligation {
    * so an older API, which left such bills off the list, degrades to that.
    */
   needs_reissue?: boolean;
+  /**
+   * The closed month this bill was raised in, when that is why it has to be
+   * issued again: still in date, but paying it would add to a month whose
+   * figures have been signed off.
+   */
+  period_closed?: string | null;
 }
 
 interface TaxpayerSummary {
@@ -551,7 +557,9 @@ export function CollectScreen({
                        * the new charge to collect on it.
                        */
                       <div>
-                        <p className="list__meta" style={{ margin: '4px 0' }}>{t.colNeedsReissue}</p>
+                        <p className="list__meta" style={{ margin: '4px 0' }}>
+                          {row.period_closed ? t.colPeriodClosedReissue : t.colNeedsReissue}
+                        </p>
                         <button
                           type="button"
                           className="small secondary"
@@ -770,6 +778,8 @@ interface TransactionStatus {
     invoice_status: string;
     /** The invoice issued in this one's place, when it has been issued again. */
     invoice_reissued_as?: string | null;
+    /** The closed month this charge was raised in, while it waits for a payment. */
+    period_closed?: string | null;
     expires_at: string | null;
     revenue_item: string;
     revenue_item_ha: string | null;
@@ -1065,6 +1075,13 @@ export function TransactionScreen({
       (transaction.invoice_status === 'UNPAID' &&
         transaction.expires_at !== null &&
         new Date(transaction.expires_at).getTime() <= Date.now()));
+  /*
+   * In date, but raised in a month whose figures have since been signed off.
+   * Paying it would add to that month, so the server refuses the start button
+   * this screen would otherwise draw (INVOICE_PERIOD_CLOSED). Issued again it
+   * is raised in an open month, for the same amount and the same deadline.
+   */
+  const monthClosed = Boolean(transaction.period_closed) && !replaced && !lapsedBill;
   const name =
     transaction.business_name ??
     `${transaction.first_name ?? ''} ${transaction.last_name ?? ''}`.trim();
@@ -1140,6 +1157,14 @@ export function TransactionScreen({
           <button type="button" className="secondary" disabled={issuing} onClick={issueAgain}>
             {issuing ? <Spinner /> : null}
             {t.colOpenReplacement}
+          </button>
+        </Alert>
+      ) : monthClosed ? (
+        <Alert kind="warning" title={t.colPeriodClosedTitle}>
+          <p style={{ margin: '0 0 0.5rem' }}>{t.colPeriodClosedBody}</p>
+          <button type="button" disabled={issuing} onClick={issueAgain}>
+            {issuing ? <Spinner /> : null}
+            {issuing ? t.colIssuingAgain : t.colIssueAgain}
           </button>
         </Alert>
       ) : lapsedBill ? (
@@ -1322,7 +1347,7 @@ export function TransactionScreen({
         </div>
       )}
 
-      {!paid && !reversed && !replaced && !lapsedBill && (!failed || canTryAgain) && (
+      {!paid && !reversed && !replaced && !lapsedBill && !monthClosed && (!failed || canTryAgain) && (
         <>
           {/*
             The artefact a taxpayer pays against later.
