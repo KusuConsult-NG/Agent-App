@@ -1511,6 +1511,142 @@ describe('objecting to it', () => {
     assert.deepEqual(decided, { refundsRequested: [] });
   });
 
+  /** What the trader was sent about an objection, oldest first. */
+  const toldAbout = (objectionId: string) =>
+    query<{ event: string; message: string; language: string; channel: string }>(
+      pool,
+      `SELECT event, message, language, channel FROM notifications
+        WHERE entity_type = 'assessment_objection' AND entity_id = $1
+        ORDER BY created_at`,
+      [objectionId],
+    );
+  const numberOf = async (assessmentId: string) =>
+    (await queryOne<{ assessment_number: string }>(
+      pool,
+      `SELECT a.assessment_number FROM presumptive_assessments pa
+         JOIN assessments a ON a.id = pa.assessment_id WHERE pa.id = $1`,
+      [assessmentId],
+    ))!.assessment_number;
+
+  describe('and the trader is told what became of it', () => {
+    /*
+     * Nobody was. The decision carries a reason "the taxpayer can read" —
+     * required by the service and the database — and nothing sent it to
+     * them: upheld, they went on believing they owed the money; rejected,
+     * that collection was still suspended.
+     */
+    it('that it was upheld, and nothing is owed', async () => {
+      const { assessment } = await assessed('Told Upheld');
+      const objection = await raiseObjection(pool, {
+        presumptiveAssessmentId: assessment.id,
+        ground: 'FACTS_WRONG',
+        statement: 'There is no apprentice.',
+        actorId: officerId,
+        actorRole: 'admin',
+      });
+      await decideObjection(pool, {
+        objectionId: objection.id,
+        uphold: true,
+        reason: 'Confirmed on site: the trader works alone.',
+        actorId: secondOfficerId,
+        actorRole: 'admin',
+      });
+      const told = await toldAbout(objection.id);
+      assert.deepEqual(told.map((row) => [row.event, row.channel]), [['OBJECTION_UPHELD', 'SMS']]);
+      assert.match(told[0]!.message, new RegExp(await numberOf(assessment.id)));
+      assert.match(told[0]!.message, /Confirmed on site: the trader works alone\./);
+      assert.match(told[0]!.message, /nothing is owed/);
+    });
+
+    it('that it was upheld on a bill already paid, and a refund has been asked for', async () => {
+      const { objection } = await paidThenObjected('Told Refund');
+      await decideObjection(pool, {
+        objectionId: objection.id,
+        uphold: true,
+        reason: 'Confirmed on site: the trader works alone.',
+        actorId: secondOfficerId,
+        actorRole: 'admin',
+      });
+      const told = await toldAbout(objection.id);
+      assert.deepEqual(told.map((row) => row.event), ['OBJECTION_UPHELD_REFUND_REQUESTED']);
+      assert.match(told[0]!.message, /refund of the ₦48,000\.00 you paid/);
+    });
+
+    it('that it was rejected, and the assessment stands', async () => {
+      const { assessment } = await assessed('Told Rejected');
+      const objection = await raiseObjection(pool, {
+        presumptiveAssessmentId: assessment.id,
+        ground: 'FACTS_WRONG',
+        statement: 'The machines are borrowed.',
+        actorId: officerId,
+        actorRole: 'admin',
+      });
+      await decideObjection(pool, {
+        objectionId: objection.id,
+        uphold: false,
+        reason: 'Re-checked on site; the machines are the trader’s own.',
+        actorId: secondOfficerId,
+        actorRole: 'admin',
+      });
+      const told = await toldAbout(objection.id);
+      assert.deepEqual(told.map((row) => row.event), ['OBJECTION_REJECTED']);
+      assert.match(told[0]!.message, /was not upheld: Re-checked on site/);
+      assert.match(told[0]!.message, /assessment of ₦48,000\.00 stands/);
+    });
+
+    it('in Hausa, to a trader who reads Hausa', async () => {
+      const { taxpayer, assessment } = await assessed('Told Hausa');
+      await pool.query(`UPDATE taxpayers SET preferred_language = 'ha' WHERE id = $1`, [taxpayer]);
+      const objection = await raiseObjection(pool, {
+        presumptiveAssessmentId: assessment.id,
+        ground: 'FACTS_WRONG',
+        statement: 'There is no apprentice.',
+        actorId: officerId,
+        actorRole: 'admin',
+      });
+      await decideObjection(pool, {
+        objectionId: objection.id,
+        uphold: true,
+        reason: 'An tabbatar a wurin: shi kadai yake aiki.',
+        actorId: secondOfficerId,
+        actorRole: 'admin',
+      });
+      const told = await toldAbout(objection.id);
+      assert.deepEqual(told.map((row) => row.language), ['ha']);
+      assert.match(told[0]!.message, /An amince da kalubalen/);
+      assert.match(told[0]!.message, new RegExp(await numberOf(assessment.id)));
+    });
+
+    it('about nothing, when the decision was refused', async () => {
+      // A payment moving refuses the decision (`withdrawUnpaidBill`); a message
+      // saying it was upheld would be the decision happening after all.
+      const { assessment } = await assessed('Told Nothing');
+      const objection = await raiseObjection(pool, {
+        presumptiveAssessmentId: assessment.id,
+        ground: 'FACTS_WRONG',
+        statement: 'There is no apprentice.',
+        actorId: officerId,
+        actorRole: 'admin',
+      });
+      const started = await post(
+        '/payments/initiate',
+        { transactionId: (await chargeOf(assessment.id)).id },
+        { ...auth, idempotencyKey: 'told-nothing-pays' },
+      );
+      assert.equal(started.status, 201, JSON.stringify(started.body));
+      await assert.rejects(
+        decideObjection(pool, {
+          objectionId: objection.id,
+          uphold: true,
+          reason: 'Confirmed on site: the trader works alone.',
+          actorId: secondOfficerId,
+          actorRole: 'admin',
+        }),
+      );
+      assert.deepEqual(await toldAbout(objection.id), []);
+    });
+  });
+
   it('costs the trader nothing on the compliance score once upheld', async () => {
     /*
      * The score counted every transaction, whatever had become of its bill.

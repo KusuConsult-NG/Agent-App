@@ -69,7 +69,21 @@ export type NotificationEvent =
   | 'TAX_REMINDER_6W'
   | 'TAX_REMINDER_4W'
   | 'TAX_REMINDER_2W'
-  | 'TAX_OBLIGATION_ASSIGNED';
+  | 'TAX_OBLIGATION_ASSIGNED'
+  /*
+   * What became of an objection.
+   *
+   * A trader who formally disputed an estimate was told nothing when it was
+   * decided, either way: the decision has a reason "the taxpayer can read",
+   * required by the service and by the database, and nothing ever sent it to
+   * them. Upheld, they went on believing they owed the money; rejected, they
+   * went on believing collection was suspended. Upheld on a bill they had
+   * already paid is its own message, because what they need to know is that
+   * a refund has been asked for.
+   */
+  | 'OBJECTION_UPHELD'
+  | 'OBJECTION_UPHELD_REFUND_REQUESTED'
+  | 'OBJECTION_REJECTED';
 
 /**
  * Render `{{placeholders}}` from a template.

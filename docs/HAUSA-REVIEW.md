@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,533 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,533 dictionary strings and 33 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -47,7 +47,7 @@ language the recipient reads rather than always in English.
 Two things follow, and both matter to how you spend your time.
 
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
-them from `packages/shared/src/i18n.ts` and from the migration that inserts the
+them from `packages/shared/src/i18n.ts` and from the migrations that insert the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
 3,533 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
@@ -59,7 +59,7 @@ and if your time runs out it is the right place for it to run out. The agent
 groups come first in the table for that reason.
 
 **Table C is new, and it is the one to read if you read nothing else.** Those
-thirty messages reach a citizen who holds no account, has no app, and has
+thirty-three messages reach a citizen who holds no account, has no app, and has
 nobody standing beside them to explain what arrived. The acknowledgement
 wording is the sharpest case: it has to be unmistakably **not** a receipt,
 because the money has not reached government yet, and a citizen who reads it
@@ -4186,7 +4186,7 @@ instructions — but they are what an agent reads all day.
 
 ### C · The messages PSIRS sends
 
-30 templates, and the highest-stakes strings in the project. A
+33 templates, and the highest-stakes strings in the project. A
 citizen holds no account here: the SMS is the entire record of the
 transaction as far as they are concerned, and nobody is standing beside
 them to explain it. Read the acknowledgement wording especially closely —
@@ -4224,6 +4224,9 @@ it has to be unmistakably **not** a receipt.
 | `AGENT_BANK_CHANGE_REFUSED_SMS_HA` | SMS | — | PSIRS: Ba a amince da bukatar canza asusun kwamishan dinka ba. Dalili: {{reason}}. Asusun ka na yanzu bai canza ba. | ☐ | |
 | `TAXPAYER_RECORD_CORRECTED_SMS_HA` | SMS | — | PSIRS: An gyara {{fields}} a kan bayananka na mai biyan haraji ta hannun jami’in haraji. Idan ba kai ka nema ba, ka je kowane ofishin PSIRS. | ☐ | |
 | `USER_ROLE_CHANGED_SMS_HA` | SMS | — | PSIRS: An canza matsayinka daga {{previousRole}} zuwa {{newRole}}. An fitar da kai, dole ka sake shiga. Idan ba a sa ran haka ba, ka tuntubi mai gudanarwarka yanzu. | ☐ | |
+| `OBJECTION_UPHELD_SMS_HA` | SMS | — | PSIRS: An amince da kalubalen da aka yi kan kimantawa {{reference}}: {{reason}}. An janye kiyasin, kuma babu bashin komai a kansa. | ☐ | |
+| `OBJECTION_UPHELD_REFUND_REQUESTED_SMS_HA` | SMS | — | PSIRS: An amince da kalubalen da aka yi kan kimantawa {{reference}}: {{reason}}. An janye kiyasin, kuma an nemi a mayar da {{amount}} da aka biya. | ☐ | |
+| `OBJECTION_REJECTED_SMS_HA` | SMS | — | PSIRS: Ba a amince da kalubalen da aka yi kan kimantawa {{reference}} ba: {{reason}}. Kimantawar {{amount}} tana nan. Idan ba a biya ba tukuna, a biya ta hannun wakilin karbar haraji ko ofishin PSIRS. | ☐ | |
 
 <!-- END:GENERATED -->
 

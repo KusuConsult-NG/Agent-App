@@ -48,6 +48,7 @@ import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { createAssessmentIn, withdrawUnpaidBill } from './revenue';
 import { recordAudit } from './audit';
+import { queueNotification } from './notifications';
 import { askForRefundsOfWithdrawnBill, type RefundRequested } from './approval-requests';
 import { scopeParams, type ReportScope } from './report-scope';
 import {
@@ -855,6 +856,43 @@ export async function decideObjection(
       oldValue: { status: 'OPEN' },
       newValue: { status: params.uphold ? 'UPHELD' : 'REJECTED' },
       reason: params.reason.trim(),
+    });
+
+    /*
+     * And the trader is told, in the same transaction as the decision.
+     *
+     * The reason is required to be one "the taxpayer can read", and nothing
+     * sent it to them: upheld, they went on believing they owed the money;
+     * rejected, that collection was still suspended. Queued here rather than
+     * after, so a decision and the message about it cannot come apart.
+     */
+    const subject = await queryOne<{
+      taxpayer_id: string;
+      assessment_number: string | null;
+      annual_tax_kobo: string;
+    }>(
+      client,
+      `SELECT pa.taxpayer_id, a.assessment_number, pa.annual_tax_kobo::text AS annual_tax_kobo
+         FROM presumptive_assessments pa
+         LEFT JOIN assessments a ON a.id = pa.assessment_id
+        WHERE pa.id = $1`,
+      [objection.presumptive_assessment_id],
+    );
+    const refunded = refundsRequested.reduce((total, refund) => total + BigInt(refund.amountKobo), 0n);
+    await queueNotification(client, {
+      event: !params.uphold
+        ? 'OBJECTION_REJECTED'
+        : refundsRequested.length > 0
+          ? 'OBJECTION_UPHELD_REFUND_REQUESTED'
+          : 'OBJECTION_UPHELD',
+      taxpayerId: subject!.taxpayer_id,
+      entityType: 'assessment_objection',
+      entityId: params.objectionId,
+      variables: {
+        reference: subject!.assessment_number ?? '',
+        reason: params.reason.trim(),
+        amount: (refundsRequested.length > 0 ? refunded : BigInt(subject!.annual_tax_kobo)).toString(),
+      },
     });
 
     return { refundsRequested };

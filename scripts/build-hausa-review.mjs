@@ -166,12 +166,22 @@ function translatedServerCodes(app, codes) {
     .filter((code) => codes.has(code));
 }
 
-/** The Hausa notification templates, read out of the migration that inserts them. */
+/**
+ * The Hausa notification templates, read out of every migration that inserts
+ * them.
+ *
+ * This read migration 048 alone, which held all thirty when it was written. A
+ * message added since in a migration of its own would have gone to citizens
+ * in Hausa without ever reaching this sheet — the one place a native speaker
+ * reads them — so every migration is read, in order.
+ */
 function templates() {
-  const source = readFileSync(
-    join(ROOT, 'apps', 'api', 'src', 'db', 'migrations', '048_the_thirty_messages_in_hausa.sql'),
-    'utf8',
-  );
+  const dir = join(ROOT, 'apps', 'api', 'src', 'db', 'migrations');
+  const source = readdirSync(dir)
+    .filter((name) => name.endsWith('.sql'))
+    .sort()
+    .map((name) => readFileSync(join(dir, name), 'utf8'))
+    .join('\n');
   const rows = [];
   // The `E'…'` form appears on the two multi-paragraph email bodies, which
   // carry `\n`. Missing it silently dropped exactly those two from the sheet —

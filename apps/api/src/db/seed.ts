@@ -762,6 +762,10 @@ export const NOTIFICATION_TEMPLATES = [
   // asked for is noticed by the person it was made to.
   { code: 'TAXPAYER_RECORD_CORRECTED_SMS', event: 'TAXPAYER_RECORD_CORRECTED', channel: 'SMS', body: 'PSIRS: {{fields}} on your taxpayer record has been corrected by a revenue officer. If you did not ask for this, visit any PSIRS office.' },
   { code: 'USER_ROLE_CHANGED_SMS', event: 'USER_ROLE_CHANGED', channel: 'SMS', body: 'PSIRS: Your access has been changed from {{previousRole}} to {{newRole}}. You have been signed out and must sign in again. If this was not expected, contact your administrator now.' },
+  // What became of an objection, told to the trader who raised it (migration 096).
+  { code: 'OBJECTION_UPHELD_SMS', event: 'OBJECTION_UPHELD', channel: 'SMS', body: "PSIRS: Your objection to assessment {{reference}} has been upheld: {{reason}}. The estimate has been withdrawn and nothing is owed on it." },
+  { code: 'OBJECTION_UPHELD_REFUND_REQUESTED_SMS', event: 'OBJECTION_UPHELD_REFUND_REQUESTED', channel: 'SMS', body: "PSIRS: Your objection to assessment {{reference}} has been upheld: {{reason}}. The estimate has been withdrawn, and a refund of the {{amount}} you paid has been requested." },
+  { code: 'OBJECTION_REJECTED_SMS', event: 'OBJECTION_REJECTED', channel: 'SMS', body: "PSIRS: Your objection to assessment {{reference}} was not upheld: {{reason}}. The assessment of {{amount}} stands. If it is not yet paid, pay it through a PSIRS revenue agent or office." },
 
   // ---------------------------------------------------------------------
   // The same thirty, in Hausa.
@@ -806,7 +810,9 @@ export const NOTIFICATION_TEMPLATES = [
   { code: 'AGENT_BANK_CHANGE_APPLIED_SMS_HA', event: 'AGENT_BANK_CHANGE_APPLIED', channel: 'SMS', language: 'ha', body: "PSIRS: Yanzu za a rika biyan kwamishan dinka a {{bank}} {{account}}. Idan ba kai ba ne, ka tuntubi shugabanka yanzu." },
   { code: 'AGENT_BANK_CHANGE_REFUSED_SMS_HA', event: 'AGENT_BANK_CHANGE_REFUSED', channel: 'SMS', language: 'ha', body: "PSIRS: Ba a amince da bukatar canza asusun kwamishan dinka ba. Dalili: {{reason}}. Asusun ka na yanzu bai canza ba." },
   { code: 'TAXPAYER_RECORD_CORRECTED_SMS_HA', event: 'TAXPAYER_RECORD_CORRECTED', channel: 'SMS', language: 'ha', body: "PSIRS: An gyara {{fields}} a kan bayananka na mai biyan haraji ta hannun jami’in haraji. Idan ba kai ka nema ba, ka je kowane ofishin PSIRS." },
-  { code: 'USER_ROLE_CHANGED_SMS_HA', event: 'USER_ROLE_CHANGED', channel: 'SMS', language: 'ha', body: "PSIRS: An canza matsayinka daga {{previousRole}} zuwa {{newRole}}. An fitar da kai, dole ka sake shiga. Idan ba a sa ran haka ba, ka tuntubi mai gudanarwarka yanzu." },
+  { code: 'USER_ROLE_CHANGED_SMS_HA', event: 'USER_ROLE_CHANGED', channel: 'SMS', language: 'ha', body: "PSIRS: An canza matsayinka daga {{previousRole}} zuwa {{newRole}}. An fitar da kai, dole ka sake shiga. Idan ba a sa ran haka ba, ka tuntubi mai gudanarwarka yanzu." },  { code: 'OBJECTION_UPHELD_SMS_HA', event: 'OBJECTION_UPHELD', channel: 'SMS', language: 'ha', body: "PSIRS: An amince da kalubalen da aka yi kan kimantawa {{reference}}: {{reason}}. An janye kiyasin, kuma babu bashin komai a kansa." },
+  { code: 'OBJECTION_UPHELD_REFUND_REQUESTED_SMS_HA', event: 'OBJECTION_UPHELD_REFUND_REQUESTED', channel: 'SMS', language: 'ha', body: "PSIRS: An amince da kalubalen da aka yi kan kimantawa {{reference}}: {{reason}}. An janye kiyasin, kuma an nemi a mayar da {{amount}} da aka biya." },
+  { code: 'OBJECTION_REJECTED_SMS_HA', event: 'OBJECTION_REJECTED', channel: 'SMS', language: 'ha', body: "PSIRS: Ba a amince da kalubalen da aka yi kan kimantawa {{reference}} ba: {{reason}}. Kimantawar {{amount}} tana nan. Idan ba a biya ba tukuna, a biya ta hannun wakilin karbar haraji ko ofishin PSIRS." },
 ];
 
 const AGENT_AGREEMENT = `PLATEAU STATE INTERNAL REVENUE SERVICE
