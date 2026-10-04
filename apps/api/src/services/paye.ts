@@ -54,6 +54,7 @@ import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { computeAmount, type RateVersion } from './rate-engine';
 import { createAssessmentIn, resolveRate, withdrawUnpaidBill } from './revenue';
+import { askForRefundsOfWithdrawnBill, type RefundRequested } from './approval-requests';
 import { recordAudit } from './audit';
 import { scopeParams, type ReportScope } from './report-scope';
 import { badRequest, conflict, notFound } from '../lib/errors';
@@ -366,12 +367,13 @@ export async function filePayeSchedule(params: FilePayeParams): Promise<PayeFili
 export async function cancelPayeSchedule(
   db: Db,
   params: { scheduleId: string; reason: string; actorId: string; actorRole: string },
-): Promise<void> {
+): Promise<{ refundsRequested: RefundRequested[] }> {
   if (!params.reason.trim()) {
     throw badRequest('Say why this return is being withdrawn.');
   }
 
-  await withTransaction(async (client) => {
+  return withTransaction(async (client) => {
+    let refundsRequested: RefundRequested[] = [];
     const schedule = await queryOne<{ id: string; status: string; assessment_id: string | null }>(
       client,
       'SELECT id, status, assessment_id FROM paye_schedules WHERE id = $1 FOR UPDATE',
@@ -406,12 +408,21 @@ export async function cancelPayeSchedule(
      * upheld, including its guard. A bill that has been paid is not withdrawn
      * here: money that has reached a government account comes back through a
      * refund, with the accountability a refund carries, not by an UPDATE that
-     * makes the demand disappear.
+     * makes the demand disappear. And the refund is asked for, as it is for
+     * the objection — see `askForRefundsOfWithdrawnBill` for the employer it
+     * was not asked for, who paid the first figure and then owed the second.
      */
     if (schedule.assessment_id) {
       await withdrawUnpaidBill(client, schedule.assessment_id, {
         actorId: params.actorId,
         reason: `PAYE return withdrawn (${params.reason.trim()})`,
+      });
+      refundsRequested = await askForRefundsOfWithdrawnBill(client, schedule.assessment_id, {
+        actorId: params.actorId,
+        actorRole: params.actorRole,
+        headline: 'PAYE return withdrawn',
+        because: 'The PAYE return this bill was raised for was withdrawn',
+        reason: params.reason.trim(),
       });
     }
 
@@ -425,6 +436,8 @@ export async function cancelPayeSchedule(
       newValue: { status: 'CANCELLED' },
       reason: params.reason.trim(),
     });
+
+    return { refundsRequested };
   });
 }
 

@@ -262,6 +262,47 @@ describe('withdrawing a return', () => {
     });
   });
 
+  it('says when withdrawing a paid return asked for the payment back', async () => {
+    // Without this the employer pays the refiled figure on top of the first,
+    // and the officer who withdrew the return is the one they will ask.
+    history = [FILED_RETURN];
+    vi.spyOn(apiModule.api, 'post').mockImplementation(async (path: string, body?: unknown) => {
+      posted.push({ path, body });
+      return {
+        refundsRequested: [
+          { approvalId: 'ap-9', transactionReference: 'TXN-2026-000777', amountKobo: '28900000' },
+        ],
+      } as never;
+    });
+    await openEmployer();
+    fireEvent.change(screen.getByLabelText(/Why is this return being withdrawn/i), {
+      target: { value: 'Gross figures were taken from the wrong column' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Withdraw$/i }));
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          'A refund of ₦289,000.00 on TXN-2026-000777 has been asked for. Another officer grants it from the approvals queue.',
+        ),
+      ).toBeTruthy(),
+    );
+  });
+
+  it('says nothing about a refund when the return was not paid', async () => {
+    history = [FILED_RETURN];
+    vi.spyOn(apiModule.api, 'post').mockImplementation(async (path: string, body?: unknown) => {
+      posted.push({ path, body });
+      return { refundsRequested: [] } as never;
+    });
+    await openEmployer();
+    fireEvent.change(screen.getByLabelText(/Why is this return being withdrawn/i), {
+      target: { value: 'Filed against the wrong school' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Withdraw$/i }));
+    await waitFor(() => expect(posted.some((entry) => entry.path.includes('/cancel'))).toBe(true));
+    expect(screen.queryByText(/has been asked for/)).toBeNull();
+  });
+
   it('offers no withdrawal on a return already withdrawn', async () => {
     history = [{ ...FILED_RETURN, status: 'CANCELLED', cancelledReason: 'Already done' }];
     await openEmployer();

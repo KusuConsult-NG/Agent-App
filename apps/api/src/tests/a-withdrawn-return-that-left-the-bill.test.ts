@@ -56,6 +56,7 @@ import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
 import { expireLapsedInvoices } from '../services/revenue';
+import { executeReversal } from '../services/reconciliation';
 
 const OFFICER = '+2348083000001';
 let officer = '';
@@ -143,9 +144,10 @@ describe('withdrawing a PAYE return withdraws the bill it raised', () => {
       { reason: 'Filed against the wrong employer record.' },
       auth(),
     );
-    // 204: the withdrawal returns no body, which is why the bill has to be
-    // checked in the database rather than read off a response.
-    assert.equal(cancelled.status, 204, JSON.stringify(cancelled.body));
+    // The response says only what refunds the withdrawal asked for — none,
+    // here — so the bill itself is checked in the database.
+    assert.equal(cancelled.status, 200, JSON.stringify(cancelled.body));
+    assert.deepEqual(cancelled.body, { refundsRequested: [] });
 
     const after = await billsFor();
     assert.equal(
@@ -222,7 +224,7 @@ describe('withdrawing a PAYE return withdraws the bill it raised', () => {
       { reason: 'Filed for the wrong month; refiling.' },
       auth(),
     );
-    assert.equal(cancelled.status, 204, JSON.stringify(cancelled.body));
+    assert.equal(cancelled.status, 200, JSON.stringify(cancelled.body));
     assert.equal(
       (await billsFor())[0]!.status,
       'CANCELLED',
@@ -241,7 +243,7 @@ describe('withdrawing a PAYE return withdraws the bill it raised', () => {
       { reason: 'Filed against the wrong employer record.' },
       auth(),
     );
-    assert.equal(cancelled.status, 204, JSON.stringify(cancelled.body));
+    assert.equal(cancelled.status, 200, JSON.stringify(cancelled.body));
 
     const charge = await queryOne<{ status: string; reason: string | null; actor: string | null }>(
       pool,
@@ -294,6 +296,102 @@ describe('withdrawing a PAYE return withdraws the bill it raised', () => {
     );
     assert.notEqual(schedule!.status, 'CANCELLED', 'the return was withdrawn though its bill was not');
     assert.equal((await billsFor())[0]!.status, 'UNPAID');
+  });
+
+  /*
+   * The consequence the cancel-and-refile test above guards for an unpaid
+   * bill, for a paid one. Measured before this: the employer paid ₦289,000 on
+   * a return filed from the wrong column, it was withdrawn and refiled at
+   * ₦127,000, and they owed the ₦127,000 with the ₦289,000 held and nothing
+   * asking for it back.
+   */
+  it('asks for the first payment back when a paid return is withdrawn', async () => {
+    const first = await fileReturn('90000000');
+    await createGovernmentUser({ fullName: 'Approving Admin', phone: '+2348083000002', role: 'admin' });
+    const demo = await seedDemoAgent();
+    const session = await loginAs(demo!.phone, demo!.password, demo!.deviceIdentifier);
+    const agent = { token: session.accessToken, deviceId: demo!.deviceIdentifier };
+    const charge = await queryOne<{ id: string }>(
+      pool,
+      'SELECT id FROM transactions WHERE assessment_id = $1',
+      [first.assessmentId],
+    );
+    const started = await post(
+      '/payments/initiate',
+      { transactionId: charge!.id },
+      { ...agent, idempotencyKey: 'paye-paid-first' },
+    );
+    assert.equal(started.status, 201, JSON.stringify(started.body));
+    await post(
+      '/payments/simulate',
+      { gatewayReference: started.body.gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
+      agent,
+    );
+    assert.equal((await billsFor())[0]!.status, 'PAID', 'the precondition: the first return was paid');
+
+    const cancelled = await post(
+      `/government/paye/returns/${first.scheduleId}/cancel`,
+      { reason: 'Gross figures were taken from the wrong column.' },
+      auth(),
+    );
+    assert.equal(cancelled.status, 200, JSON.stringify(cancelled.body));
+    assert.equal(
+      cancelled.body.refundsRequested.length,
+      1,
+      'the first payment was kept and nothing asked for it back',
+    );
+    const asked = cancelled.body.refundsRequested[0];
+    const request = await queryOne<{
+      approval_type: string;
+      entity_id: string;
+      payload: { amountKobo: string; refundType: string; attributableTo: string };
+    }>(pool, 'SELECT approval_type, entity_id, payload FROM approvals WHERE id = $1', [asked.approvalId]);
+    assert.deepEqual(
+      {
+        type: request?.approval_type,
+        transaction: request?.entity_id,
+        refundType: request?.payload.refundType,
+        whose: request?.payload.attributableTo,
+        amount: request?.payload.amountKobo,
+      },
+      {
+        type: 'REFUND',
+        transaction: charge!.id,
+        refundType: 'FULL',
+        whose: 'GOVERNMENT',
+        amount: asked.amountKobo,
+      },
+    );
+
+    const second = await fileReturn('45000000');
+
+    // Granted by a second officer and carried out by a third, after which
+    // the employer is asked for the corrected figure and nothing else.
+    await createGovernmentUser({ fullName: 'Granting Officer', phone: '+2348083000003', role: 'finance_officer' });
+    const executorId = await createGovernmentUser({
+      fullName: 'Paying Officer',
+      phone: '+2348083000004',
+      role: 'finance_officer',
+    });
+    const granting = await loginAs('+2348083000003');
+    const granted = await post(
+      `/government/approvals/${asked.approvalId}/decide`,
+      { decision: 'APPROVE', reason: 'Return withdrawn and refiled; refund the first payment.' },
+      { token: granting.accessToken },
+    );
+    assert.equal(granted.status, 200, JSON.stringify(granted.body));
+    await executeReversal({ approvalId: asked.approvalId, actorId: executorId, actorRole: 'finance_officer' });
+
+    const bills = await billsFor();
+    const owed = bills
+      .filter((bill) => bill.status === 'UNPAID')
+      .reduce((total, bill) => total + BigInt(bill.total), 0n);
+    assert.deepEqual(
+      bills.filter((bill) => bill.status === 'PAID'),
+      [],
+      'the first payment is still held',
+    );
+    assert.equal(owed, BigInt(second.taxDueKobo));
   });
 
   /* The control that the withdrawal itself still happens and is accountable. */

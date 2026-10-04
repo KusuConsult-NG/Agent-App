@@ -530,13 +530,16 @@ governmentRouter.post(
   validateBody(
     z.object({ reason: z.string().min(4).max(500) }),
     async (req, res, data) => {
-      await cancelPayeSchedule(pool, {
-        scheduleId: req.params.id!,
-        reason: data.reason,
-        actorId: req.auth!.userId,
-        actorRole: req.auth!.role,
-      });
-      res.status(204).end();
+      // 200 with the refunds it asked for: withdrawing a return already paid
+      // asks for the payment back, and the officer who withdrew it is told.
+      res.json(
+        await cancelPayeSchedule(pool, {
+          scheduleId: req.params.id!,
+          reason: data.reason,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
     },
   ),
 );

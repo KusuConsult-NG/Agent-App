@@ -1924,7 +1924,6 @@ instructions — but they are what an agent reads all day.
 | `ofcEnBillOwed` | Not paid | Ba a biya ba | ☐ | |
 | `ofcEnBillPaid` | Paid {{amount}}. Upholding this asks for a refund. | An biya {{amount}}. Amincewa da kalubalen zai nemi a mayar da kudin. | ☐ | |
 | `ofcEnBillPaying` | A payment is in progress. Decide once it has settled. | Ana kan biya. A yanke hukunci bayan biyan ya kammala. | ☐ | |
-| `ofcEnRefundAsked` | A refund of {{amount}} on {{reference}} has been asked for. Another officer grants it from the approvals queue. | An nemi a mayar da {{amount}} na {{reference}}. Wani jami’i ne zai amince da shi daga jerin abubuwan da ke jiran amincewa. | ☐ | |
 
 #### The officer portal — distribution rounds
 
@@ -2109,6 +2108,7 @@ instructions — but they are what an agent reads all day.
 | `ofcPhAmount` | Amount | Adadi | ☐ | |
 | `ofcPhReceipt` | Receipt | Rasit | ☐ | |
 | `ofcPhNothingPaid` | Nothing was paid in this period. | Ba a biya komai a wannan lokacin ba. | ☐ | |
+| `ofcRefundAsked` | A refund of {{amount}} on {{reference}} has been asked for. Another officer grants it from the approvals queue. | An nemi a mayar da {{amount}} na {{reference}}. Wani jami’i ne zai amince da shi daga jerin abubuwan da ke jiran amincewa. | ☐ | |
 | `ofcCwNoEvidence` | None attached | Babu wanda aka hada | ☐ | |
 | `ofcAllStatuses` | All statuses | Dukkan matsayi | ☐ | |
 | `ofcAllLgas` | All LGAs | Dukkan Kananan Hukumomi | ☐ | |

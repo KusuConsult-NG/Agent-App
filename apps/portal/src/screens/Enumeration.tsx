@@ -489,7 +489,7 @@ export function EnumerationScreen() {
             <ErrorAlert error={decisionError} />
             {refundsAsked.map((refund) => (
               <Alert kind="success" key={refund.approvalId}>
-                {t.ofcEnRefundAsked
+                {t.ofcRefundAsked
                   .replace('{{amount}}', formatNaira(BigInt(refund.amountKobo)))
                   .replace('{{reference}}', refund.transactionReference)}
               </Alert>
