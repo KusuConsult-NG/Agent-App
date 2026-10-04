@@ -668,6 +668,7 @@ export interface TranslationDictionary {
   enumPaymentHistory: string;
   enumTaxObligations: string;
   enumTaxpayerRecord: string;
+  enumOutstandingBills: string;
 
   /**
    * The sentence a referee reads once, with a subject.
@@ -4468,6 +4469,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumPaymentHistory: "Payment history",
     enumTaxObligations: "Tax obligations",
     enumTaxpayerRecord: "Taxpayer record",
+    enumOutstandingBills: "Outstanding bills",
     enumReadyForReview: "Ready for review",
     enumRealProperty: "Land and buildings",
     enumReceipt: "Receipt",
@@ -8032,6 +8034,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumPaymentHistory: "Tarihin biyayya",
     enumTaxObligations: "Wajiban haraji",
     enumTaxpayerRecord: "Rikodin mai biyan haraji",
+    enumOutstandingBills: "Bashin da ba a biya ba",
     enumReadyForReview: "A shirye don dubawa",
     enumRealProperty: "Filaye da gine-gine",
     enumReceipt: "Rasit",

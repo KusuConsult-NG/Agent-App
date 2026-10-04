@@ -25,7 +25,14 @@
  * the compliance record and the incentive programmes. One request, one
  * person's affairs, no trace.
  *
- * WHY THESE FOUR SURFACES
+ * WHY THESE FIVE SURFACES
+ *
+ * Four, at first, and the fifth is the one the paragraph below should have
+ * caught: the agent application reads `GET /taxpayers/:id` — and its
+ * collection screen reads a person's unpaid bills from
+ * `GET /revenue/taxpayers/:id/obligations` straight after a search, never
+ * touching the profile route. That route is open to every agent in the State
+ * by design, and it logged nothing. Migration 090 has the measurement.
  *
  * The two front ends reach a named person's data by different routes, and
  * logging only one of them would have left a whole population unlogged. The
@@ -57,7 +64,9 @@ export type AccessSurface =
   | 'TAXPAYER_RECORD'
   | 'PAYMENT_HISTORY'
   | 'TAX_OBLIGATIONS'
-  | 'INCENTIVE_STANDING';
+  | 'INCENTIVE_STANDING'
+  /** What they owe now, invoice by invoice — the agent collection screen's read. */
+  | 'OUTSTANDING_BILLS';
 
 /**
  * Record that somebody read this taxpayer's data.

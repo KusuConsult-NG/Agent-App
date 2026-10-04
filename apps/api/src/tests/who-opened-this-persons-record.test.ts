@@ -140,7 +140,7 @@ describe('a look at a record leaves a record of the look', () => {
     assert.ok(rows[0]!.ip_address, 'and where from');
   });
 
-  it('distinguishes the four things an officer can be shown', async () => {
+  it('distinguishes the five things an officer can be shown', async () => {
     const from = '2024-01-01';
     const to = '2024-12-31';
     const calls: [string, string, string][] = [
@@ -152,6 +152,9 @@ describe('a look at a record leaves a record of the look', () => {
       ],
       [`/taxpayers/${taxpayerId}/obligations`, officerToken, 'TAX_OBLIGATIONS'],
       [`/taxpayers/${taxpayerId}/incentives`, adminToken, 'INCENTIVE_STANDING'],
+      // The fifth, and the one every agent in the State may read: what this
+      // person owes now, invoice by invoice. It logged nothing.
+      [`/revenue/taxpayers/${taxpayerId}/obligations`, officerToken, 'OUTSTANDING_BILLS'],
     ];
 
     for (const [path, token, expected] of calls) {
@@ -164,8 +167,8 @@ describe('a look at a record leaves a record of the look', () => {
       (await looks()).map((row) => row.surface),
       calls.map(([, , surface]) => surface),
       'each surface logged as itself: the register entry, the payment history, ' +
-        'the obligations and the incentive standing are four different amounts ' +
-        "of somebody's life",
+        'the obligations, the incentive standing and the unpaid bills are five ' +
+        "different amounts of somebody's life",
     );
   });
 

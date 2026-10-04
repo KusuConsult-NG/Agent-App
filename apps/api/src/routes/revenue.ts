@@ -11,6 +11,7 @@ import { assertOwnRecord, callerAgentId, seesEverything } from '../lib/ownership
 import { notFound, badRequest } from '../lib/errors';
 import * as revenue from '../services/revenue';
 import { recordAudit } from '../services/audit';
+import { recordTaxpayerAccess } from '../services/taxpayer-access';
 import { registerDocument, renderInvoicePdf } from '../services/documents';
 import { signDocumentUrl } from '../services/storage';
 
@@ -562,7 +563,28 @@ revenueRouter.get(
    * and they are in front of the agent asking.
    */
   asyncHandler(async (req, res) => {
-    res.json(await revenue.getObligations(pool, req.params.id));
+    const bills = await revenue.getObligations(pool, req.params.id);
+    /*
+     * And recorded, because "any agent may read it" is exactly why who did
+     * has to be answerable. Logged after the read and only for a taxpayer that
+     * exists — the log's foreign key would refuse anything else, and an empty
+     * list for a real taxpayer is still a look at their affairs.
+     */
+    const exists = await queryOne<{ id: string }>(pool, 'SELECT id FROM taxpayers WHERE id = $1', [
+      req.params.id,
+    ]);
+    if (exists) {
+      await recordTaxpayerAccess({
+        taxpayerId: req.params.id!,
+        accessedBy: req.auth!.userId,
+        actorRole: req.auth!.role,
+        surface: 'OUTSTANDING_BILLS',
+        ipAddress: req.clientIp,
+        deviceId: req.auth!.deviceId,
+        requestId: req.requestId,
+      });
+    }
+    res.json(bills);
   }),
 );
 

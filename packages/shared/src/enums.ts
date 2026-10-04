@@ -286,6 +286,7 @@ export const ENUM_LABELS: Record<string, keyof TranslationDictionary> = {
   "OPEN": 'enumOpen',
   "OPENED": 'enumOpened',
   "OTHER": 'enumOther',
+  "OUTSTANDING_BILLS": 'enumOutstandingBills',
   "OUT_OF_TERRITORY": 'enumOutOfTerritory',
   "OVERRIDE_APPLIED": 'enumOverrideApplied',
   "PAID": 'enumPaid',
