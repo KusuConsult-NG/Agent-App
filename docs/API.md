@@ -270,7 +270,7 @@ already in force, which the gate would never read.
 | `GET` | `/revenue/assessments/:id` · `/invoices/:id` | read |
 | `POST` | `/revenue/invoices/:id/document` | render invoice PDF |
 | `POST` | `/revenue/invoices/:id/reissue` | `invoice:create` + active agent — issue again a bill that can no longer be paid: one past its deadline, or owed again after a payment the taxpayer's bank or the gateway reversed. A fresh invoice and transaction against the same assessment, for the same amounts, with a new thirty-day window; the old invoice is cancelled and names its replacement (`reissued_as`). Refused, by code, for a bill still payable, paid or part paid, withdrawn, under an open objection, with a payment in progress, on a record that is not active, or for a vehicle renewal no longer pending. Asked again, answers `200` with the replacement already made. Migration 091 holds the amounts, the link and one live invoice per assessment. |
-| `GET` | `/revenue/taxpayers/:id/obligations` | outstanding invoices |
+| `GET` | `/revenue/taxpayers/:id/obligations` | everything the taxpayer owes, lapsed or not; each row carries `needs_reissue` — past its deadline, or its charge ended by a reversal — for a bill to issue again before it is paid, and `under_objection` for one not to be pressed for |
 
 ## Payments, receipts, vehicles
 

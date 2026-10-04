@@ -121,9 +121,17 @@ export async function initiatePayment(
     if (transaction.invoice_status === 'CANCELLED' || transaction.invoice_status === 'EXPIRED') {
       throw paymentRefused({
         code: 'INVOICE_NOT_PAYABLE',
+        /*
+         * Not "raise a new assessment", which was the advice before a bill
+         * could be issued again, and which billed the taxpayer twice. A lapsed
+         * bill is issued again; a cancelled one was either replaced — the
+         * replacement is the one to pay — or withdrawn, and is not owed.
+         */
         message:
           `This invoice is ${transaction.invoice_status.toLowerCase()} and can no longer be paid. ` +
-          'Raise a new assessment.',
+          (transaction.invoice_status === 'EXPIRED'
+            ? "Issue it again from the taxpayer's list of bills."
+            : "If it was replaced, take the payment against the new invoice on the taxpayer's list of bills."),
         // Nothing was started, so nothing was taken — which is what the agent
         // has to be able to tell the person in front of them.
         moneyStatus: 'NOT_DEBITED',
@@ -144,7 +152,7 @@ export async function initiatePayment(
     ) {
       throw paymentRefused({
         code: 'INVOICE_EXPIRED',
-        message: 'This invoice has expired. Raise a new assessment for the taxpayer.',
+        message: "This invoice has expired. Issue it again from the taxpayer's list of bills.",
         moneyStatus: 'NOT_DEBITED',
       });
     }
@@ -1199,6 +1207,7 @@ export async function getTransactionStatus(db: Db, transactionReference: string)
     `SELECT t.id, t.transaction_reference, t.status, t.amount_kobo, t.service_charge_kobo,
             t.total_amount_kobo, t.created_at, t.verified_at, t.settled_at, t.agent_id,
             i.id AS invoice_id, i.invoice_number, i.status AS invoice_status, i.expires_at,
+            i.reissued_as AS invoice_reissued_as,
             ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
             rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
             tp.first_name, tp.last_name, tp.business_name, tp.tin,

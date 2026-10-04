@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > nineteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,487 strings; that one is two pages and links back
+> because it carries all 3,501 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,487 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,501 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,487 strings is worse than no sheet, because it looks complete; this one cannot
+3,501 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,487 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,501 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,487 strings: where the
+- The glossary below is applied consistently across all 3,501 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -407,6 +407,9 @@ quietly leave it.
 | `paymentFailed` | Payment did not go through | Biyan kudin bai yi nasara ba | ☐ | |
 | `paymentFailedBody` | No money has been taken from the taxpayer. You can start the payment again. | Ba a karbi kudi daga mai biyan haraji ba. Kana iya sake fara biyan. | ☐ | |
 | `paymentEndedBody` | No money has been taken from the taxpayer. This bill can no longer be paid. | Ba a karbi kudi daga mai biyan haraji ba. Ba za a iya biyan wannan takardar biya yanzu ba. | ☐ | |
+| `colLapsedBody` | No money has been taken. It can no longer be paid as it stands — issue it again, for the same amount, to take the payment. | Ba a karbi kudi ba. Ba za a iya biyanta yadda take ba — a sake fitar da ita, a kan adadin kudi daya, don a karbi biyan. | ☐ | |
+| `colReplacedBody` | No money was taken against this one. Take the payment against the new bill. | Ba a karbi kudi a kan wannan ba. A karbi biyan a kan sabuwar takardar. | ☐ | |
+| `errInvoicePaymentInProgress` | A payment against this bill is still being processed. Check its status first, and do not collect again. | Ana kan sarrafa wani biya da aka yi kan wannan takardar biya. A duba matsayinsa tukuna, kuma kada a sake karbar kudi. | ☐ | |
 | `paymentUnconfirmed` | Payment not yet confirmed | Ba a tabbatar da biyan kudin ba tukuna | ☐ | |
 | `paymentUnconfirmedBody` | This payment has NOT been marked as received. Do not ask the taxpayer to pay again — check again in a moment. | BA A nuna an karbi wannan kudin ba. Kada ka ce wa mai biyan haraji ya sake biya — ka sake dubawa nan da dan lokaci. | ☐ | |
 | `findTaxpayerFirst` | Find the taxpayer first. Every payment must be attributed. | Ka nemo mai biyan haraji tukuna. Dole a danganta kowane biyan kudi ga wani. | ☐ | |
@@ -484,7 +487,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3405 strings, grouped by where an agent meets them. Lower stakes
+3416 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2678,6 +2681,12 @@ instructions — but they are what an agent reads all day.
 | `colOwesUnknown` | Their open invoices could not be read | Ba a iya karanta takardun biyansu ba | ☐ | |
 | `colOwesUnknownBody` | Nothing here says they owe nothing; it says the platform could not tell you. Raising a charge now risks charging twice for the same levy. | Wannan ba ya nufin ba su da bashi; yana nufin dandalin bai iya gaya maka ba. Yin sabon caji yanzu na iya haifar da cajin abu daya sau biyu. | ☐ | |
 | `colTakeThisPayment` | Take this payment | Karbi wannan biyan | ☐ | |
+| `colNeedsReissue` | Lapsed — it has to be issued again before it can be paid. | Ta kare — sai an sake fitar da ita kafin a iya biyanta. | ☐ | |
+| `colIssueAgain` | Issue this bill again | Sake fitar da wannan takardar biya | ☐ | |
+| `colIssuingAgain` | Issuing… | Ana fitarwa… | ☐ | |
+| `colLapsedTitle` | This bill has lapsed | Wannan takardar biya ta kare | ☐ | |
+| `colReplacedTitle` | This bill was issued again | An sake fitar da wannan takardar biya | ☐ | |
+| `colOpenReplacement` | Open the new bill | Bude sabuwar takardar | ☐ | |
 | `colUnderObjection` | Under objection | Ana kalubalanta | ☐ | |
 | `colUnderObjectionBody` | the trader has formally disputed this estimate. PSIRS is not pursuing it while the objection is decided, so do not ask for this payment. | mai sana’ar ya kalubalanci wannan kiyasi a hukumance. PSIRS ba ta neman wannan kudi har sai an yanke hukunci kan kalubalen, don haka kada a nemi wannan biyan. | ☐ | |
 | `colChargeRaisedTitle` | The charge was raised. The payment was not. | An yi kimantawa, amma ba a fara biyan kudi ba. | ☐ | |
@@ -3311,8 +3320,13 @@ instructions — but they are what an agent reads all day.
 | `errPossibleDuplicateTaxpayer` | A record was found that may be this same person. Check it before opening a new one. | An sami rikodin da zai yiwu na wannan mutumin ne. Ka duba shi kafin ka bude sabuwar rajista. | ☐ | |
 | `errTinServiceUnavailable` | The PSIRS TIN service could not be reached, so this TIN cannot be confirmed. Nobody has been registered. | Ba a iya isa ga sabis din TIN na PSIRS ba, don haka ba a tabbatar da wannan TIN ba. Ba a yi rajistar kowa ba. | ☐ | |
 | `errTinNotFound` | TIN {{tin}} could not be found in the PSIRS TIN service. | Ba a sami TIN {{tin}} a sabis din TIN na PSIRS ba. | ☐ | |
-| `errInvoiceExpired` | This bill has expired. Raise a new assessment for the taxpayer. | Wannan takardar biya ta kare. Ka yi sabon kimantawa ga mai biyan haraji. | ☐ | |
-| `errInvoiceNotPayable` | This bill is {{state}} and can no longer be paid. Raise a new assessment. | Wannan takardar biya tana {{state}} kuma ba za a iya biyanta ba. Ka yi sabon kimantawa. | ☐ | |
+| `errInvoiceExpired` | This bill has expired. Issue it again from the taxpayer's list of bills. | Wannan takardar biya ta kare. A sake fitar da ita daga jerin takardun biyan mai biyan haraji. | ☐ | |
+| `errInvoiceStillPayable` | This bill can still be paid. Take the payment against it. | Har yanzu ana iya biyan wannan takardar biya. A karbi biya a kanta. | ☐ | |
+| `errInvoiceUnderObjection` | This bill is under objection, and collection is suspended until the objection is decided. | Ana kalubalantar wannan takardar biya, kuma an dakatar da karba har sai an yanke hukunci kan kalubalen. | ☐ | |
+| `errInvoiceWithdrawn` | This bill was withdrawn. Nothing is owed on it. | An janye wannan takardar biya. Babu bashin komai a kanta. | ☐ | |
+| `errInvoicePartPaid` | Part of this bill has been paid, so it cannot be issued again. Ask a PSIRS officer. | An biya wani bangare na wannan takardar biya, don haka ba za a iya sake fitar da ita ba. A tambayi jami’in PSIRS. | ☐ | |
+| `errVehicleRenewalClosed` | This bill was for a vehicle renewal that has ended, so it cannot be issued again. Ask a PSIRS officer. | Wannan takardar biya ta sabunta abin hawa ce da ta kare, don haka ba za a iya sake fitar da ita ba. A tambayi jami’in PSIRS. | ☐ | |
+| `errInvoiceNotPayable` | This bill is {{state}} and can no longer be paid. If it lapsed, issue it again; if it was replaced, take the payment against the new bill. | Wannan takardar biya tana {{state}} kuma ba za a iya biyanta ba. Idan ta kare, a sake fitar da ita; idan an maye gurbinta, a karbi biya a kan sabuwar takardar. | ☐ | |
 | `errNoEffectiveRate` | No rate approved by government is in force for this tax or levy, so nothing can be assessed on it. Choose another, or tell a PSIRS officer. | Babu kudin da Gwamnati ta amince da shi a aiki kan wannan haraji ko kudin shiga, don haka ba za a iya kimanta komai kan sa ba. Ka zabi wani, ko ka gaya wa jami’in PSIRS. | ☐ | |
 | `errPaymentAlreadyVerified` | This charge has already been paid and the payment confirmed. Do not collect payment again. | An riga an biya wannan kudin kuma an tabbatar da biyan. Kada ka sake karbar kudi. | ☐ | |
 | `errTransactionNotPayable` | This charge is {{state}} and cannot take a payment now. | Wannan ma’amala tana {{state}} kuma ba za ta karbi biya a yanzu ba. | ☐ | |

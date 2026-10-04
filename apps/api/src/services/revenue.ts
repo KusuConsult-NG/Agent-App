@@ -19,7 +19,7 @@ import { UNDER_OPEN_OBJECTION_SQL } from '../lib/enforcement-suspended';
 import { conflict, forbidden, notFound, refused } from '../lib/errors';
 import { generateVerificationCode } from '../lib/crypto';
 import { escapeLike } from '../lib/like';
-import { PAYABLE_INVOICE_SQL } from '../lib/payable-invoice';
+import { OWED_INVOICE_SQL, PAYABLE_INVOICE_SQL } from '../lib/payable-invoice';
 import {
   nextAssessmentNumber,
   nextInvoiceNumber,
@@ -1349,18 +1349,20 @@ export async function withdrawInvoiceIn(
 /**
  * Outstanding obligations for a taxpayer (PRD §5.2 "Know what they owe").
  *
- * What can still be paid. A lapsed invoice leaves this list at its deadline,
- * by `PAYABLE_INVOICE_SQL`.
+ * Everything owed, lapsed or not (`OWED_INVOICE_SQL`), each with whether it
+ * can be taken today or has to be issued again first.
  *
- * This used to say the opposite: that a lapsed invoice stayed here so a
- * screen could say "this one needs reissuing". No screen ever said it, and it
- * stayed for an hour at most — until the expiry sweep wrote EXPIRED and the
- * status filter below dropped it. In that hour the agent's collection screen
- * showed it with a "Take this payment" button the payment path then refused
- * with INVOICE_EXPIRED. A lapsed bill needs a fresh assessment, and leaving
- * it off this list is also what lets an agent raise one without being warned
- * that the debt is already on file. The money stays in sight on the arrears
- * worklist's lapsed figure. `lib/payable-invoice.ts` has the rest.
+ * This list used to be what could be paid. A lapsed invoice left it at its
+ * deadline, because shown, it carried a "Take this payment" button the
+ * payment path then refused with INVOICE_EXPIRED, and nothing could replace
+ * it except a fresh assessment. Leaving it off was also what let an agent
+ * raise that second assessment without being told the debt was on file — the
+ * double charge the collection screen's own comment exists to prevent.
+ *
+ * A lapsed bill can now be issued again (`reissueInvoice`), so it comes back,
+ * marked `needs_reissue`, and the screen offers the reissue where it offered
+ * the payment. So is a bill owed again after a payment its payer's bank
+ * reversed: in date, but its only charge is REVERSED and takes nothing.
  */
 export async function getObligations(db: Db, taxpayerId: string) {
   /*
@@ -1395,13 +1397,20 @@ export async function getObligations(db: Db, taxpayerId: string) {
             a.assessment_number, a.period_label,
             ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
             rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
-            t.id AS transaction_id, t.transaction_reference, t.status AS transaction_status
+            t.id AS transaction_id, t.transaction_reference, t.status AS transaction_status,
+            /*
+             * Owed but not collectable as it stands: past its deadline, or its
+             * charge has ended (a reversal, an expiry). Issued again, it is.
+             */
+            NOT (${PAYABLE_INVOICE_SQL}
+                 AND COALESCE(t.status, '') NOT IN ('REVERSED', 'REFUNDED', 'EXPIRED', 'CANCELLED'))
+              AS needs_reissue
        FROM invoices i
        JOIN assessments a ON a.id = i.assessment_id
        JOIN revenue_items ri ON ri.id = a.revenue_item_id
        JOIN revenue_categories rc ON rc.id = ri.category_id
        LEFT JOIN transactions t ON t.invoice_id = i.id
-      WHERE i.taxpayer_id = $1 AND ${PAYABLE_INVOICE_SQL}
+      WHERE i.taxpayer_id = $1 AND ${OWED_INVOICE_SQL}
       ORDER BY i.issued_at DESC`,
     [taxpayerId],
   );

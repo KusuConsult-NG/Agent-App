@@ -395,6 +395,25 @@ describe('A bill a reversal left owed', () => {
     assert.equal(await transactionStatus(first.transactionId), 'REVERSED', 'the reversal stays on the record');
   });
 
+  it('is listed as one to issue again, not as a payment to take', async () => {
+    const first = await collectedAndReversed('TAXPAYER');
+    const listed = async () =>
+      (
+        (await get(`/revenue/taxpayers/${first.taxpayerId}/obligations`, asAgent())).body as {
+          invoice_id: string;
+          needs_reissue: boolean;
+        }[]
+      ).map((row) => [row.invoice_id, row.needs_reissue]);
+
+    // In date, but its only charge is REVERSED: the old "Take this payment"
+    // led straight to TRANSACTION_NOT_PAYABLE.
+    assert.deepEqual(await listed(), [[first.invoiceId, true]]);
+
+    const reissued = await reissue(first.invoiceId);
+    assert.equal(reissued.status, 201, JSON.stringify(reissued.body));
+    assert.deepEqual(await listed(), [[reissued.body.invoiceId, false]], 'one bill, and payable');
+  });
+
   it('is not issued again when the State withdrew it', async () => {
     const first = await collectedAndReversed('GOVERNMENT');
     const refused = await reissue(first.invoiceId);

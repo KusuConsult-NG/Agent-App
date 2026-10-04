@@ -323,15 +323,16 @@ describe('one lapsed invoice, before the sweep and after it', () => {
       },
     },
     {
-      // Until the collection screen can offer the bill's reissue, a lapsed
-      // bill on it would be a payment the server refuses.
-      figure: "the taxpayer's obligations",
+      // Still on the list once lapsed — but as a bill to issue again, not a
+      // payment to take. The flag is the payable half of the list.
+      figure: "whether the taxpayer's obligations offer the bill for payment",
       read: async () => {
         const owed = ok(
           await get(`/revenue/taxpayers/${raised.taxpayerId}/obligations`, { token: officerToken }),
           'obligations',
-        ) as { invoice_id: string }[];
-        return owed.some((row) => row.invoice_id === raised.invoiceId);
+        ) as { invoice_id: string; needs_reissue: boolean }[];
+        const row = owed.find((r) => r.invoice_id === raised.invoiceId);
+        return row ? !row.needs_reissue : 'absent';
       },
     },
     {
@@ -348,6 +349,20 @@ describe('one lapsed invoice, before the sweep and after it', () => {
    * that judges or reports what somebody owes.
    */
   const owedReaders: { figure: string; read: () => Promise<unknown> }[] = [
+    {
+      // On the list either way, so an agent is never invited to raise a
+      // second charge for a debt already on file. Counted as rows rather than
+      // by invoice id, because a bill issued again is a new invoice for the
+      // same debt — and this taxpayer owes exactly one.
+      figure: "the taxpayer's obligations",
+      read: async () => {
+        const owed = ok(
+          await get(`/revenue/taxpayers/${raised.taxpayerId}/obligations`, { token: officerToken }),
+          'obligations',
+        ) as { invoice_id: string }[];
+        return owed.length;
+      },
+    },
     {
       figure: 'the compliance score',
       read: async () => {

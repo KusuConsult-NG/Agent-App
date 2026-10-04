@@ -1,6 +1,6 @@
 # Hausa review: everything still waiting on a decision
 
-`HAUSA-REVIEW.md` carries all 3,487 dictionary strings, and most of its length
+`HAUSA-REVIEW.md` carries all 3,501 dictionary strings, and most of its length
 is those tables. The open questions are scattered through seven sections of the
 prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
@@ -18,7 +18,7 @@ new strings and none of review.
 
 ## 1. Not a translation question — PSIRS decides
 
-**445 strings address the reader as `ka`: masculine singular.** A woman
+**443 strings address the reader as `ka`: masculine singular.** A woman
 collecting revenue in Bokkos is addressed as a man by the application she uses
 all day.
 
@@ -31,10 +31,10 @@ about field staff. Counting says otherwise:
 
 | Who reads it | Strings |
 |---|---|
-| The agent app | 252 |
+| The agent app | 250 |
 | The officer portal | 150 |
 | Citizens, referees and group leaders | 43 |
-| **Total** | **445** of 3,487 |
+| **Total** | **443** of 3,501 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
@@ -411,7 +411,7 @@ roll. If any correction you make runs long, that test will say so rather than
 the receipt.
 
 **And `scanHelp` was not the only dead string in this table.** Checking it
-raised the obvious next question, so it was measured: **43 of the 3,487 keys
+raised the obvious next question, so it was measured: **43 of the 3,501 keys
 are never named anywhere outside the dictionary**, and four of them are in the
 table above — `statusOffline`, `offlineMessage`, `statusFailed`, and
 `civicDutyThanks`, the one the `Mungode` typo was in. Three of the four
@@ -676,7 +676,7 @@ instruction was already in Hausa under an English heading.
 
 **The scale, counted rather than estimated.** The platform raises **181
 distinct error codes**; the officer portal says 8 of them in Hausa, and the
-agent application says 33. The last two are `CASE_MOVED`, raised when two
+agent application says 39. The last two are `CASE_MOVED`, raised when two
 officers escalate one case together and the second finds it already with
 somebody else, and `SWEEP_ALREADY_RUNNING`, raised when one presses any of the
 six buttons that start a background sweep by hand — reminders, refunds, TINs,

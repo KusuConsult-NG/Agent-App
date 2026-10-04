@@ -92,6 +92,12 @@ interface Obligation {
   transaction_id: string | null;
   transaction_reference: string | null;
   transaction_status: string | null;
+  /**
+   * Owed, but not collectable as it stands — past its deadline, or its charge
+   * ended by a reversal — so it is issued again before it is paid. Optional
+   * so an older API, which left such bills off the list, degrades to that.
+   */
+  needs_reissue?: boolean;
 }
 
 interface TaxpayerSummary {
@@ -214,6 +220,7 @@ export function CollectScreen({
    */
   const [owes, setOwes] = useState<Obligation[] | null>(null);
   const [owesFailed, setOwesFailed] = useState(false);
+  const [reissuing, setReissuing] = useState<string | null>(null);
 
   const loadOwes = useCallback(() => {
     if (!taxpayer) return;
@@ -231,6 +238,28 @@ export function CollectScreen({
   useEffect(() => {
     loadOwes();
   }, [loadOwes]);
+
+  /*
+   * Issue a lapsed bill again and go to the charge that collects it. Asked
+   * twice, the server answers with the replacement already made, so a second
+   * press after a dropped connection lands in the same place.
+   */
+  async function issueAgain(row: Obligation) {
+    setReissuing(row.invoice_id);
+    setError(null);
+    try {
+      const replacement = await api.post<{ transactionReference: string }>(
+        `/revenue/invoices/${row.invoice_id}/reissue`,
+        {},
+        newIdempotencyKey('reissue'),
+      );
+      navigate(`/transactions/${replacement.transactionReference}`);
+    } catch (caught) {
+      setError(asApiError(caught));
+    } finally {
+      setReissuing(null);
+    }
+  }
 
   const needsBaseAmount =
     selectedItem?.rate_type === 'PERCENTAGE' || selectedItem?.rate_type === 'TIERED';
@@ -513,6 +542,25 @@ export function CollectScreen({
                       <p className="list__meta" style={{ margin: '4px 0 0' }}>
                         <strong>{t.colUnderObjection}</strong> — {t.colUnderObjectionBody}
                       </p>
+                    ) : row.needs_reissue ? (
+                      /*
+                       * Lapsed, or owed again after a reversal: the old
+                       * charge takes nothing, so the button that led to it
+                       * would lead to a refusal. Issued again — same amount,
+                       * same levy, a fresh window — and the agent is taken to
+                       * the new charge to collect on it.
+                       */
+                      <div>
+                        <p className="list__meta" style={{ margin: '4px 0' }}>{t.colNeedsReissue}</p>
+                        <button
+                          type="button"
+                          className="small secondary"
+                          disabled={reissuing !== null}
+                          onClick={() => issueAgain(row)}
+                        >
+                          {reissuing === row.invoice_id ? t.colIssuingAgain : t.colIssueAgain}
+                        </button>
+                      </div>
                     ) : (
                       row.transaction_reference && (
                         <button
@@ -720,6 +768,8 @@ interface TransactionStatus {
     invoice_number: string;
     /** The bill's own state, which decides whether a failed attempt can be tried again. */
     invoice_status: string;
+    /** The invoice issued in this one's place, when it has been issued again. */
+    invoice_reissued_as?: string | null;
     expires_at: string | null;
     revenue_item: string;
     revenue_item_ha: string | null;
@@ -860,6 +910,30 @@ export function TransactionScreen({
    * A second press cannot open a second payment: the server answers with the
    * one already in flight rather than initiating again.
    */
+  /*
+   * Issue the bill again, or — when it already has been — find the bill
+   * that replaced it: the server answers either with the replacement, so one
+   * call serves both, and the agent lands on the charge to collect.
+   */
+  const [issuing, setIssuing] = useState(false);
+  async function issueAgain() {
+    if (!data) return;
+    setIssuing(true);
+    setError(null);
+    try {
+      const replacement = await api.post<{ transactionReference: string }>(
+        `/revenue/invoices/${data.transaction.invoice_id}/reissue`,
+        {},
+        newIdempotencyKey('reissue'),
+      );
+      navigate(`/transactions/${replacement.transactionReference}`);
+    } catch (caught) {
+      setError(asApiError(caught));
+    } finally {
+      setIssuing(false);
+    }
+  }
+
   async function startPayment() {
     if (!data) return;
     setConfirming(true);
@@ -960,6 +1034,22 @@ export function TransactionScreen({
     transaction.status === 'FAILED' &&
     transaction.invoice_status === 'UNPAID' &&
     (!transaction.expires_at || new Date(transaction.expires_at).getTime() > Date.now());
+  /*
+   * A bill past its deadline, with nothing in flight against it, cannot be
+   * paid as it stands — and this screen said "payment not yet confirmed" over
+   * a start button the server would refuse. It can be issued again, and one
+   * that already has been says so and opens the replacement.
+   */
+  const replaced = Boolean(transaction.invoice_reissued_as);
+  const lapsedBill =
+    !paid &&
+    !acknowledged &&
+    !transaction.payment_id &&
+    !replaced &&
+    (transaction.invoice_status === 'EXPIRED' ||
+      (transaction.invoice_status === 'UNPAID' &&
+        transaction.expires_at !== null &&
+        new Date(transaction.expires_at).getTime() <= Date.now()));
   const name =
     transaction.business_name ??
     `${transaction.first_name ?? ''} ${transaction.last_name ?? ''}`.trim();
@@ -1014,6 +1104,22 @@ export function TransactionScreen({
               {t.acknowledgementLabel} {transaction.acknowledgement_number}
             </strong>
           </p>
+        </Alert>
+      ) : replaced ? (
+        <Alert kind="info" title={t.colReplacedTitle}>
+          <p style={{ margin: '0 0 0.5rem' }}>{t.colReplacedBody}</p>
+          <button type="button" className="secondary" disabled={issuing} onClick={issueAgain}>
+            {issuing ? <Spinner /> : null}
+            {t.colOpenReplacement}
+          </button>
+        </Alert>
+      ) : lapsedBill ? (
+        <Alert kind="warning" title={t.colLapsedTitle}>
+          <p style={{ margin: '0 0 0.5rem' }}>{t.colLapsedBody}</p>
+          <button type="button" disabled={issuing} onClick={issueAgain}>
+            {issuing ? <Spinner /> : null}
+            {issuing ? t.colIssuingAgain : t.colIssueAgain}
+          </button>
         </Alert>
       ) : failed ? (
         <Alert kind="error" title={t.paymentFailed}>
@@ -1187,7 +1293,7 @@ export function TransactionScreen({
         </div>
       )}
 
-      {!paid && (!failed || canTryAgain) && (
+      {!paid && !replaced && !lapsedBill && (!failed || canTryAgain) && (
         <>
           {/*
             The artefact a taxpayer pays against later.

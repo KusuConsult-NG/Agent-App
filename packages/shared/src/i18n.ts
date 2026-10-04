@@ -169,6 +169,12 @@ export interface TranslationDictionary {
   errNoEffectiveRate: string;
   errInvoiceNotPayable: string;
   errInvoiceExpired: string;
+  errInvoiceStillPayable: string;
+  errInvoiceUnderObjection: string;
+  errInvoicePaymentInProgress: string;
+  errInvoiceWithdrawn: string;
+  errInvoicePartPaid: string;
+  errVehicleRenewalClosed: string;
   errInvoiceAlreadyPaid: string;
   /*
    * PUTTING SOMEBODY ON THE REGISTER, WHICH IS WHERE EVERYTHING ELSE STARTS.
@@ -2768,6 +2774,14 @@ export interface TranslationDictionary {
   colOwesUnknown: string;
   colOwesUnknownBody: string;
   colTakeThisPayment: string;
+  colNeedsReissue: string;
+  colIssueAgain: string;
+  colIssuingAgain: string;
+  colLapsedTitle: string;
+  colLapsedBody: string;
+  colReplacedTitle: string;
+  colReplacedBody: string;
+  colOpenReplacement: string;
   colUnderObjection: string;
   colUnderObjectionBody: string;
   colChargeRaisedTitle: string;
@@ -4171,9 +4185,19 @@ export const translations: Record<Language, TranslationDictionary> = {
       'The PSIRS TIN service could not be reached, so this TIN cannot be confirmed. Nobody has been registered.',
     errTinNotFound: 'TIN {{tin}} could not be found in the PSIRS TIN service.',
     errInvoiceExpired:
-      'This bill has expired. Raise a new assessment for the taxpayer.',
+      "This bill has expired. Issue it again from the taxpayer's list of bills.",
+    errInvoiceStillPayable: 'This bill can still be paid. Take the payment against it.',
+    errInvoiceUnderObjection:
+      'This bill is under objection, and collection is suspended until the objection is decided.',
+    errInvoicePaymentInProgress:
+      'A payment against this bill is still being processed. Check its status first, and do not collect again.',
+    errInvoiceWithdrawn: 'This bill was withdrawn. Nothing is owed on it.',
+    errInvoicePartPaid:
+      'Part of this bill has been paid, so it cannot be issued again. Ask a PSIRS officer.',
+    errVehicleRenewalClosed:
+      'This bill was for a vehicle renewal that has ended, so it cannot be issued again. Ask a PSIRS officer.',
     errInvoiceNotPayable:
-      'This bill is {{state}} and can no longer be paid. Raise a new assessment.',
+      'This bill is {{state}} and can no longer be paid. If it lapsed, issue it again; if it was replaced, take the payment against the new bill.',
     errNoEffectiveRate:
       'No rate approved by government is in force for this tax or levy, so nothing can be assessed on it. Choose another, or tell a PSIRS officer.',
     errPaymentAlreadyVerified:
@@ -6545,6 +6569,14 @@ export const translations: Record<Language, TranslationDictionary> = {
     colOwesUnknown: "Their open invoices could not be read",
     colOwesUnknownBody: "Nothing here says they owe nothing; it says the platform could not tell you. Raising a charge now risks charging twice for the same levy.",
     colTakeThisPayment: "Take this payment",
+    colNeedsReissue: "Lapsed — it has to be issued again before it can be paid.",
+    colIssueAgain: "Issue this bill again",
+    colIssuingAgain: "Issuing…",
+    colLapsedTitle: "This bill has lapsed",
+    colLapsedBody: "No money has been taken. It can no longer be paid as it stands — issue it again, for the same amount, to take the payment.",
+    colReplacedTitle: "This bill was issued again",
+    colReplacedBody: "No money was taken against this one. Take the payment against the new bill.",
+    colOpenReplacement: "Open the new bill",
     colUnderObjection: "Under objection",
     colUnderObjectionBody: "the trader has formally disputed this estimate. PSIRS is not pursuing it while the objection is decided, so do not ask for this payment.",
     colChargeRaisedTitle: "The charge was raised. The payment was not.",
@@ -7751,9 +7783,19 @@ export const translations: Record<Language, TranslationDictionary> = {
       'Ba a iya isa ga sabis din TIN na PSIRS ba, don haka ba a tabbatar da wannan TIN ba. Ba a yi rajistar kowa ba.',
     errTinNotFound: 'Ba a sami TIN {{tin}} a sabis din TIN na PSIRS ba.',
     errInvoiceExpired:
-      'Wannan takardar biya ta kare. Ka yi sabon kimantawa ga mai biyan haraji.',
+      'Wannan takardar biya ta kare. A sake fitar da ita daga jerin takardun biyan mai biyan haraji.',
+    errInvoiceStillPayable: 'Har yanzu ana iya biyan wannan takardar biya. A karbi biya a kanta.',
+    errInvoiceUnderObjection:
+      'Ana kalubalantar wannan takardar biya, kuma an dakatar da karba har sai an yanke hukunci kan kalubalen.',
+    errInvoicePaymentInProgress:
+      'Ana kan sarrafa wani biya da aka yi kan wannan takardar biya. A duba matsayinsa tukuna, kuma kada a sake karbar kudi.',
+    errInvoiceWithdrawn: 'An janye wannan takardar biya. Babu bashin komai a kanta.',
+    errInvoicePartPaid:
+      'An biya wani bangare na wannan takardar biya, don haka ba za a iya sake fitar da ita ba. A tambayi jami’in PSIRS.',
+    errVehicleRenewalClosed:
+      'Wannan takardar biya ta sabunta abin hawa ce da ta kare, don haka ba za a iya sake fitar da ita ba. A tambayi jami’in PSIRS.',
     errInvoiceNotPayable:
-      'Wannan takardar biya tana {{state}} kuma ba za a iya biyanta ba. Ka yi sabon kimantawa.',
+      'Wannan takardar biya tana {{state}} kuma ba za a iya biyanta ba. Idan ta kare, a sake fitar da ita; idan an maye gurbinta, a karbi biya a kan sabuwar takardar.',
     errNoEffectiveRate:
       'Babu kudin da Gwamnati ta amince da shi a aiki kan wannan haraji ko kudin shiga, don haka ba za a iya kimanta komai kan sa ba. Ka zabi wani, ko ka gaya wa jami’in PSIRS.',
     errPaymentAlreadyVerified:
@@ -10125,6 +10167,14 @@ export const translations: Record<Language, TranslationDictionary> = {
     colOwesUnknown: "Ba a iya karanta takardun biyansu ba",
     colOwesUnknownBody: "Wannan ba ya nufin ba su da bashi; yana nufin dandalin bai iya gaya maka ba. Yin sabon caji yanzu na iya haifar da cajin abu daya sau biyu.",
     colTakeThisPayment: "Karbi wannan biyan",
+    colNeedsReissue: "Ta kare — sai an sake fitar da ita kafin a iya biyanta.",
+    colIssueAgain: "Sake fitar da wannan takardar biya",
+    colIssuingAgain: "Ana fitarwa…",
+    colLapsedTitle: "Wannan takardar biya ta kare",
+    colLapsedBody: "Ba a karbi kudi ba. Ba za a iya biyanta yadda take ba — a sake fitar da ita, a kan adadin kudi daya, don a karbi biyan.",
+    colReplacedTitle: "An sake fitar da wannan takardar biya",
+    colReplacedBody: "Ba a karbi kudi a kan wannan ba. A karbi biyan a kan sabuwar takardar.",
+    colOpenReplacement: "Bude sabuwar takardar",
     colUnderObjection: "Ana kalubalanta",
     colUnderObjectionBody: "mai sana’ar ya kalubalanci wannan kiyasi a hukumance. PSIRS ba ta neman wannan kudi har sai an yanke hukunci kan kalubalen, don haka kada a nemi wannan biyan.",
     colChargeRaisedTitle: "An yi kimantawa, amma ba a fara biyan kudi ba.",

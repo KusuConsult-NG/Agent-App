@@ -148,6 +148,18 @@ export const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   INVOICE_NOT_PAYABLE: 'errInvoiceNotPayable',
   INVOICE_EXPIRED: 'errInvoiceExpired',
   TRANSACTION_NOT_PAYABLE: 'errTransactionNotPayable',
+  /*
+   * Issuing a lapsed bill again (`POST /revenue/invoices/:id/reissue`), from
+   * the trader's list of bills and the transaction screen. Each refusal names
+   * one fixed state, and the agent is standing in front of the person whose
+   * bill it is.
+   */
+  INVOICE_STILL_PAYABLE: 'errInvoiceStillPayable',
+  INVOICE_UNDER_OBJECTION: 'errInvoiceUnderObjection',
+  INVOICE_PAYMENT_IN_PROGRESS: 'errInvoicePaymentInProgress',
+  INVOICE_WITHDRAWN: 'errInvoiceWithdrawn',
+  INVOICE_PART_PAID: 'errInvoicePartPaid',
+  VEHICLE_RENEWAL_CLOSED: 'errVehicleRenewalClosed',
 
   /*
    * PUTTING SOMEBODY ON THE REGISTER.

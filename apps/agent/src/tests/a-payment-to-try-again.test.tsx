@@ -87,9 +87,12 @@ describe('a payment attempt that did not go through', () => {
     await waitFor(() => expect(posted).toContain('/payments/initiate'));
   });
 
-  it('offers nothing once the bill is past its deadline, and does not promise it', async () => {
+  it('offers no payment once the bill is past its deadline, and offers to issue it again', async () => {
+    // A lapsed bill is issued again rather than paid; see
+    // `a-bill-that-has-to-be-issued-again.test.tsx`.
     show({ expires_at: new Date(Date.now() - 3_600_000).toISOString() });
-    await screen.findByText(/This bill can no longer be paid/i);
+    await screen.findByText(/This bill has lapsed/i);
+    expect(screen.getByRole('button', { name: /Issue this bill again/i })).toBeTruthy();
     expect(screen.queryByText(/You can start the payment again/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /Start the payment/i })).toBeNull();
   });
