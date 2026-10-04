@@ -192,6 +192,22 @@ describe('FORMULA rate — safe arithmetic evaluator', () => {
     assert.equal(evaluateFormula('10000 / 2', {}), 5000n);
   });
 
+  it('gives one bill for one rate, however the formula is written', () => {
+    // Each division used to round on the spot, and whatever followed
+    // multiplied the rounding: "₦500 per ten square metres" charged a 15 m²
+    // shop ₦1,000 written one way and ₦750 written the other.
+    assert.equal(evaluateFormula('area / 10 * 50000', { area: 15 }), 75000n);
+    assert.equal(evaluateFormula('area * 50000 / 10', { area: 15 }), 75000n);
+    assert.equal(evaluateFormula('(rooms / 3) * 3', { rooms: 4 }), 4n);
+    assert.equal(evaluateFormula('1 / 3 + 1 / 3 + 1 / 3', {}), 1n);
+  });
+
+  it('rounds the final value half-up, and symmetrically below zero', () => {
+    assert.equal(evaluateFormula('5 / 2 - 0', {}), 3n);
+    assert.equal(evaluateFormula('0 - 5 / 2', {}), -3n);
+    assert.equal(evaluateFormula('7 / 3', {}), 2n);
+  });
+
   it('throws 400 on division by zero', () => {
     assert.throws(
       () => computeAmount(baseRate({ rate_type: 'FORMULA', formula: 'baseAmountKobo / 0' }), { baseAmountKobo: '100000' }),

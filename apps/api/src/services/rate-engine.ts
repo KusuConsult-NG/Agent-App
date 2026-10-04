@@ -188,8 +188,16 @@ function computeTiered(base: Kobo, tiers: Tier[]): { amount: Kobo; trace: Comput
 // the caller supplied: a revenue formula is configuration written by a
 // government officer, and configuration must not be able to execute code.
 //
-// Arithmetic is integer (kobo) throughout. Division rounds half-up on the final
-// value only, so a formula stays reproducible.
+// Arithmetic is exact throughout, and the result is rounded half-up to the kobo
+// once, at the end, so a formula stays reproducible.
+//
+// That was the promise and not the practice: each division rounded on the
+// spot, and whatever came after multiplied the rounding. Measured: "₦500 per
+// ten square metres" written `area / 10 * 50000` charged a 15 m² shop
+// ₦1,000, and the same rate written `area * 50000 / 10` charged it ₦750 — a
+// third more for where the officer happened to put the division. And
+// `(rooms / 3) * 3` came to 3 for four rooms. Values are now carried as exact
+// fractions, so two ways of writing one rate give one bill.
 // ---------------------------------------------------------------------------
 
 type Token = { type: 'number'; value: bigint } | { type: 'ident'; value: string } | { type: 'op'; value: string };
@@ -242,9 +250,37 @@ function tokenise(formula: string): Token[] {
 
 const PRECEDENCE: Record<string, number> = { '+': 1, '-': 1, '*': 2, '/': 2 };
 
+/** An exact value: numerator over a positive denominator, kept in lowest terms. */
+interface Fraction {
+  n: bigint;
+  d: bigint;
+}
+
+function gcd(a: bigint, b: bigint): bigint {
+  let x = a < 0n ? -a : a;
+  let y = b;
+  while (y !== 0n) [x, y] = [y, x % y];
+  return x;
+}
+
+function fraction(n: bigint, d: bigint): Fraction {
+  if (d < 0n) [n, d] = [-n, -d];
+  const divisor = gcd(n, d) || 1n;
+  return { n: n / divisor, d: d / divisor };
+}
+
+/** Half-up on the absolute value, so a result is symmetric about zero. */
+function roundHalfUp(value: Fraction): bigint {
+  const negative = value.n < 0n;
+  const absolute = negative ? -value.n : value.n;
+  const quotient = absolute / value.d;
+  const rounded = (absolute % value.d) * 2n >= value.d ? quotient + 1n : quotient;
+  return negative ? -rounded : rounded;
+}
+
 function evaluateFormula(formula: string, inputs: ComputationInputs): Kobo {
   const tokens = tokenise(formula);
-  const values: bigint[] = [];
+  const values: Fraction[] = [];
   const operators: string[] = [];
 
   const applyOperator = () => {
@@ -256,24 +292,17 @@ function evaluateFormula(formula: string, inputs: ComputationInputs): Kobo {
     }
     switch (operator) {
       case '+':
-        values.push(left + right);
+        values.push(fraction(left.n * right.d + right.n * left.d, left.d * right.d));
         break;
       case '-':
-        values.push(left - right);
+        values.push(fraction(left.n * right.d - right.n * left.d, left.d * right.d));
         break;
       case '*':
-        values.push(left * right);
+        values.push(fraction(left.n * right.n, left.d * right.d));
         break;
       case '/': {
-        if (right === 0n) throw badRequest("This revenue item's formula divides by zero.");
-        // Round half-up on the absolute value to keep results symmetric.
-        const negative = left < 0n !== right < 0n;
-        const absLeft = left < 0n ? -left : left;
-        const absRight = right < 0n ? -right : right;
-        const quotient = absLeft / absRight;
-        const remainder = absLeft % absRight;
-        const rounded = remainder * 2n >= absRight ? quotient + 1n : quotient;
-        values.push(negative ? -rounded : rounded);
+        if (right.n === 0n) throw badRequest("This revenue item's formula divides by zero.");
+        values.push(fraction(left.n * right.d, left.d * right.n));
         break;
       }
       default:
@@ -283,7 +312,7 @@ function evaluateFormula(formula: string, inputs: ComputationInputs): Kobo {
 
   for (const token of tokens) {
     if (token.type === 'number') {
-      values.push(token.value);
+      values.push({ n: token.value, d: 1n });
     } else if (token.type === 'ident') {
       const raw = readInput(inputs, token.value);
       if (raw === undefined || raw === null || raw === '') {
@@ -291,7 +320,7 @@ function evaluateFormula(formula: string, inputs: ComputationInputs): Kobo {
           { field: token.value, issue: 'Required input is missing' },
         ]);
       }
-      values.push(parseKobo(typeof raw === 'boolean' ? Number(raw) : raw));
+      values.push({ n: parseKobo(typeof raw === 'boolean' ? Number(raw) : raw), d: 1n });
     } else if (token.value === '(') {
       operators.push(token.value);
     } else if (token.value === ')') {
@@ -320,7 +349,7 @@ function evaluateFormula(formula: string, inputs: ComputationInputs): Kobo {
   if (result === undefined || values.length > 0) {
     throw badRequest("This revenue item's formula is malformed.");
   }
-  return result;
+  return roundHalfUp(result);
 }
 
 /**
