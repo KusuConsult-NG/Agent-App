@@ -48,6 +48,7 @@ const INVOICE = {
   transaction_status: 'INVOICE_GENERATED' as string | null,
   reissued_as: null as string | null,
   reissued_as_number: null as string | null,
+  period_closed: null as string | null,
 };
 
 let invoice: typeof INVOICE;
@@ -132,6 +133,19 @@ describe('an invoice owed again after a reversal', () => {
 
     expect(await screen.findByText(/Owed again after a reversal/i)).toBeTruthy();
     expect(reissueButton()).toBeTruthy();
+  });
+});
+
+describe('an invoice raised in a month that has been closed', () => {
+  it('says why it cannot be paid as it stands, and can be issued again', async () => {
+    // In date, but paying it would add to a month whose figures have been
+    // signed off; the payment path refuses it with INVOICE_PERIOD_CLOSED.
+    invoice = { ...INVOICE, period_closed: '2026-08' };
+    open();
+    await screen.findByText(/Raised in a month that has been closed/i);
+    expect(screen.getByText(/2026-08 has been closed/)).toBeTruthy();
+    fireEvent.click(reissueButton()!);
+    await waitFor(() => expect(posted).toEqual(['/revenue/invoices/inv-7/reissue']));
   });
 });
 

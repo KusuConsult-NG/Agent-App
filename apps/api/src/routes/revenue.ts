@@ -9,6 +9,7 @@ import { idempotent } from '../middleware/idempotency';
 import { asyncHandler, koboSchema, uuidSchema, validateBody, validateQuery } from '../middleware/validate';
 import { assertOwnRecord, callerAgentId, seesEverything } from '../lib/ownership';
 import { notFound, badRequest } from '../lib/errors';
+import { CHARGE_PERIOD_SHUT_SQL } from '../lib/payable-invoice';
 import * as revenue from '../services/revenue';
 import { recordAudit } from '../services/audit';
 import { recordTaxpayerAccess } from '../services/taxpayer-access';
@@ -460,7 +461,11 @@ revenueRouter.get(
               rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
               t.transaction_reference, t.status AS transaction_status,
               -- What replaced it, by number, so the screen can say so.
-              replacement.invoice_number AS reissued_as_number
+              replacement.invoice_number AS reissued_as_number,
+              -- The closed month it was raised in, while its charge still waits
+              -- for a payment: issued again before it is paid.
+              CASE WHEN t.status IN ('INVOICE_GENERATED', 'FAILED') THEN ${CHARGE_PERIOD_SHUT_SQL} END
+                AS period_closed
          FROM invoices i
          JOIN assessments a ON a.id = i.assessment_id
          JOIN revenue_items ri ON ri.id = a.revenue_item_id

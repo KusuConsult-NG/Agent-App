@@ -2580,6 +2580,8 @@ export interface TranslationDictionary {
   ofcChLapsedNoDate: string;
   ofcChStrandedTitle: string;
   ofcChStranded: string;
+  ofcChMonthClosedTitle: string;
+  ofcChMonthClosed: string;
   ofcChReplacedTitle: string;
   ofcChReplaced: string;
   ofcChOpenReplacement: string;
@@ -6420,6 +6422,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcChLapsedNoDate: "This invoice has lapsed. The platform will refuse money against it, so it has to be issued again before anything can be collected.",
     ofcChStrandedTitle: "Owed again after a reversal",
     ofcChStranded: "A payment against this invoice was reversed for a reason that was not the State's, so the money is owed again — but its old charge cannot take a payment. Issue it again to collect it.",
+    ofcChMonthClosedTitle: "Raised in a month that has been closed",
+    ofcChMonthClosed: "This bill is still in date, but {{period}} has been closed, so it cannot be paid as it stands. Issue it again — for the same amount and the same deadline — and take the payment against the new invoice.",
     ofcChReplacedTitle: "Issued again",
     ofcChReplaced: "This invoice was replaced by {{number}}, for the same amount. Money is taken against the new invoice, not this one.",
     ofcChOpenReplacement: "Open {{number}}",
@@ -10049,6 +10053,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcChLapsedNoDate: "Wannan takardar biya ta kare. Dandalin zai ki karbar kudi a kanta, don haka sai an sake fitar da ita kafin a iya karbar komai.",
     ofcChStrandedTitle: "Ana bin kudin kuma bayan mayarwa",
     ofcChStranded: "An mayar da wani biya da aka yi kan wannan takardar biya saboda dalilin da ba na Gwamnati ba, don haka ana bin kudin kuma — amma tsohon cajinta ba zai iya karbar biya ba. A sake fitar da ita don a karba.",
+    ofcChMonthClosedTitle: "An fitar da ita a watan da aka rufe",
+    ofcChMonthClosed: "Wa’adin wannan takardar biya bai kare ba, amma an rufe {{period}}, don haka ba za a iya biyanta yadda take ba. A sake fitar da ita — a kan adadin kudi daya da wa’adi daya — sannan a karbi biyan a kan sabuwar takardar biya.",
     ofcChReplacedTitle: "An sake fitar da ita",
     ofcChReplaced: "An maye gurbin wannan takardar biya da {{number}}, a kan adadin kudi daya. Ana karbar kudi a kan sabuwar takardar, ba a kan wannan ba.",
     ofcChOpenReplacement: "Bude {{number}}",

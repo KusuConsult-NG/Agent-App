@@ -30,6 +30,7 @@ import assert from 'node:assert/strict';
 import { REVENUE_RECOGNISED_STATES } from '@psirs/shared';
 import {
   createGovernmentUser,
+  get,
   loginAs,
   pool,
   post,
@@ -166,6 +167,11 @@ describe('a bill still open when its month was closed', () => {
       { needs_reissue: true, period_closed: CLOSED },
       'the list offered a payment the server would refuse',
     );
+
+    // And the invoice's own record says so, for the officer's charge page.
+    const read = await get(`/revenue/invoices/${bill.invoiceId}`, asAgent());
+    assert.equal(read.status, 200, JSON.stringify(read.body));
+    assert.equal(read.body.period_closed, CLOSED);
 
     // Refused before the gateway is asked for anything.
     const paying = await post(

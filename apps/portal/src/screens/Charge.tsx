@@ -85,6 +85,8 @@ interface InvoiceRecord {
   /** The invoice issued in its place, when it has been issued again. */
   reissued_as: string | null;
   reissued_as_number: string | null;
+  /** The closed month it was raised in, while its charge waits for a payment. */
+  period_closed?: string | null;
 }
 
 interface AssessmentRecord {
@@ -231,7 +233,14 @@ export function InvoiceScreen({
     record.status === 'UNPAID' &&
     !pastDeadline &&
     (record.transaction_status === 'REVERSED' || record.transaction_status === 'REFUNDED');
-  const mayReissue = (lapsed || stranded) && can('invoice:create');
+  /*
+   * In date, but raised in a month whose figures have since been signed off:
+   * paying it would add to them, so it is issued again into an open month
+   * first — same amount, same deadline. See INVOICE_PERIOD_CLOSED.
+   */
+  const monthClosed =
+    record.status === 'UNPAID' && !pastDeadline && !record.reissued_as && Boolean(record.period_closed);
+  const mayReissue = (lapsed || stranded || monthClosed) && can('invoice:create');
   /*
    * A bill raised in error — a duplicate, a charge against the wrong record —
    * is withdrawn by approval: asked here, decided by another officer in the
@@ -320,6 +329,14 @@ export function InvoiceScreen({
         {stranded && (
           <Alert kind="warning" title="ofcChStrandedTitle">
             <p style={{ margin: 0 }}>{t.ofcChStranded}</p>
+          </Alert>
+        )}
+
+        {monthClosed && (
+          <Alert kind="warning" title="ofcChMonthClosedTitle">
+            <p style={{ margin: 0 }}>
+              {t.ofcChMonthClosed.replace('{{period}}', record.period_closed ?? '')}
+            </p>
           </Alert>
         )}
 
