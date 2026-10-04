@@ -105,8 +105,9 @@ describe('the verification answer', () => {
    * Every answer, not just the four above. A code with no string would render
    * `undefined` to somebody asking whether their money arrived.
    */
-  it('has a Hausa sentence for all thirteen answers', () => {
-    expect(VERIFICATION_REASONS.length).toBe(13);
+  it('has a Hausa sentence for all eighteen answers', () => {
+    // Thirteen, and five for an invoice answered by its bill.
+    expect(VERIFICATION_REASONS.length).toBe(18);
     for (const reason of VERIFICATION_REASONS) {
       const key = VERIFICATION_TEXT[reason];
       expect(key, `${reason} has no dictionary key`).toBeTruthy();
@@ -186,6 +187,28 @@ describe('verifying something that is not a receipt', () => {
     await waitFor(() =>
       expect(screen.getByText(ha[VERIFICATION_TEXT.ACKNOWLEDGEMENT_NOT_RECEIPT]!)).toBeTruthy(),
     );
+  });
+
+  it('does not call a certificate a receipt', async () => {
+    answeredWithDocument('DOCUMENT_GENUINE', 'VEHICLE_CERTIFICATE');
+    await verify();
+    await waitFor(() => expect(screen.getByText(ha.pubVerdictValid!)).toBeTruthy());
+    expect(screen.queryByText(ha.genuineReceipt!)).toBeNull();
+  });
+
+  it('heads a genuine invoice as an invoice, not a receipt', async () => {
+    answeredWithDocument('INVOICE_PAYABLE', 'INVOICE', { documentNumber: 'INV/2026/000777' });
+    await verify();
+    await waitFor(() => expect(screen.getByText(ha.pubVerdictInvoice!)).toBeTruthy());
+    expect(screen.queryByText(ha.genuineReceipt!)).toBeNull();
+    expect(screen.getByText(ha[VERIFICATION_TEXT.INVOICE_PAYABLE]!)).toBeTruthy();
+  });
+
+  it('heads a lapsed invoice as not valid, without calling it a receipt', async () => {
+    answeredWithDocument('INVOICE_LAPSED', 'INVOICE', { status: 'INVALID', documentNumber: 'INV/2026/000777' });
+    await verify();
+    await waitFor(() => expect(screen.getByText(ha.pubVerdictInvalid!)).toBeTruthy());
+    expect(screen.queryByText(ha.receiptNotValid!)).toBeNull();
   });
 
   it('shows the document number a certificate is identified by', async () => {

@@ -2662,6 +2662,7 @@ export interface TranslationDictionary {
    */
   pubVerdictValid: string;
   pubVerdictAcknowledgement: string;
+  pubVerdictInvoice: string;
   pubVerdictReversed: string;
   pubVerdictNotFound: string;
   pubVerdictInvalid: string;
@@ -3577,6 +3578,12 @@ export interface TranslationDictionary {
   pubVerifyAction: string;
   pubVerifyChecking: string;
   pubVerifyReceiptNumber: string;
+  pubVerifyDocumentNumber: string;
+  verifyInvoicePayable: string;
+  verifyInvoicePaid: string;
+  verifyInvoiceReplaced: string;
+  verifyInvoiceWithdrawn: string;
+  verifyInvoiceLapsed: string;
   pubVerifyRevenueType: string;
   pubVerifyAmount: string;
   pubVerifyIssued: string;
@@ -5360,7 +5367,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcIgSince: "Since",
     ofcIgPayableNow: "Can be paid now",
     ofcIgPayableYes: "Yes",
-    ofcIgPayableNeedsReassessment: "No — needs a fresh assessment",
+    ofcIgPayableNeedsReassessment: "No — it has to be issued again",
     ofcIgOwesNothing: "They owe the State nothing.",
     enumAsserted: "Claimed",
     enumConfirmedByTaxpayer: "Confirmed by the taxpayer",
@@ -5377,12 +5384,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcArWithin30: "30 days",
     ofcArCollectableNow: "Collectable now",
     ofcArTaxpayers: "Taxpayers owing",
-    ofcArNeedsReassessment: "Needs re-assessment",
+    ofcArNeedsReassessment: "Needs issuing again",
     ofcArEndedElsewhere: "Owed by closed records",
     ofcArWhoIsMissing: "Who is not on this list",
     ofcArInFlightExplained: "Anyone part-way through paying is left off, so this list is safe to work as it stands: {{n}} invoice(s) are excluded because a payment is running against them right now. Nobody holding a receipt will be called.",
     ofcArLapsedTitle: "Debt that cannot be paid as it stands",
-    ofcArLapsedExplained: "{{n}} invoice(s) have passed their payment deadline. The platform will refuse money against them, so they are counted above but kept off the call list — collecting means raising a fresh assessment first.",
+    ofcArLapsedExplained: "{{n}} invoice(s) have passed their payment deadline. The platform will refuse money against them, so they are counted above but kept off the call list — collecting means issuing the bill again first, from the bill itself.",
     ofcArWhoToCall: "Who to call",
     ofcArShowingLargest: "Showing the {{n}} largest of the {{m}} debts on this list. Narrow by LGA or amount to see further down.",
     ofcArFiltersAreNarrower: "The four figures above cover everyone in this scope. The list below is narrower: {{n}} taxpayer(s), owing {{amount}} between them, meet the amount and the deadline you asked for.",
@@ -6480,6 +6487,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     stepUpAuthoriseFailed: "Could not authorise this.",
     pubVerdictValid: "VALID",
     pubVerdictAcknowledgement: "VALID — NOT A RECEIPT",
+    pubVerdictInvoice: "VALID — AN INVOICE, NOT A RECEIPT",
     pubVerdictReversed: "REVERSED",
     pubVerdictNotFound: "NOT FOUND",
     pubVerdictInvalid: "INVALID",
@@ -7288,6 +7296,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubVerifyAction: 'Verify',
     pubVerifyChecking: 'Checking…',
     pubVerifyReceiptNumber: 'Receipt number',
+    pubVerifyDocumentNumber: 'Document number',
+    verifyInvoicePayable: 'This is a genuine PSIRS invoice, and it can still be paid.',
+    verifyInvoicePaid: 'This is a genuine PSIRS invoice, and it has been paid. Nothing more is owed on it.',
+    verifyInvoiceReplaced: 'This invoice was replaced by a new one for the same amount and can no longer be paid. Pay against the new invoice, not this one.',
+    verifyInvoiceWithdrawn: 'This invoice was withdrawn and nothing is owed on it. Do not pay against it.',
+    verifyInvoiceLapsed: 'This is a genuine PSIRS invoice, but its payment deadline has passed and it cannot be paid as it stands. A revenue agent or PSIRS office can issue it again for the same amount.',
     pubVerifyRevenueType: 'Revenue type',
     pubVerifyAmount: 'Amount',
     pubVerifyIssued: 'Issued',
@@ -8972,7 +8986,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcIgSince: "Tun",
     ofcIgPayableNow: "Ana iya biya yanzu",
     ofcIgPayableYes: "Eh",
-    ofcIgPayableNeedsReassessment: "A’a — yana bukatar sabon kimantawa",
+    ofcIgPayableNeedsReassessment: "A’a — sai an sake fitar da ita",
     ofcIgOwesNothing: "Ba sa bin jiha komai.",
     enumAsserted: "An yi ikirari",
     enumConfirmedByTaxpayer: "Mai biyan haraji ya tabbatar",
@@ -8989,12 +9003,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcArWithin30: "Kwana 30",
     ofcArCollectableNow: "Ana iya karba yanzu",
     ofcArTaxpayers: "Masu biyan haraji da ke bin bashi",
-    ofcArNeedsReassessment: "Yana bukatar sake kimantawa",
+    ofcArNeedsReassessment: "Sai an sake fitar da su",
     ofcArEndedElsewhere: "Bashin rikodin da aka rufe",
     ofcArWhoIsMissing: "Wanda ba ya cikin wannan jerin",
     ofcArInFlightExplained: "An bar duk wanda ke tsakiyar biya, don haka ana iya aiki da wannan jerin kamar yadda yake: an cire daftari {{n}} saboda ana biya a kansu yanzu. Ba za a kira wanda ke rike da rasit ba.",
     ofcArLapsedTitle: "Bashin da ba a iya biya kamar yadda yake",
-    ofcArLapsedExplained: "Daftari {{n}} sun wuce ranar karshen biya. Tsarin zai ki karbar kudi a kansu, don haka an kidaya su a sama amma ba a sa su cikin jerin kira ba — karba yana nufin fara sabon kimantawa.",
+    ofcArLapsedExplained: "Daftari {{n}} sun wuce ranar karshen biya. Tsarin zai ki karbar kudi a kansu, don haka an kidaya su a sama amma ba a sa su cikin jerin kira ba — karba yana nufin a fara sake fitar da takardar biyan, daga takardar kanta.",
     ofcArWhoToCall: "Wanda za a kira",
     ofcArShowingLargest: "Ana nuna manyan bashi {{n}} daga cikin bashi {{m}} da ke wannan jerin. Ka rage ta LGA ko adadi domin ganin kasa.",
     ofcArFiltersAreNarrower: "Jimillar hudu da ke sama sun kunshi kowa a wannan iyaka. Jerin da ke kasa ya fi kankanta: masu biyan haraji {{n}}, da ke bin {{amount}} tsakaninsu, sun dace da adadin da ranar karshe da ka nema.",
@@ -10092,6 +10106,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     stepUpAuthoriseFailed: "Ba a iya bada izinin wannan ba.",
     pubVerdictValid: "INGANTACCE",
     pubVerdictAcknowledgement: "INGANTACCE — BA RASIT BA NE",
+    pubVerdictInvoice: "INGANTACCE — TAKARDAR BIYA CE, BA RASIT BA",
     pubVerdictReversed: "AN JUYAR DA SHI",
     pubVerdictNotFound: "BA A SAMU BA",
     pubVerdictInvalid: "BA INGANTACCE BA",
@@ -10900,6 +10915,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubVerifyAction: 'Tantance',
     pubVerifyChecking: 'Ana bincike…',
     pubVerifyReceiptNumber: 'Lambar rasit',
+    pubVerifyDocumentNumber: 'Lambar takarda',
+    verifyInvoicePayable: 'Wannan takardar biya ta PSIRS ce ta gaskiya, kuma har yanzu ana iya biyanta.',
+    verifyInvoicePaid: 'Wannan takardar biya ta PSIRS ce ta gaskiya, kuma an biya ta. Babu sauran bashi a kanta.',
+    verifyInvoiceReplaced: 'An maye gurbin wannan takardar biya da sabuwa a kan adadin kudi daya, kuma ba za a iya biyanta ba. A biya a kan sabuwar takardar, ba wannan ba.',
+    verifyInvoiceWithdrawn: 'An janye wannan takardar biya kuma babu bashin komai a kanta. Kada a biya a kanta.',
+    verifyInvoiceLapsed: 'Wannan takardar biya ta PSIRS ce ta gaskiya, amma lokacin biyanta ya wuce kuma ba za a iya biyanta yadda take ba. Wakilin karbar haraji ko ofishin PSIRS na iya sake fitar da ita a kan adadin kudi daya.',
     pubVerifyRevenueType: 'Nau’in haraji',
     pubVerifyAmount: 'Adadi',
     pubVerifyIssued: 'Ranar bayarwa',
@@ -11330,7 +11351,7 @@ export const DUPLICATE_REASON_TEXT: Record<DuplicateReason, keyof TranslationDic
 };
 
 /**
- * The eleven verification answers, as dictionary keys.
+ * The verification answers, as dictionary keys.
  *
  * The third such table, after `BLOCKER_TEXT` and `DUPLICATE_REASON_TEXT`, and
  * the one where being wrong costs the most: these sentences tell somebody
@@ -11351,6 +11372,11 @@ export const VERIFICATION_TEXT: Record<VerificationReason, keyof TranslationDict
   DOCUMENT_EXPIRED: 'verifyDocumentExpired',
   DOCUMENT_GENUINE: 'verifyDocumentGenuine',
   DOCUMENT_GENUINE_UNCHECKED: 'verifyDocumentGenuineUnchecked',
+  INVOICE_PAYABLE: 'verifyInvoicePayable',
+  INVOICE_PAID: 'verifyInvoicePaid',
+  INVOICE_REPLACED: 'verifyInvoiceReplaced',
+  INVOICE_WITHDRAWN: 'verifyInvoiceWithdrawn',
+  INVOICE_LAPSED: 'verifyInvoiceLapsed',
 };
 
 /**

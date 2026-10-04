@@ -13,7 +13,7 @@
  * mention it.
  *
  * That lapsed debt is counted but not listed. It cannot be paid as it stands,
- * so it needs a fresh assessment rather than a phone call. A figure with no
+ * so it needs issuing again rather than only a phone call. A figure with no
  * explanation would have officers hunting the table for names deliberately
  * not in it.
  */
@@ -122,7 +122,9 @@ describe('what the officer is told before they start ringing', () => {
     expect(
       note.textContent,
       'an officer told only that money is missing will go looking for it on this page',
-    ).toMatch(/fresh assessment/i);
+    ).toMatch(/issuing the bill again/i);
+    // Not the old advice, which billed the taxpayer a second time beside the first.
+    expect(note.textContent).not.toMatch(/fresh assessment/i);
   });
 
   it('says nothing about lapsed debt when there is none', async () => {

@@ -146,7 +146,10 @@ export function VerifyScreen({ code }: { code?: string }) {
                      */
                     result.documentType === 'PAYMENT_ACKNOWLEDGEMENT'
                     ? t.pubVerdictAcknowledgement
-                    : t.pubVerdictValid
+                    : // A genuine invoice is a demand, not proof of payment.
+                      result.documentType === 'INVOICE'
+                      ? t.pubVerdictInvoice
+                      : t.pubVerdictValid
                   : result.status === 'REVERSED'
                     ? t.pubVerdictReversed
                     : result.status === 'NOT_FOUND'
@@ -177,7 +180,12 @@ export function VerifyScreen({ code }: { code?: string }) {
             {(result.receiptNumber || result.documentNumber) && (
               <KeyValue
                 items={[
-                  [t.pubVerifyReceiptNumber, result.receiptNumber ?? result.documentNumber ?? '—'],
+                  // A receipt's number is a receipt number; an invoice's is not, and
+                  // "Receipt number" under a green tick made an unpaid bill read as paid.
+                  [
+                    result.receiptNumber ? t.pubVerifyReceiptNumber : t.pubVerifyDocumentNumber,
+                    result.receiptNumber ?? result.documentNumber ?? '—',
+                  ],
                   /*
                    * What the citizen paid for, in words a citizen uses.
                    *

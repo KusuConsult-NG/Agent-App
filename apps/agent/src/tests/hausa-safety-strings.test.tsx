@@ -131,6 +131,7 @@ const SAFETY_KEYS: (keyof TranslationDictionary)[] = [
   // not, which is the failure this tier exists to catch.
   'pubVerdictValid',
   'pubVerdictAcknowledgement',
+  'pubVerdictInvoice',
   'pubVerdictReversed',
   'pubVerdictNotFound',
   'pubVerdictInvalid',
@@ -160,6 +161,11 @@ const SAFETY_KEYS: (keyof TranslationDictionary)[] = [
   'verifyDocumentExpired',
   'verifyDocumentGenuine',
   'verifyDocumentGenuineUnchecked',
+  'verifyInvoicePayable',
+  'verifyInvoicePaid',
+  'verifyInvoiceReplaced',
+  'verifyInvoiceWithdrawn',
+  'verifyInvoiceLapsed',
 ];
 
 describe('the safety tier is really in Hausa', () => {

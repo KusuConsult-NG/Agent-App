@@ -1,6 +1,6 @@
 # Hausa review: everything still waiting on a decision
 
-`HAUSA-REVIEW.md` carries all 3,515 dictionary strings, and most of its length
+`HAUSA-REVIEW.md` carries all 3,522 dictionary strings, and most of its length
 is those tables. The open questions are scattered through seven sections of the
 prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
@@ -34,7 +34,7 @@ about field staff. Counting says otherwise:
 | The agent app | 250 |
 | The officer portal | 150 |
 | Citizens, referees and group leaders | 43 |
-| **Total** | **443** of 3,515 |
+| **Total** | **443** of 3,522 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
@@ -411,7 +411,7 @@ roll. If any correction you make runs long, that test will say so rather than
 the receipt.
 
 **And `scanHelp` was not the only dead string in this table.** Checking it
-raised the obvious next question, so it was measured: **43 of the 3,515 keys
+raised the obvious next question, so it was measured: **43 of the 3,522 keys
 are never named anywhere outside the dictionary**, and four of them are in the
 table above — `statusOffline`, `offlineMessage`, `statusFailed`, and
 `civicDutyThanks`, the one the `Mungode` typo was in. Three of the four

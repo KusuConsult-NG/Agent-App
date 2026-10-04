@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > nineteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,515 strings; that one is two pages and links back
+> because it carries all 3,522 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,515 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,522 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,515 strings is worse than no sheet, because it looks complete; this one cannot
+3,522 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,515 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,522 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,515 strings: where the
+- The glossary below is applied consistently across all 3,522 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -470,6 +470,7 @@ quietly leave it.
 | `colInvoiceNoReference` | Start the payment first if they want to pay at a bank: the reference a bank asks for is issued then, and the invoice does not carry it. | Ka fara biyan kudin idan suna son biya a banki: lambar da banki ke nema ana bayar da ita a lokacin, kuma takardar biya ba ta dauke da ita ba. | ☐ | |
 | `pubVerdictValid` | VALID | INGANTACCE | ☐ | |
 | `pubVerdictAcknowledgement` | VALID — NOT A RECEIPT | INGANTACCE — BA RASIT BA NE | ☐ | |
+| `pubVerdictInvoice` | VALID — AN INVOICE, NOT A RECEIPT | INGANTACCE — TAKARDAR BIYA CE, BA RASIT BA | ☐ | |
 | `pubVerdictReversed` | REVERSED | AN JUYAR DA SHI | ☐ | |
 | `pubVerdictNotFound` | NOT FOUND | BA A SAMU BA | ☐ | |
 | `pubVerdictInvalid` | INVALID | BA INGANTACCE BA | ☐ | |
@@ -486,10 +487,15 @@ quietly leave it.
 | `verifyDocumentExpired` | This document expired on {{date}}. | Wannan takardar ta kare a {{date}}. | ☐ | |
 | `verifyDocumentGenuine` | This is a genuine government document issued by PSIRS. | Wannan takardar gwamnati ce ta gaskiya wadda PSIRS ta bayar. | ☐ | |
 | `verifyDocumentGenuineUnchecked` | This is a genuine government document issued by PSIRS. The stored copy could not be checked just now, so its fingerprint has not been confirmed on this attempt. | Wannan takardar gwamnati ce ta gaskiya wadda PSIRS ta bayar. Ba a iya duba kwafin da aka adana a yanzu ba, don haka ba a tabbatar da asalin sa a wannan yunkurin ba. | ☐ | |
+| `verifyInvoicePayable` | This is a genuine PSIRS invoice, and it can still be paid. | Wannan takardar biya ta PSIRS ce ta gaskiya, kuma har yanzu ana iya biyanta. | ☐ | |
+| `verifyInvoicePaid` | This is a genuine PSIRS invoice, and it has been paid. Nothing more is owed on it. | Wannan takardar biya ta PSIRS ce ta gaskiya, kuma an biya ta. Babu sauran bashi a kanta. | ☐ | |
+| `verifyInvoiceReplaced` | This invoice was replaced by a new one for the same amount and can no longer be paid. Pay against the new invoice, not this one. | An maye gurbin wannan takardar biya da sabuwa a kan adadin kudi daya, kuma ba za a iya biyanta ba. A biya a kan sabuwar takardar, ba wannan ba. | ☐ | |
+| `verifyInvoiceWithdrawn` | This invoice was withdrawn and nothing is owed on it. Do not pay against it. | An janye wannan takardar biya kuma babu bashin komai a kanta. Kada a biya a kanta. | ☐ | |
+| `verifyInvoiceLapsed` | This is a genuine PSIRS invoice, but its payment deadline has passed and it cannot be paid as it stands. A revenue agent or PSIRS office can issue it again for the same amount. | Wannan takardar biya ta PSIRS ce ta gaskiya, amma lokacin biyanta ya wuce kuma ba za a iya biyanta yadda take ba. Wakilin karbar haraji ko ofishin PSIRS na iya sake fitar da ita a kan adadin kudi daya. | ☐ | |
 
 ### B · The rest of the dictionary, by screen
 
-3428 strings, grouped by where an agent meets them. Lower stakes
+3429 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -1688,12 +1694,12 @@ instructions — but they are what an agent reads all day.
 | `ofcArWithin30` | 30 days | Kwana 30 | ☐ | |
 | `ofcArCollectableNow` | Collectable now | Ana iya karba yanzu | ☐ | |
 | `ofcArTaxpayers` | Taxpayers owing | Masu biyan haraji da ke bin bashi | ☐ | |
-| `ofcArNeedsReassessment` | Needs re-assessment | Yana bukatar sake kimantawa | ☐ | |
+| `ofcArNeedsReassessment` | Needs issuing again | Sai an sake fitar da su | ☐ | |
 | `ofcArEndedElsewhere` | Owed by closed records | Bashin rikodin da aka rufe | ☐ | |
 | `ofcArWhoIsMissing` | Who is not on this list | Wanda ba ya cikin wannan jerin | ☐ | |
 | `ofcArInFlightExplained` | Anyone part-way through paying is left off, so this list is safe to work as it stands: {{n}} invoice(s) are excluded because a payment is running against them right now. Nobody holding a receipt will be called. | An bar duk wanda ke tsakiyar biya, don haka ana iya aiki da wannan jerin kamar yadda yake: an cire daftari {{n}} saboda ana biya a kansu yanzu. Ba za a kira wanda ke rike da rasit ba. | ☐ | |
 | `ofcArLapsedTitle` | Debt that cannot be paid as it stands | Bashin da ba a iya biya kamar yadda yake | ☐ | |
-| `ofcArLapsedExplained` | {{n}} invoice(s) have passed their payment deadline. The platform will refuse money against them, so they are counted above but kept off the call list — collecting means raising a fresh assessment first. | Daftari {{n}} sun wuce ranar karshen biya. Tsarin zai ki karbar kudi a kansu, don haka an kidaya su a sama amma ba a sa su cikin jerin kira ba — karba yana nufin fara sabon kimantawa. | ☐ | |
+| `ofcArLapsedExplained` | {{n}} invoice(s) have passed their payment deadline. The platform will refuse money against them, so they are counted above but kept off the call list — collecting means issuing the bill again first, from the bill itself. | Daftari {{n}} sun wuce ranar karshen biya. Tsarin zai ki karbar kudi a kansu, don haka an kidaya su a sama amma ba a sa su cikin jerin kira ba — karba yana nufin a fara sake fitar da takardar biyan, daga takardar kanta. | ☐ | |
 | `ofcArWhoToCall` | Who to call | Wanda za a kira | ☐ | |
 | `ofcArShowingLargest` | Showing the {{n}} largest of the {{m}} debts on this list. Narrow by LGA or amount to see further down. | Ana nuna manyan bashi {{n}} daga cikin bashi {{m}} da ke wannan jerin. Ka rage ta LGA ko adadi domin ganin kasa. | ☐ | |
 | `ofcArFiltersAreNarrower` | The four figures above cover everyone in this scope. The list below is narrower: {{n}} taxpayer(s), owing {{amount}} between them, meet the amount and the deadline you asked for. | Jimillar hudu da ke sama sun kunshi kowa a wannan iyaka. Jerin da ke kasa ya fi kankanta: masu biyan haraji {{n}}, da ke bin {{amount}} tsakaninsu, sun dace da adadin da ranar karshe da ka nema. | ☐ | |
@@ -1758,7 +1764,7 @@ instructions — but they are what an agent reads all day.
 | `ofcIgSince` | Since | Tun | ☐ | |
 | `ofcIgPayableNow` | Can be paid now | Ana iya biya yanzu | ☐ | |
 | `ofcIgPayableYes` | Yes | Eh | ☐ | |
-| `ofcIgPayableNeedsReassessment` | No — needs a fresh assessment | A’a — yana bukatar sabon kimantawa | ☐ | |
+| `ofcIgPayableNeedsReassessment` | No — it has to be issued again | A’a — sai an sake fitar da ita | ☐ | |
 | `ofcIgOwesNothing` | They owe the State nothing. | Ba sa bin jiha komai. | ☐ | |
 
 #### The officer portal — employers and payroll returns
@@ -3381,6 +3387,7 @@ instructions — but they are what an agent reads all day.
 | `pubVerifyAction` | Verify | Tantance | ☐ | |
 | `pubVerifyChecking` | Checking… | Ana bincike… | ☐ | |
 | `pubVerifyReceiptNumber` | Receipt number | Lambar rasit | ☐ | |
+| `pubVerifyDocumentNumber` | Document number | Lambar takarda | ☐ | |
 | `pubVerifyRevenueType` | Revenue type | Nau’in haraji | ☐ | |
 | `pubVerifyAmount` | Amount | Adadi | ☐ | |
 | `pubVerifyIssued` | Issued | Ranar bayarwa | ☐ | |

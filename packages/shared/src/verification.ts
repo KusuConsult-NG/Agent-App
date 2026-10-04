@@ -42,6 +42,27 @@ export const VERIFICATION_REASONS = [
   'DOCUMENT_EXPIRED',
   'DOCUMENT_GENUINE',
   'DOCUMENT_GENUINE_UNCHECKED',
+  /*
+   * An invoice, answered by the bill rather than by its paper.
+   *
+   * Every invoice verified as "a genuine government document issued by
+   * PSIRS" for ever — paid, replaced, withdrawn or lapsed — because the
+   * answer came from the PDF's register row, which none of those changes.
+   * And an invoice whose PDF had not been made was "not issued by PSIRS",
+   * though its code is printed on the officer's screen. A trader checking a
+   * demand before paying it needs to know whether it can be paid, and to
+   * whom it is owed now.
+   */
+  /** Genuine, unpaid, and still in date. */
+  'INVOICE_PAYABLE',
+  /** Genuine, and paid. */
+  'INVOICE_PAID',
+  /** Replaced by a new invoice for the same debt; pay that one. */
+  'INVOICE_REPLACED',
+  /** Withdrawn; nothing is owed on it. */
+  'INVOICE_WITHDRAWN',
+  /** Genuine, past its deadline; an agent can issue it again. */
+  'INVOICE_LAPSED',
 ] as const;
 
 export type VerificationReason = (typeof VERIFICATION_REASONS)[number];
@@ -85,6 +106,15 @@ export const VERIFICATION_SENTENCES: Record<VerificationReason, string> = {
   DOCUMENT_GENUINE_UNCHECKED:
     'This is a genuine government document issued by PSIRS. The stored copy could not be checked ' +
     'just now, so its fingerprint has not been confirmed on this attempt.',
+  INVOICE_PAYABLE: 'This is a genuine PSIRS invoice, and it can still be paid.',
+  INVOICE_PAID: 'This is a genuine PSIRS invoice, and it has been paid. Nothing more is owed on it.',
+  INVOICE_REPLACED:
+    'This invoice was replaced by a new one for the same amount and can no longer be paid. ' +
+    'Pay against the new invoice, not this one.',
+  INVOICE_WITHDRAWN: 'This invoice was withdrawn and nothing is owed on it. Do not pay against it.',
+  INVOICE_LAPSED:
+    'This is a genuine PSIRS invoice, but its payment deadline has passed and it cannot be paid ' +
+    'as it stands. A revenue agent or PSIRS office can issue it again for the same amount.',
 };
 
 /** The English for a verification answer, for the log rather than the screen. */
