@@ -795,13 +795,61 @@ export async function expireLapsedInvoices(params: {
  * A paid bill is still not withdrawn here, for the reason `paye.ts` gives:
  * money that has reached a government account comes back through a refund,
  * with the accountability a refund carries.
+ *
+ * AND ITS CHARGE IS CLOSED, OR THE DECISION WAITS.
+ *
+ * This cancelled the invoice and nothing else. The charge behind it stayed
+ * INVOICE_GENERATED for good — the expiry sweep reads UNPAID invoices, and
+ * this one no longer was — so the field app's transaction screen went on
+ * saying "payment not yet confirmed" over a start button the server refused.
+ * The charge is closed now, as the bill raised in error closes it.
+ *
+ * And a bill somebody was part-way through paying was cancelled under them.
+ * Measured: a trader starts paying, the objection is upheld while the gateway
+ * holds the attempt, and the gateway then confirms. The invoice went from
+ * CANCELLED to PAID — the settlement writes PAID over whatever was there —
+ * and the trader had paid ₦48,000 on an estimate the State had just agreed was
+ * wrong, against an assessment reading WITHDRAWN, with nothing anywhere
+ * saying a refund was owed. The decision now refuses while a payment is
+ * moving, in the words every other path that ends a bill uses; once it has
+ * settled the bill is either paid, and left for a refund, or not, and
+ * withdrawn.
  */
-export async function withdrawUnpaidBill(db: Db, assessmentId: string): Promise<void> {
-  await db.query(
-    `UPDATE invoices SET status = 'CANCELLED'
-      WHERE assessment_id = $1 AND status IN ('UNPAID', 'PARTIALLY_PAID', 'EXPIRED')`,
+export async function withdrawUnpaidBill(
+  client: PoolClient,
+  assessmentId: string,
+  params: { actorId: string; reason: string },
+): Promise<void> {
+  const invoices = await query<{ id: string; invoice_number: string }>(
+    client,
+    `SELECT id, invoice_number FROM invoices
+      WHERE assessment_id = $1 AND status IN ('UNPAID', 'PARTIALLY_PAID', 'EXPIRED')
+      ORDER BY created_at
+      FOR UPDATE`,
     [assessmentId],
   );
+
+  for (const invoice of invoices) {
+    const transactions = await chargesAtRest(
+      client,
+      invoice,
+      true,
+      'Decide once it has settled. If it goes through, the bill has been paid, and what was paid comes back through a refund.',
+    );
+
+    await client.query(`UPDATE invoices SET status = 'CANCELLED' WHERE id = $1`, [invoice.id]);
+
+    for (const transaction of transactions) {
+      if (!['ASSESSMENT_CREATED', 'INVOICE_GENERATED', 'FAILED'].includes(transaction.status)) continue;
+      await transitionTransaction(client, {
+        transactionId: transaction.id,
+        to: 'CANCELLED',
+        reason: `Invoice ${invoice.invoice_number} withdrawn: ${params.reason}`,
+        actorId: params.actorId,
+        source: 'OFFICER',
+      });
+    }
+  }
 }
 
 /**
@@ -1247,10 +1295,32 @@ async function withdrawableInvoice(client: PoolClient, invoiceId: string, lock: 
     );
   }
 
+  const transactions = await chargesAtRest(
+    client,
+    invoice,
+    lock,
+    'Check the payment status first. A bill somebody is paying is not withdrawn.',
+  );
+  return { invoice, transactions };
+}
+
+/**
+ * A bill's charges, provided nothing is moving against any of them.
+ *
+ * Refuses while an attempt is in flight or money is held — the gateway's or
+ * the State's — because a bill ended under a payment is a bill the payment
+ * then settles: the settlement writes PAID over whatever status it finds.
+ */
+async function chargesAtRest(
+  client: PoolClient,
+  invoice: { id: string; invoice_number: string },
+  lock: boolean,
+  nextStep: string,
+) {
   const transactions = await query<{ id: string; status: string }>(
     client,
     `SELECT id, status FROM transactions WHERE invoice_id = $1 ORDER BY created_at ${lock ? 'FOR UPDATE' : ''}`,
-    [invoiceId],
+    [invoice.id],
   );
   const paymentInFlight = await queryOne<{ id: string }>(
     client,
@@ -1258,16 +1328,16 @@ async function withdrawableInvoice(client: PoolClient, invoiceId: string, lock: 
        JOIN transactions t ON t.id = p.transaction_id
       WHERE t.invoice_id = $1 AND p.status IN ('INITIATED','PENDING','SUCCESSFUL','VERIFIED')
       LIMIT 1`,
-    [invoiceId],
+    [invoice.id],
   );
   if (paymentInFlight || transactions.some((t) => !(AT_REST as readonly string[]).includes(t.status))) {
     throw conflict(
       'INVOICE_PAYMENT_IN_PROGRESS',
       `A payment against invoice ${invoice.invoice_number} is still being processed.`,
-      'Check the payment status first. A bill somebody is paying is not withdrawn.',
+      nextStep,
     );
   }
-  return { invoice, transactions };
+  return transactions;
 }
 
 /** The request-time half: refuses, by name, a bill that could not be withdrawn. */

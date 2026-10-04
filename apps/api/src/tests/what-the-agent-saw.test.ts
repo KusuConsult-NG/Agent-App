@@ -1184,6 +1184,170 @@ describe('objecting to it', () => {
     );
   });
 
+  /** The charge behind the presumptive bill, with what its own record says. */
+  async function chargeOf(assessmentId: string) {
+    return (await queryOne<{ id: string; status: string; invoice_status: string }>(
+      pool,
+      `SELECT t.id, t.status, i.status AS invoice_status
+         FROM presumptive_assessments pa
+         JOIN invoices i ON i.assessment_id = pa.assessment_id
+         JOIN transactions t ON t.invoice_id = i.id
+        WHERE pa.id = $1`,
+      [assessmentId],
+    ))!;
+  }
+
+  it('closes the charge behind the bill it withdraws', async () => {
+    /*
+     * The invoice was cancelled and its charge left INVOICE_GENERATED for good.
+     * The expiry sweep reads UNPAID invoices, and this one no longer was, so
+     * nothing would ever close it — and the field app's transaction screen
+     * read it as a payment "not yet confirmed", over a start button the
+     * server then refused with INVOICE_NOT_PAYABLE.
+     */
+    const { assessment } = await assessed('Charge Closed');
+    const objection = await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'There is no apprentice.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    await decideObjection(pool, {
+      objectionId: objection.id,
+      uphold: true,
+      reason: 'Confirmed on site: the trader works alone.',
+      actorId: secondOfficerId,
+      actorRole: 'admin',
+    });
+
+    const charge = await chargeOf(assessment.id);
+    assert.deepEqual(
+      { charge: charge.status, invoice: charge.invoice_status },
+      { charge: 'CANCELLED', invoice: 'CANCELLED' },
+      'the bill was withdrawn and its charge left open',
+    );
+    const closed = await queryOne<{ reason: string; actor_id: string; source: string }>(
+      pool,
+      `SELECT reason, actor_id, source FROM transaction_events
+        WHERE transaction_id = $1 AND to_status = 'CANCELLED'`,
+      [charge.id],
+    );
+    assert.equal(closed?.actor_id, secondOfficerId, 'closed by nobody the record can name');
+    assert.equal(closed?.source, 'OFFICER');
+    assert.match(closed!.reason, /objection upheld \(Confirmed on site: the trader works alone\.\)/);
+  });
+
+  it('waits for a payment already moving, rather than withdrawing the bill under it', async () => {
+    /*
+     * Measured before this refused: the trader starts paying, the objection is
+     * upheld while the gateway holds the attempt, and the gateway confirms.
+     * The settlement writes PAID over whatever status it finds, so the bill
+     * went from CANCELLED to PAID — ₦48,000 taken on an estimate the State had
+     * just agreed was wrong, against an assessment reading WITHDRAWN, and
+     * nothing anywhere saying a refund was owed.
+     */
+    const { taxpayer, assessment } = await assessed('Paying Objector');
+    const objection = await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'There is no apprentice.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    const before = await chargeOf(assessment.id);
+    const started = await post(
+      '/payments/initiate',
+      { transactionId: before.id },
+      { ...auth, idempotencyKey: 'objector-pays' },
+    );
+    assert.equal(started.status, 201, JSON.stringify(started.body));
+
+    await assert.rejects(
+      decideObjection(pool, {
+        objectionId: objection.id,
+        uphold: true,
+        reason: 'Confirmed on site: the trader works alone.',
+        actorId: secondOfficerId,
+        actorRole: 'admin',
+      }),
+      (error: { code?: string; message?: string }) =>
+        error.code === 'INVOICE_PAYMENT_IN_PROGRESS' && /still being processed/.test(error.message ?? ''),
+    );
+    const objected = await queryOne<{ objection: string; assessment: string }>(
+      pool,
+      `SELECT o.status AS objection, pa.status AS assessment
+         FROM assessment_objections o
+         JOIN presumptive_assessments pa ON pa.id = o.presumptive_assessment_id
+        WHERE o.id = $1`,
+      [objection.id],
+    );
+    assert.deepEqual(
+      objected,
+      { objection: 'OPEN', assessment: 'OBJECTED' },
+      'a refused decision left part of itself behind',
+    );
+    assert.equal((await chargeOf(assessment.id)).invoice_status, 'UNPAID');
+
+    // The payment settles, and the bill is paid — not cancelled and then paid.
+    const settled = await post(
+      '/payments/simulate',
+      { gatewayReference: started.body.gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
+      auth,
+    );
+    assert.equal(settled.status, 200, JSON.stringify(settled.body));
+
+    // And the objection can be decided now; a paid bill is left for a refund.
+    await decideObjection(pool, {
+      objectionId: objection.id,
+      uphold: true,
+      reason: 'Confirmed on site: the trader works alone.',
+      actorId: secondOfficerId,
+      actorRole: 'admin',
+    });
+    assert.equal((await chargeOf(assessment.id)).invoice_status, 'PAID');
+    assert.deepEqual(await getObligations(pool, taxpayer), []);
+  });
+
+  it('closes a declined attempt with the bill it was made against', async () => {
+    const { assessment } = await assessed('Declined Objector');
+    const objection = await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'There is no apprentice.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    const before = await chargeOf(assessment.id);
+    const started = await post(
+      '/payments/initiate',
+      { transactionId: before.id },
+      { ...auth, idempotencyKey: 'objector-declined' },
+    );
+    assert.equal(started.status, 201, JSON.stringify(started.body));
+    await post(
+      '/payments/simulate',
+      { gatewayReference: started.body.gatewayReference, outcome: 'FAILED', deliverWebhook: true },
+      auth,
+    );
+    assert.equal((await chargeOf(assessment.id)).status, 'FAILED', 'the precondition: a declined attempt');
+
+    await decideObjection(pool, {
+      objectionId: objection.id,
+      uphold: true,
+      reason: 'Confirmed on site: the trader works alone.',
+      actorId: secondOfficerId,
+      actorRole: 'admin',
+    });
+
+    // FAILED is where the payment path starts a second attempt from.
+    const after = await chargeOf(assessment.id);
+    assert.deepEqual(
+      { charge: after.status, invoice: after.invoice_status },
+      { charge: 'CANCELLED', invoice: 'CANCELLED' },
+    );
+  });
+
   it('costs the trader nothing on the compliance score once upheld', async () => {
     /*
      * The score counted every transaction, whatever had become of its bill.

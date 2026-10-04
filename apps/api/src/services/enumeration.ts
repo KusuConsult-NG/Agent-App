@@ -823,7 +823,10 @@ export async function decideObjection(
        * which this used to leave standing: see `withdrawUnpaidBill`.
        */
       if (assessment!.assessment_id) {
-        await withdrawUnpaidBill(client, assessment!.assessment_id);
+        await withdrawUnpaidBill(client, assessment!.assessment_id, {
+          actorId: params.actorId,
+          reason: `objection upheld (${params.reason.trim()})`,
+        });
       }
     } else {
       await client.query(

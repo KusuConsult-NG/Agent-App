@@ -409,7 +409,10 @@ export async function cancelPayeSchedule(
      * makes the demand disappear.
      */
     if (schedule.assessment_id) {
-      await withdrawUnpaidBill(client, schedule.assessment_id);
+      await withdrawUnpaidBill(client, schedule.assessment_id, {
+        actorId: params.actorId,
+        reason: `PAYE return withdrawn (${params.reason.trim()})`,
+      });
     }
 
     await recordAudit(client, {

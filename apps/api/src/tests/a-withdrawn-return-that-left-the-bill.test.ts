@@ -54,6 +54,7 @@ import {
 } from './helpers';
 import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
+import { seedDemoAgent } from '../db/seed-agent';
 import { expireLapsedInvoices } from '../services/revenue';
 
 const OFFICER = '+2348083000001';
@@ -227,6 +228,72 @@ describe('withdrawing a PAYE return withdraws the bill it raised', () => {
       'CANCELLED',
       'the return was withdrawn and its lapsed bill stayed on the books',
     );
+  });
+
+  /*
+   * The bill was cancelled and the charge behind it left INVOICE_GENERATED,
+   * where nothing would ever close it: the expiry sweep reads UNPAID invoices.
+   */
+  it('closes the charge behind the bill it withdraws', async () => {
+    const filed = await fileReturn();
+    const cancelled = await post(
+      `/government/paye/returns/${filed.scheduleId}/cancel`,
+      { reason: 'Filed against the wrong employer record.' },
+      auth(),
+    );
+    assert.equal(cancelled.status, 204, JSON.stringify(cancelled.body));
+
+    const charge = await queryOne<{ status: string; reason: string | null; actor: string | null }>(
+      pool,
+      `SELECT t.status, e.reason, u.phone AS actor
+         FROM transactions t
+         LEFT JOIN transaction_events e ON e.transaction_id = t.id AND e.to_status = 'CANCELLED'
+         LEFT JOIN users u ON u.id = e.actor_id
+        WHERE t.assessment_id = $1`,
+      [filed.assessmentId],
+    );
+    assert.equal(charge?.status, 'CANCELLED', 'the bill was withdrawn and its charge left open');
+    assert.equal(charge?.actor, OFFICER);
+    assert.match(charge!.reason ?? '', /PAYE return withdrawn \(Filed against the wrong employer record\.\)/);
+  });
+
+  /*
+   * A bill the employer is part-way through paying. Withdrawn under the
+   * payment, the settlement that followed would have written PAID over the
+   * cancelled bill, for a return PSIRS had taken back.
+   */
+  it('waits while a payment against the bill is moving', async () => {
+    const filed = await fileReturn();
+    // The demonstration agent is approved by an administrator, so needs one.
+    await createGovernmentUser({ fullName: 'Approving Admin', phone: '+2348083000002', role: 'admin' });
+    const demo = await seedDemoAgent();
+    const session = await loginAs(demo!.phone, demo!.password, demo!.deviceIdentifier);
+    const charge = await queryOne<{ id: string }>(
+      pool,
+      'SELECT id FROM transactions WHERE assessment_id = $1',
+      [filed.assessmentId],
+    );
+    const started = await post(
+      '/payments/initiate',
+      { transactionId: charge!.id },
+      { token: session.accessToken, deviceId: demo!.deviceIdentifier, idempotencyKey: 'paye-paying' },
+    );
+    assert.equal(started.status, 201, JSON.stringify(started.body));
+
+    const cancelled = await post(
+      `/government/paye/returns/${filed.scheduleId}/cancel`,
+      { reason: 'Filed for the wrong month; refiling.' },
+      auth(),
+    );
+    assert.equal(cancelled.status, 409, JSON.stringify(cancelled.body));
+    assert.equal(cancelled.body.error.code, 'INVOICE_PAYMENT_IN_PROGRESS');
+    const schedule = await queryOne<{ status: string }>(
+      pool,
+      'SELECT status FROM paye_schedules WHERE id = $1',
+      [filed.scheduleId],
+    );
+    assert.notEqual(schedule!.status, 'CANCELLED', 'the return was withdrawn though its bill was not');
+    assert.equal((await billsFor())[0]!.status, 'UNPAID');
   });
 
   /* The control that the withdrawal itself still happens and is accountable. */
