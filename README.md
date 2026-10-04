@@ -24,7 +24,7 @@ defeating any one of them is not enough:
 | Layer | Control |
 |---|---|
 | Database trigger | `receipts_require_verified_payment` refuses to insert a receipt unless the linked payment is `VERIFIED`, belongs to the same transaction and matches the amount — for *any* caller, including a DBA at a psql prompt |
-| State machine | `RECEIPT_GENERATED` is reachable only from `PAYMENT_VERIFIED`; no edge exists from `FAILED` or `PAYMENT_PENDING` |
+| State machine | `RECEIPT_GENERATED` is reachable only from `RECONCILIATION_PENDING`, which only a verified payment reaches; no edge to it exists from `FAILED` or `PAYMENT_PENDING`, and the one edge out of `FAILED` that is not a cancellation starts a new attempt at `PAYMENT_INITIATED` |
 | Service layer | `confirmPayment()` is the only function that can mark a payment verified, and it takes no status argument from any caller — it asks the gateway |
 | API surface | There is no endpoint that sets a payment status. "Confirm" asks the server to go and verify |
 

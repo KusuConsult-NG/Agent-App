@@ -30,7 +30,8 @@ export type TransactionState = (typeof TRANSACTION_STATES)[number];
 
 /**
  * The happy path is a straight line; every branch off it is terminal or
- * requires an approved workflow to leave.
+ * requires an approved workflow to leave — except a failed payment attempt,
+ * which may be tried again (see FAILED below).
  *
  * Two properties are load-bearing and enforced here rather than in prose:
  *   1. Nothing reaches PAYMENT_SUCCESSFUL except from a payment-in-flight
@@ -63,7 +64,26 @@ export const TRANSACTION_TRANSITIONS: Record<TransactionState, readonly Transact
   RECEIPT_GENERATED: ['SETTLED', 'UNDER_REVIEW', 'REVERSED', 'REFUNDED'],
   SETTLED: ['REVERSED', 'REFUNDED', 'UNDER_REVIEW'],
   UNDER_REVIEW: ['SETTLED', 'RECONCILIATION_PENDING', 'REVERSED', 'REFUNDED', 'RECEIPT_GENERATED'],
-  FAILED: ['CANCELLED'],
+  /*
+   * A failed attempt is not a failed debt.
+   *
+   * FAILED used to lead only to CANCELLED, and nothing ever made that move,
+   * so a declined card — or a USSD session the citizen walked away from,
+   * which the gateway reports as ABANDONED and this machine records as
+   * FAILED — ended the bill's life as something that could be paid. The
+   * payment path refused every later attempt with TRANSACTION_NOT_PAYABLE,
+   * no transaction is ever raised beside the first, and the agent's screen
+   * said "You can start the payment again" over a button it did not draw.
+   * Measured: one declined attempt, and the invoice stayed UNPAID and listed
+   * with "Take this payment" until the day it lapsed, unpayable throughout.
+   *
+   * So another attempt is a legal move. It goes through PAYMENT_INITIATED
+   * like the first, so the property above holds: nothing reaches
+   * PAYMENT_SUCCESSFUL except from a payment in flight. The failed attempt
+   * keeps its own payment row and its journal entry; only one attempt can be
+   * in flight at once, which `idx_payments_one_active` enforces underneath.
+   */
+  FAILED: ['PAYMENT_INITIATED', 'CANCELLED'],
   CANCELLED: [],
   EXPIRED: [],
   REVERSED: [],

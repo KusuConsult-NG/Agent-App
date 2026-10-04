@@ -718,6 +718,8 @@ interface TransactionStatus {
     total_amount_kobo: string;
     invoice_id: string;
     invoice_number: string;
+    /** The bill's own state, which decides whether a failed attempt can be tried again. */
+    invoice_status: string;
     expires_at: string | null;
     revenue_item: string;
     revenue_item_ha: string | null;
@@ -944,6 +946,20 @@ export function TransactionScreen({
    */
   const acknowledged = !paid && transaction.acknowledgement_number !== null;
   const failed = ['FAILED', 'CANCELLED', 'EXPIRED'].includes(transaction.status);
+  /*
+   * A declined attempt, on a bill that can still be paid, can be tried again.
+   *
+   * The failure alert below has always said "You can start the payment
+   * again", and the actions that would do it were hidden for every failed
+   * state alike — so the agent was told to press a button that was not there.
+   * CANCELLED and EXPIRED are the end of the bill and stay hidden; FAILED is
+   * the end of one attempt. The bill's deadline is checked here as well as by
+   * the server, so a lapsed bill does not offer a payment the server refuses.
+   */
+  const canTryAgain =
+    transaction.status === 'FAILED' &&
+    transaction.invoice_status === 'UNPAID' &&
+    (!transaction.expires_at || new Date(transaction.expires_at).getTime() > Date.now());
   const name =
     transaction.business_name ??
     `${transaction.first_name ?? ''} ${transaction.last_name ?? ''}`.trim();
@@ -1003,7 +1019,8 @@ export function TransactionScreen({
         <Alert kind="error" title={t.paymentFailed}>
           <p style={{ margin: 0 }}>
             {transaction.failure_reason ? `${transaction.failure_reason} ` : ''}
-            {t.paymentFailedBody}
+            {/* "Start the payment again" only where it can be. */}
+            {canTryAgain ? t.paymentFailedBody : t.paymentEndedBody}
           </p>
         </Alert>
       ) : (
@@ -1170,7 +1187,7 @@ export function TransactionScreen({
         </div>
       )}
 
-      {!paid && !failed && (
+      {!paid && (!failed || canTryAgain) && (
         <>
           {/*
             The artefact a taxpayer pays against later.

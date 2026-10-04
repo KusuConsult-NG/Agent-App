@@ -41,6 +41,7 @@ const SAFETY_KEYS: (keyof TranslationDictionary)[] = [
   'commissionAccountNote',
   'paymentFailed',
   'paymentFailedBody',
+  'paymentEndedBody',
   'paymentUnconfirmed',
   'paymentUnconfirmedBody',
   'findTaxpayerFirst',

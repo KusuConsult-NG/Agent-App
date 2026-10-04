@@ -186,7 +186,14 @@ export async function initiatePayment(
       };
     }
 
-    if (!['INVOICE_GENERATED', 'PAYMENT_INITIATED'].includes(transaction.status)) {
+    /*
+     * FAILED is a transaction whose last attempt did not go through, and the
+     * bill behind it is still owed and still in date — both checked above. It
+     * was refused here, and with nothing able to raise a second transaction a
+     * single declined card made the bill unpayable. See FAILED in
+     * `TRANSACTION_TRANSITIONS`.
+     */
+    if (!['INVOICE_GENERATED', 'PAYMENT_INITIATED', 'FAILED'].includes(transaction.status)) {
       throw paymentRefused({
         code: 'TRANSACTION_NOT_PAYABLE',
         message:
@@ -232,7 +239,7 @@ export async function initiatePayment(
       ],
     );
 
-    if (transaction.status === 'INVOICE_GENERATED') {
+    if (transaction.status === 'INVOICE_GENERATED' || transaction.status === 'FAILED') {
       await transitionTransaction(client, {
         transactionId: transaction.id,
         to: 'PAYMENT_INITIATED',

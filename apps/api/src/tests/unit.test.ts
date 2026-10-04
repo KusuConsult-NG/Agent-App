@@ -249,6 +249,16 @@ describe('transaction state machine', () => {
       IllegalTransitionError,
     );
   });
+
+  it('lets a failed attempt be followed by another, through a payment in flight', () => {
+    // A declined card ends an attempt, not the bill. The next attempt starts
+    // where the first did, so success is still reachable only from a payment
+    // in flight — never straight out of FAILED, as the case above holds.
+    assert.ok(canTransactionTransition('FAILED', 'PAYMENT_INITIATED'));
+    for (const skip of ['PAYMENT_PENDING', 'PAYMENT_VERIFIED', 'RECONCILIATION_PENDING'] as const) {
+      assert.throws(() => assertTransactionTransition('FAILED', skip), IllegalTransitionError);
+    }
+  });
 });
 
 describe('RBAC matrix', () => {

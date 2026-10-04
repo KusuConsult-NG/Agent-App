@@ -102,6 +102,7 @@ export interface TranslationDictionary {
   // What happened to the money
   paymentFailed: string;
   paymentFailedBody: string;
+  paymentEndedBody: string;
   paymentUnconfirmed: string;
   paymentUnconfirmedBody: string;
   paymentAcknowledged: string;
@@ -4075,6 +4076,7 @@ export const translations: Record<Language, TranslationDictionary> = {
 
     paymentFailed: 'Payment did not go through',
     paymentFailedBody: 'No money has been taken from the taxpayer. You can start the payment again.',
+    paymentEndedBody: 'No money has been taken from the taxpayer. This bill can no longer be paid.',
     paymentUnconfirmed: 'Payment not yet confirmed',
     paymentUnconfirmedBody:
       'This payment has NOT been marked as received. Do not ask the taxpayer to pay again \u2014 check again in a moment.',
@@ -7651,6 +7653,7 @@ export const translations: Record<Language, TranslationDictionary> = {
 
     paymentFailed: 'Biyan kudin bai yi nasara ba',
     paymentFailedBody: 'Ba a karbi kudi daga mai biyan haraji ba. Kana iya sake fara biyan.',
+    paymentEndedBody: 'Ba a karbi kudi daga mai biyan haraji ba. Ba za a iya biyan wannan takardar biya yanzu ba.',
     paymentUnconfirmed: 'Ba a tabbatar da biyan kudin ba tukuna',
     paymentUnconfirmedBody:
       'BA A nuna an karbi wannan kudin ba. Kada ka ce wa mai biyan haraji ya sake biya \u2014 ka sake dubawa nan da dan lokaci.',
