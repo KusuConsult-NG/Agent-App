@@ -40,7 +40,7 @@ import {
 import { queryOne, query } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
-import { expireLapsedInvoices, getObligations } from '../services/revenue';
+import { expireLapsedInvoices, getObligations, reissueInvoice } from '../services/revenue';
 import { liabilitiesFor } from '../services/connections';
 import {
   assessFromObservation,
@@ -835,6 +835,91 @@ describe('objecting to it', () => {
 
     const after = (await getObligations(pool, taxpayer)) as { under_objection: boolean }[];
     assert.equal(after[0]!.under_objection, false, 'decided, and no longer suspended');
+  });
+
+  it('is not issued again while the objection is open, and is once it is rejected', async () => {
+    /*
+     * A lapsed bill can be issued again (`reissueInvoice`), and an objection
+     * suspends collection. A fresh demand raised while the objection is open
+     * would be the enforcement the objection stops, so it is refused — and
+     * once the objection is rejected the debt is back in reach, on the same
+     * assessment, so the presumptive link and any later objection still find
+     * it.
+     */
+    const { taxpayer, assessment } = await assessed('Lapsed Objector');
+    const bill = (await getObligations(pool, taxpayer)) as { invoice_id: string }[];
+    assert.equal(bill.length, 1, 'the fixture must produce an invoice or nothing here means anything');
+    const objection = await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'One of the machines is broken and unused.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    await pool.query(`UPDATE invoices SET expires_at = now() - interval '1 hour' WHERE id = $1`, [
+      bill[0]!.invoice_id,
+    ]);
+    await expireLapsedInvoices({ actorId: null, actorRole: 'system' });
+
+    await assert.rejects(
+      reissueInvoice({ invoiceId: bill[0]!.invoice_id, actorId: officerId, actorRole: 'admin', channel: 'OFFICER' }),
+      (error: { code?: string }) => error.code === 'INVOICE_UNDER_OBJECTION',
+    );
+
+    await decideObjection(pool, {
+      objectionId: objection.id,
+      uphold: false,
+      reason: 'Both machines were seen working on the second visit.',
+      actorId: secondOfficerId,
+      actorRole: 'admin',
+    });
+
+    const again = await reissueInvoice({
+      invoiceId: bill[0]!.invoice_id,
+      actorId: officerId,
+      actorRole: 'admin',
+      channel: 'OFFICER',
+    });
+    assert.equal(again.reissued, true);
+    const link = await queryOne<{ assessment_id: string }>(
+      pool,
+      'SELECT assessment_id FROM invoices WHERE id = $1',
+      [again.invoiceId],
+    );
+    const presumptive = await queryOne<{ assessment_id: string }>(
+      pool,
+      'SELECT assessment_id FROM presumptive_assessments WHERE id = $1',
+      [assessment.id],
+    );
+    assert.equal(link?.assessment_id, presumptive?.assessment_id, 'the new bill is for the assessment objected to');
+  });
+
+  it('is withdrawn, not issued again, when the objection is upheld', async () => {
+    const { taxpayer, assessment } = await assessed('Upheld Objector');
+    const bill = (await getObligations(pool, taxpayer)) as { invoice_id: string }[];
+    const objection = await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'There is no apprentice.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    await pool.query(`UPDATE invoices SET expires_at = now() - interval '1 hour' WHERE id = $1`, [
+      bill[0]!.invoice_id,
+    ]);
+    await expireLapsedInvoices({ actorId: null, actorRole: 'system' });
+    await decideObjection(pool, {
+      objectionId: objection.id,
+      uphold: true,
+      reason: 'Confirmed on site: the trader works alone.',
+      actorId: secondOfficerId,
+      actorRole: 'admin',
+    });
+
+    await assert.rejects(
+      reissueInvoice({ invoiceId: bill[0]!.invoice_id, actorId: officerId, actorRole: 'admin', channel: 'OFFICER' }),
+      (error: { code?: string }) => error.code === 'INVOICE_WITHDRAWN',
+    );
   });
 
   it('marks the assessment objected, and settled again once decided', async () => {

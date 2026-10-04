@@ -2554,6 +2554,13 @@ export interface TranslationDictionary {
   ofcChLapsedTitle: string;
   ofcChLapsed: string;
   ofcChLapsedNoDate: string;
+  ofcChStrandedTitle: string;
+  ofcChStranded: string;
+  ofcChReplacedTitle: string;
+  ofcChReplaced: string;
+  ofcChOpenReplacement: string;
+  ofcChReissue: string;
+  ofcChReissuing: string;
   ofcChHowComputed: string;
   ofcChTraceFrozen: string;
   ofcChNoTrace: string;
@@ -6329,8 +6336,15 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcChIssued: "Issued",
     ofcChPayableUntil: "Payable until",
     ofcChLapsedTitle: "The deadline has passed",
-    ofcChLapsed: "This invoice lapsed on {{date}}. The platform will refuse money against it, so collecting means raising a fresh assessment first.",
-    ofcChLapsedNoDate: "This invoice has lapsed. The platform will refuse money against it, so collecting means raising a fresh assessment first.",
+    ofcChLapsed: "This invoice lapsed on {{date}}. The platform will refuse money against it, so it has to be issued again before anything can be collected.",
+    ofcChLapsedNoDate: "This invoice has lapsed. The platform will refuse money against it, so it has to be issued again before anything can be collected.",
+    ofcChStrandedTitle: "Owed again after a reversal",
+    ofcChStranded: "A payment against this invoice was reversed for a reason that was not the State's, so the money is owed again — but its old charge cannot take a payment. Issue it again to collect it.",
+    ofcChReplacedTitle: "Issued again",
+    ofcChReplaced: "This invoice was replaced by {{number}}, for the same amount. Money is taken against the new invoice, not this one.",
+    ofcChOpenReplacement: "Open {{number}}",
+    ofcChReissue: "Issue this invoice again",
+    ofcChReissuing: "Issuing…",
     ofcChHowComputed: "How the figure was arrived at",
     ofcChTraceFrozen: "Recorded when the assessment was raised, and frozen since. This is what the calculation did on the day, not what it would do today.",
     ofcChNoTrace: "No calculation was recorded against this assessment.",
@@ -9895,8 +9909,15 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcChIssued: "An fitar",
     ofcChPayableUntil: "Ana iya biya har zuwa",
     ofcChLapsedTitle: "Lokacin ya wuce",
-    ofcChLapsed: "Wannan takardar biya ta kare a {{date}}. Dandalin zai ki karbar kudi a kanta, don haka sai an sabunta tantancewa kafin a iya karba.",
-    ofcChLapsedNoDate: "Wannan takardar biya ta kare. Dandalin zai ki karbar kudi a kanta, don haka sai an sabunta tantancewa kafin a iya karba.",
+    ofcChLapsed: "Wannan takardar biya ta kare a {{date}}. Dandalin zai ki karbar kudi a kanta, don haka sai an sake fitar da ita kafin a iya karbar komai.",
+    ofcChLapsedNoDate: "Wannan takardar biya ta kare. Dandalin zai ki karbar kudi a kanta, don haka sai an sake fitar da ita kafin a iya karbar komai.",
+    ofcChStrandedTitle: "Ana bin kudin kuma bayan mayarwa",
+    ofcChStranded: "An mayar da wani biya da aka yi kan wannan takardar biya saboda dalilin da ba na Gwamnati ba, don haka ana bin kudin kuma — amma tsohon cajinta ba zai iya karbar biya ba. A sake fitar da ita don a karba.",
+    ofcChReplacedTitle: "An sake fitar da ita",
+    ofcChReplaced: "An maye gurbin wannan takardar biya da {{number}}, a kan adadin kudi daya. Ana karbar kudi a kan sabuwar takardar, ba a kan wannan ba.",
+    ofcChOpenReplacement: "Bude {{number}}",
+    ofcChReissue: "Sake fitar da wannan takardar biya",
+    ofcChReissuing: "Ana fitarwa…",
     ofcChHowComputed: "Yadda aka kai ga wannan adadi",
     ofcChTraceFrozen: "An rubuta shi lokacin da aka yi tantancewar, kuma ba a canza shi ba tun daga nan. Wannan shi ne abin da lissafin ya yi a ranar, ba abin da zai yi a yau ba.",
     ofcChNoTrace: "Ba a rubuta wani lissafi a kan wannan tantancewa ba.",

@@ -37,8 +37,9 @@
  * The cost of this direction is real and is stated rather than hidden: a bill
  * left to lapse stops counting against the person who did not pay it. It
  * always did, an hour after the deadline; now it does at the deadline. The
- * fix for that is a reissue that supersedes the lapsed invoice, which does not
- * exist yet, and not a figure that counts a debt nobody can settle.
+ * fix for that is a reissue that supersedes the lapsed invoice — which now
+ * exists, `reissueInvoice` and migration 091 — and not a figure that counts a
+ * debt nobody can settle.
  *
  * WHERE LAPSED MONEY IS STILL COUNTED
  *

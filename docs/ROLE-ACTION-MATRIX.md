@@ -54,7 +54,7 @@ Counted from the shipped map. A role holding no permission of a verb is shown as
 | Verb | agent | supervisor | revenue_officer | finance_officer | auditor | admin |
 | --- | --- | --- | --- | --- | --- | --- |
 | View | 13 | 16 | 21 | 18 | 19 | 21 |
-| Create | 6 | 1 | 1 | 1 | 1 | 1 |
+| Create | 6 | 1 | 2 | 1 | 1 | 1 |
 | Edit | 1 | 3 | 10 | 2 | 2 | 16 |
 | Approve | — | 2 | 1 | 4 | 1 | 1 |
 | Reverse | — | — | 1 | 1 | — | — |
@@ -69,7 +69,7 @@ One row per permission in the catalogue. A permission no role holds is still lis
 
 **A dash in the last column means no route guard and no service check names this permission**, and every dash states why beside it. That is the column to read first, because authority that looks real and confers nothing is the thing this table exists to expose. Generating it found one: `payment:reverse:request` was granted to two roles and checked nowhere, so any officer who could request an agent activation could request a payment reversal. It is enforced now.
 
-The reasons are not interchangeable, which is why they are written out per row rather than once here. `agent:read:own` and its siblings are scoped by which agent is asking, so nothing consults them and nothing should. `invoice:create` is a different thing wearing the same dash: the act it names is real — creating an assessment writes its invoice in the same transaction — and it is enforced, by `assessment:create` on the same role. **So revoking `invoice:create` here to stop an agent raising invoices would achieve nothing.** A dash nobody has explained now fails the generator rather than printing.
+The reasons are not interchangeable, which is why they are written out per row rather than once here. `agent:read:own` and its siblings are scoped by which agent is asking, so nothing consults them and nothing should. `invoice:create` used to be a different thing wearing the same dash — real authority, enforced by `assessment:create` instead — and now guards the one act that creates an invoice and nothing else: issuing a lapsed bill again. Raising a new assessment, which writes its first invoice, is still `assessment:create`. A dash nobody has explained now fails the generator rather than printing.
 
 | Permission | Verb | Held by | Endpoints |
 | --- | --- | --- | --- |
@@ -94,7 +94,7 @@ The reasons are not interchangeable, which is why they are written out per row r
 | `assessment:read:own` | View | agent | `GET /revenue/assessments/:id` |
 | `assessment:read:all` | View | supervisor, revenue_officer, finance_officer, auditor, admin | `GET /revenue/assessments/:id` |
 | `paye:file` | Other | revenue_officer, admin | `POST /government/paye/returns`<br>`POST /government/paye/returns/:id/cancel`<br>`POST /government/enumeration/observations`<br>`POST /government/enumeration/observations/:id/assess`<br>…and 1 more |
-| `invoice:create` | Create | agent | — (the act is guarded by `assessment:create`) |
+| `invoice:create` | Create | agent, revenue_officer | `POST /revenue/invoices/:id/reissue` |
 | `invoice:read:own` | View | agent | `GET /revenue/invoices/:id`<br>`POST /revenue/invoices/:id/document`<br>`GET /revenue/taxpayers/:id/obligations` |
 | `invoice:read:all` | View | supervisor, revenue_officer, finance_officer, auditor, admin | `GET /revenue/invoices/:id`<br>`POST /revenue/invoices/:id/document`<br>`GET /revenue/taxpayers/:id/obligations` |
 | `payment:initiate` | Create | agent | `POST /payments/initiate`<br>`POST /payments/:paymentId/confirm` |

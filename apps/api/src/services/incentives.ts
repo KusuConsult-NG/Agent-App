@@ -66,8 +66,19 @@ export async function computeComplianceScore(
        count(*) FILTER (WHERE i.status <> 'CANCELLED')::text AS raised_count,
        count(*) FILTER (WHERE t.status IN ('SETTLED','RECEIPT_GENERATED','RECONCILIATION_PENDING'))::text
          AS paid_count,
-       count(*) FILTER (WHERE i.expires_at IS NOT NULL AND t.verified_at > i.expires_at)::text
-         AS late_count,
+       /*
+        * Late against the first deadline the citizen was given.
+        *
+        * A bill issued again carries a fresh window, and measuring against
+        * that window would make letting a bill lapse and having it reissued
+        * the way to pay late without it showing. The earliest deadline on the
+        * assessment is the one that was missed; a reissue renews the demand,
+        * not the date it was due.
+        */
+       count(*) FILTER (
+         WHERE t.verified_at > (SELECT min(d.expires_at) FROM invoices d
+                                 WHERE d.assessment_id = i.assessment_id)
+       )::text AS late_count,
        -- Owed and still payable, by the deadline rather than the status.
        --
        -- This said "no deadline test, deliberately", so that letting a bill
@@ -192,7 +203,7 @@ export async function computeComplianceScore(
     components.push({
       factor: 'Late payments',
       points: -penalty,
-      detail: `${late} payment(s) made after the invoice expiry date`,
+      detail: `${late} payment(s) made after the bill's first payment deadline`,
     });
   }
 

@@ -494,74 +494,26 @@ export async function createAssessmentIn(
       ],
     );
 
-    const validityDays = params.invoiceValidityDays ?? 30;
-    const expiresAt = new Date(Date.now() + validityDays * 86_400_000);
-    const invoiceNumber = await nextInvoiceNumber(client);
-    const invoiceCode = generateVerificationCode();
-
-    const invoice = await queryOne<{ id: string }>(
-      client,
-      `INSERT INTO invoices (
-         invoice_number, assessment_id, taxpayer_id, amount_kobo, service_charge_kobo,
-         total_amount_kobo, verification_code, expires_at, agent_id, created_by
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-      [
-        invoiceNumber,
-        assessment!.id,
-        params.taxpayerId,
-        computation.amountKobo.toString(),
-        serviceCharge.toString(),
-        total.toString(),
-        invoiceCode,
-        expiresAt,
-        params.agentId ?? null,
-        params.actorId,
-      ],
-    );
-
-    const transactionReference = await nextTransactionReference(client);
-    const transaction = await queryOne<{ id: string }>(
-      client,
-      `INSERT INTO transactions (
-         transaction_reference, taxpayer_id, invoice_id, assessment_id, revenue_item_id,
-         agent_id, territory_id, device_id, lga_id, ward_id, latitude, longitude, channel,
-         amount_kobo, service_charge_kobo, total_amount_kobo, status, created_by
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'INVOICE_GENERATED',$17)
-       RETURNING id`,
-      [
-        transactionReference,
-        params.taxpayerId,
-        invoice!.id,
-        assessment!.id,
-        params.revenueItemId,
-        params.agentId ?? null,
-        params.territoryId ?? null,
-        params.deviceId ?? null,
-        taxpayer.lga_id,
-        taxpayer.ward_id,
-        params.latitude ?? null,
-        params.longitude ?? null,
-        params.channel ?? 'AGENT_PWA',
-        computation.amountKobo.toString(),
-        serviceCharge.toString(),
-        total.toString(),
-        params.actorId,
-      ],
-    );
-
-    for (const status of ['INITIATED', 'ASSESSMENT_CREATED', 'INVOICE_GENERATED'] as const) {
-      await client.query(
-        `INSERT INTO transaction_events (transaction_id, from_status, to_status, actor_id, source, metadata)
-         VALUES ($1, NULL, $2, $3, $4, $5)`,
-        [
-          transaction!.id,
-          status,
-          params.actorId,
-          params.channel === 'OFFICER' ? 'OFFICER' : 'AGENT',
-          JSON.stringify({ assessmentNumber, invoiceNumber }),
-        ],
-      );
-    }
+    const raised = await raiseInvoiceIn(client, {
+      assessmentId: assessment!.id,
+      assessmentNumber,
+      taxpayerId: params.taxpayerId,
+      revenueItemId: params.revenueItemId,
+      lgaId: taxpayer.lga_id,
+      wardId: taxpayer.ward_id,
+      amountKobo: computation.amountKobo,
+      serviceChargeKobo: serviceCharge,
+      totalKobo: total,
+      validityDays: params.invoiceValidityDays ?? 30,
+      actorId: params.actorId,
+      agentId: params.agentId ?? null,
+      territoryId: params.territoryId ?? null,
+      deviceId: params.deviceId ?? null,
+      latitude: params.latitude ?? null,
+      longitude: params.longitude ?? null,
+      channel: params.channel ?? 'AGENT_PWA',
+    });
+    const { invoiceNumber, transactionReference, expiresAt } = raised;
 
     await recordAudit(client, {
       actorId: params.actorId,
@@ -589,10 +541,10 @@ export async function createAssessmentIn(
     return {
       assessmentId: assessment!.id,
       assessmentNumber,
-      invoiceId: invoice!.id,
+      invoiceId: raised.invoiceId,
       invoiceNumber,
-      invoiceVerificationCode: invoiceCode,
-      transactionId: transaction!.id,
+      invoiceVerificationCode: raised.verificationCode,
+      transactionId: raised.transactionId,
       transactionReference,
       amountKobo: computation.amountKobo,
       serviceChargeKobo: serviceCharge,
@@ -601,6 +553,129 @@ export async function createAssessmentIn(
       trace: computation.trace,
     };
   }
+}
+
+interface RaiseInvoiceParams {
+  assessmentId: string;
+  assessmentNumber: string;
+  taxpayerId: string;
+  revenueItemId: string;
+  lgaId: string;
+  wardId: string | null;
+  amountKobo: Kobo;
+  serviceChargeKobo: Kobo;
+  totalKobo: Kobo;
+  validityDays: number;
+  actorId: string;
+  agentId: string | null;
+  territoryId: string | null;
+  deviceId: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  channel: 'AGENT_PWA' | 'OFFICER' | 'API';
+  /** Recorded on the transaction's opening events, beside the numbers. */
+  eventMetadata?: Record<string, unknown>;
+}
+
+interface RaisedInvoice {
+  invoiceId: string;
+  invoiceNumber: string;
+  verificationCode: string;
+  transactionId: string;
+  transactionReference: string;
+  expiresAt: Date;
+}
+
+/**
+ * The demand for an assessment: its invoice and the transaction that collects it.
+ *
+ * Every invoice in the platform is written here, and every transaction. An
+ * assessment's first demand comes from `createAssessmentIn`; a later one, for
+ * a bill that could no longer be paid, from `reissueInvoice` — the same rows,
+ * written the same way, so nothing downstream can tell a reissued bill from
+ * a first one except by the link the reissue records.
+ */
+async function raiseInvoiceIn(client: PoolClient, params: RaiseInvoiceParams): Promise<RaisedInvoice> {
+  const expiresAt = new Date(Date.now() + params.validityDays * 86_400_000);
+  const invoiceNumber = await nextInvoiceNumber(client);
+  const verificationCode = generateVerificationCode();
+
+  const invoice = await queryOne<{ id: string }>(
+    client,
+    `INSERT INTO invoices (
+       invoice_number, assessment_id, taxpayer_id, amount_kobo, service_charge_kobo,
+       total_amount_kobo, verification_code, expires_at, agent_id, created_by
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+    [
+      invoiceNumber,
+      params.assessmentId,
+      params.taxpayerId,
+      params.amountKobo.toString(),
+      params.serviceChargeKobo.toString(),
+      params.totalKobo.toString(),
+      verificationCode,
+      expiresAt,
+      params.agentId,
+      params.actorId,
+    ],
+  );
+
+  const transactionReference = await nextTransactionReference(client);
+  const transaction = await queryOne<{ id: string }>(
+    client,
+    `INSERT INTO transactions (
+       transaction_reference, taxpayer_id, invoice_id, assessment_id, revenue_item_id,
+       agent_id, territory_id, device_id, lga_id, ward_id, latitude, longitude, channel,
+       amount_kobo, service_charge_kobo, total_amount_kobo, status, created_by
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'INVOICE_GENERATED',$17)
+     RETURNING id`,
+    [
+      transactionReference,
+      params.taxpayerId,
+      invoice!.id,
+      params.assessmentId,
+      params.revenueItemId,
+      params.agentId,
+      params.territoryId,
+      params.deviceId,
+      params.lgaId,
+      params.wardId,
+      params.latitude,
+      params.longitude,
+      params.channel,
+      params.amountKobo.toString(),
+      params.serviceChargeKobo.toString(),
+      params.totalKobo.toString(),
+      params.actorId,
+    ],
+  );
+
+  for (const status of ['INITIATED', 'ASSESSMENT_CREATED', 'INVOICE_GENERATED'] as const) {
+    await client.query(
+      `INSERT INTO transaction_events (transaction_id, from_status, to_status, actor_id, source, metadata)
+       VALUES ($1, NULL, $2, $3, $4, $5)`,
+      [
+        transaction!.id,
+        status,
+        params.actorId,
+        params.channel === 'OFFICER' ? 'OFFICER' : 'AGENT',
+        JSON.stringify({
+          assessmentNumber: params.assessmentNumber,
+          invoiceNumber,
+          ...(params.eventMetadata ?? {}),
+        }),
+      ],
+    );
+  }
+
+  return {
+    invoiceId: invoice!.id,
+    invoiceNumber,
+    verificationCode,
+    transactionId: transaction!.id,
+    transactionReference,
+    expiresAt,
+  };
 }
 
 /**
@@ -727,6 +802,357 @@ export async function withdrawUnpaidBill(db: Db, assessmentId: string): Promise<
       WHERE assessment_id = $1 AND status IN ('UNPAID', 'PARTIALLY_PAID', 'EXPIRED')`,
     [assessmentId],
   );
+}
+
+/**
+ * Transaction states in which nothing is moving or held against a bill.
+ *
+ * An allow-list, so a bill is issued again only from a state known to be at
+ * rest: never raised further than an invoice, a failed attempt, or ended.
+ * Anything else — an attempt in flight, money the gateway or the State holds,
+ * a payment under review — refuses, and so would a state added later that
+ * nobody thought to put here, which is the direction to be wrong in when the
+ * alternative is two demands for money already taken.
+ */
+const AT_REST = [
+  'ASSESSMENT_CREATED',
+  'INVOICE_GENERATED',
+  'FAILED',
+  'EXPIRED',
+  'CANCELLED',
+  'REVERSED',
+  'REFUNDED',
+] as const;
+
+/** Transaction states from which the payment path will start an attempt. */
+const PAYABLE_TRANSACTION_STATES = ['INVOICE_GENERATED', 'FAILED'] as const;
+
+export interface ReissueParams {
+  invoiceId: string;
+  actorId: string;
+  actorRole: string;
+  agentId?: string | null;
+  territoryId?: string | null;
+  deviceId?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  channel?: 'AGENT_PWA' | 'OFFICER' | 'API';
+  ipAddress?: string | null;
+}
+
+export interface ReissueResult {
+  /** False when the bill had already been issued again, and this is that replacement. */
+  reissued: boolean;
+  invoiceId: string;
+  invoiceNumber: string;
+  transactionId: string;
+  transactionReference: string;
+  totalKobo: Kobo;
+  expiresAt: Date | null;
+  replaces: { invoiceId: string; invoiceNumber: string };
+}
+
+/**
+ * Issue a bill again, for the debt it was always for.
+ *
+ * Two roads ended at a bill that was owed and could not be paid. Its deadline
+ * passed — the payment path refuses an expired invoice — or a payment against
+ * it was reversed by the taxpayer's bank or the gateway, which leaves the bill
+ * owed and its only transaction REVERSED. The advice for both was "raise a new
+ * assessment", which re-runs the rate engine against today's catalogue rather
+ * than the figure the State determined, and leaves the first bill standing
+ * beside the second: two demands for one liability.
+ *
+ * This renews the demand and nothing else. The replacement is against the same
+ * assessment — so its period, its objection, its PAYE schedule and its vehicle
+ * renewal stay attached — for the same amounts, with a fresh payment window.
+ * The old invoice is cancelled and names the new one. Migration 091 refuses
+ * any of that being done differently, by this function or anything else.
+ *
+ * Refused, by name, where issuing again would be wrong rather than merely
+ * unnecessary: a bill that can still be paid, one paid in whole or in part,
+ * one the State withdrew, one under an open objection (collection is
+ * suspended, and a fresh demand would be the enforcement the objection
+ * stops), one with money in motion, and one whose taxpayer record is closed.
+ *
+ * Asked twice — a retried request, a second press — it answers with the
+ * replacement already made rather than making another, the way a payment
+ * already in flight is returned rather than duplicated.
+ */
+export async function reissueInvoice(params: ReissueParams): Promise<ReissueResult> {
+  return withTransaction(async (client) => {
+    const old = await queryOne<{
+      id: string;
+      invoice_number: string;
+      assessment_id: string;
+      assessment_number: string;
+      taxpayer_id: string;
+      revenue_item_id: string;
+      lga_id: string;
+      ward_id: string | null;
+      amount_kobo: string;
+      service_charge_kobo: string;
+      total_amount_kobo: string;
+      amount_paid_kobo: string;
+      status: string;
+      expires_at: Date | null;
+      reissued_as: string | null;
+      taxpayer_status: string;
+      under_objection: boolean;
+    }>(
+      client,
+      `SELECT i.id, i.invoice_number, i.assessment_id, a.assessment_number, i.taxpayer_id,
+              a.revenue_item_id, a.lga_id, a.ward_id, i.amount_kobo, i.service_charge_kobo,
+              i.total_amount_kobo, i.amount_paid_kobo, i.status, i.expires_at, i.reissued_as,
+              tp.status AS taxpayer_status, ${UNDER_OPEN_OBJECTION_SQL} AS under_objection
+         FROM invoices i
+         JOIN assessments a ON a.id = i.assessment_id
+         JOIN taxpayers tp ON tp.id = i.taxpayer_id
+        WHERE i.id = $1
+        FOR UPDATE OF i`,
+      [params.invoiceId],
+    );
+    if (!old) throw notFound('That invoice');
+
+    if (old.reissued_as) {
+      const head = await queryOne<{
+        id: string;
+        invoice_number: string;
+        total_amount_kobo: string;
+        expires_at: Date | null;
+        transaction_id: string;
+        transaction_reference: string;
+      }>(
+        client,
+        `WITH RECURSIVE chain AS (
+           SELECT id, reissued_as, 0 AS depth FROM invoices WHERE id = $1
+           UNION ALL
+           SELECT n.id, n.reissued_as, c.depth + 1
+             FROM invoices n JOIN chain c ON n.id = c.reissued_as
+            WHERE c.depth < 100
+         )
+         SELECT i.id, i.invoice_number, i.total_amount_kobo, i.expires_at,
+                t.id AS transaction_id, t.transaction_reference
+           FROM chain c
+           JOIN invoices i ON i.id = c.id
+           JOIN LATERAL (SELECT id, transaction_reference FROM transactions
+                          WHERE invoice_id = i.id ORDER BY created_at DESC LIMIT 1) t ON true
+          WHERE c.reissued_as IS NULL
+          LIMIT 1`,
+        [old.reissued_as],
+      );
+      if (!head) throw notFound('The invoice that replaced this one');
+      return {
+        reissued: false,
+        invoiceId: head.id,
+        invoiceNumber: head.invoice_number,
+        transactionId: head.transaction_id,
+        transactionReference: head.transaction_reference,
+        totalKobo: parseKobo(head.total_amount_kobo),
+        expiresAt: head.expires_at,
+        replaces: { invoiceId: old.id, invoiceNumber: old.invoice_number },
+      };
+    }
+
+    if (old.status === 'PAID') {
+      throw conflict(
+        'INVOICE_ALREADY_PAID',
+        `Invoice ${old.invoice_number} has already been paid. There is nothing to issue again.`,
+        'Do not collect payment again. Open the receipt from the transaction history.',
+      );
+    }
+    if (old.status === 'PARTIALLY_PAID' || parseKobo(old.amount_paid_kobo) > 0n) {
+      throw conflict(
+        'INVOICE_PART_PAID',
+        `Part of invoice ${old.invoice_number} has been paid, so it cannot be issued again for the full amount.`,
+        'What happens to the part already paid is a decision for a PSIRS officer.',
+      );
+    }
+    if (old.status === 'CANCELLED') {
+      throw conflict(
+        'INVOICE_WITHDRAWN',
+        `Invoice ${old.invoice_number} was withdrawn, and nothing is owed on it.`,
+      );
+    }
+    if (old.under_objection) {
+      throw conflict(
+        'INVOICE_UNDER_OBJECTION',
+        `Invoice ${old.invoice_number} is under objection, and collection is suspended until the objection is decided.`,
+      );
+    }
+    if (old.taxpayer_status !== 'ACTIVE') {
+      throw conflict(
+        'TAXPAYER_NOT_ACTIVE',
+        `This taxpayer record is ${old.taxpayer_status.toLowerCase()} and cannot be billed.`,
+      );
+    }
+
+    const transactions = await query<{ id: string; status: string }>(
+      client,
+      'SELECT id, status FROM transactions WHERE invoice_id = $1 ORDER BY created_at FOR UPDATE',
+      [old.id],
+    );
+    const paymentInFlight = await queryOne<{ id: string }>(
+      client,
+      `SELECT p.id FROM payments p
+         JOIN transactions t ON t.id = p.transaction_id
+        WHERE t.invoice_id = $1 AND p.status IN ('INITIATED','PENDING','SUCCESSFUL','VERIFIED')
+        LIMIT 1`,
+      [old.id],
+    );
+    if (
+      paymentInFlight ||
+      transactions.some((t) => !(AT_REST as readonly string[]).includes(t.status))
+    ) {
+      throw conflict(
+        'INVOICE_PAYMENT_IN_PROGRESS',
+        `A payment against invoice ${old.invoice_number} is still being processed.`,
+        'Check the payment status first. If the gateway says it did not go through, the bill can then be issued again.',
+      );
+    }
+
+    const lapsed =
+      old.status === 'EXPIRED' || (old.expires_at !== null && old.expires_at.getTime() <= Date.now());
+    const payable = transactions.some((t) =>
+      (PAYABLE_TRANSACTION_STATES as readonly string[]).includes(t.status),
+    );
+    if (!lapsed && payable) {
+      throw conflict(
+        'INVOICE_STILL_PAYABLE',
+        `Invoice ${old.invoice_number} can still be paid` +
+          (old.expires_at ? ` until ${old.expires_at.toISOString().slice(0, 10)}` : '') +
+          '. Take the payment against it.',
+      );
+    }
+
+    /*
+     * A vehicle renewal follows the bill, or the bill is not issued again.
+     *
+     * The renewal is tied to a transaction, not to the assessment, and it is
+     * completed by `issueRenewalFor` when that transaction is paid. Left on
+     * the old one, the motorist would pay the new bill and receive nothing.
+     * Its period is decided at completion, not here, so moving it is safe.
+     *
+     * A renewal that is no longer pending — cancelled when its payment was
+     * reversed, after the vehicle's expiry had already been moved and the
+     * authority told — is not one this can finish. Issuing the bill again
+     * would collect for a renewal the registry already shows, or grant a
+     * second one on top of it.
+     */
+    const renewal = transactions.length
+      ? await queryOne<{ id: string; status: string }>(
+          client,
+          'SELECT id, status FROM vehicle_renewals WHERE transaction_id = ANY($1::uuid[]) FOR UPDATE',
+          [transactions.map((t) => t.id)],
+        )
+      : null;
+    if (renewal && renewal.status !== 'PENDING_PAYMENT') {
+      throw conflict(
+        'VEHICLE_RENEWAL_CLOSED',
+        `Invoice ${old.invoice_number} was for a vehicle renewal that is now ${renewal.status.toLowerCase()}, so it cannot be issued again.`,
+        'A PSIRS officer has to settle this with the vehicle registry.',
+      );
+    }
+
+    const raised = await raiseInvoiceIn(client, {
+      assessmentId: old.assessment_id,
+      assessmentNumber: old.assessment_number,
+      taxpayerId: old.taxpayer_id,
+      revenueItemId: old.revenue_item_id,
+      lgaId: old.lga_id,
+      wardId: old.ward_id,
+      amountKobo: parseKobo(old.amount_kobo),
+      serviceChargeKobo: parseKobo(old.service_charge_kobo),
+      totalKobo: parseKobo(old.total_amount_kobo),
+      validityDays: 30,
+      actorId: params.actorId,
+      agentId: params.agentId ?? null,
+      territoryId: params.territoryId ?? null,
+      deviceId: params.deviceId ?? null,
+      latitude: params.latitude ?? null,
+      longitude: params.longitude ?? null,
+      channel: params.channel ?? 'AGENT_PWA',
+      eventMetadata: { reissueOf: old.invoice_number },
+    });
+
+    const why = lapsed
+      ? `Invoice ${old.invoice_number} passed its payment deadline unpaid`
+      : `The payment against invoice ${old.invoice_number} was reversed`;
+
+    await client.query(`UPDATE invoices SET status = 'CANCELLED', reissued_as = $2 WHERE id = $1`, [
+      old.id,
+      raised.invoiceId,
+    ]);
+
+    // The old transactions are closed, so nothing can be collected on them.
+    for (const transaction of transactions) {
+      const to =
+        transaction.status === 'INVOICE_GENERATED' || transaction.status === 'ASSESSMENT_CREATED'
+          ? 'EXPIRED'
+          : transaction.status === 'FAILED'
+            ? 'CANCELLED'
+            : null;
+      if (!to) continue;
+      await transitionTransaction(client, {
+        transactionId: transaction.id,
+        to,
+        reason: `${why}; issued again as ${raised.invoiceNumber}`,
+        actorId: params.actorId,
+        source: params.channel === 'OFFICER' ? 'OFFICER' : 'AGENT',
+      });
+    }
+
+    // The assessment the sweep marked EXPIRED is billed again.
+    await client.query(
+      `UPDATE assessments SET status = 'INVOICED' WHERE id = $1 AND status = 'EXPIRED'`,
+      [old.assessment_id],
+    );
+
+    if (renewal) {
+      await client.query('UPDATE vehicle_renewals SET transaction_id = $2 WHERE id = $1', [
+        renewal.id,
+        raised.transactionId,
+      ]);
+    }
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'invoice.reissued',
+      entityType: 'invoice',
+      entityId: old.id,
+      oldValue: {
+        invoiceNumber: old.invoice_number,
+        status: old.status,
+        expiresAt: old.expires_at,
+      },
+      newValue: {
+        status: 'CANCELLED',
+        reissuedAs: raised.invoiceId,
+        invoiceNumber: raised.invoiceNumber,
+        transactionReference: raised.transactionReference,
+        totalKobo: old.total_amount_kobo,
+        expiresAt: raised.expiresAt,
+        vehicleRenewalId: renewal?.id ?? null,
+      },
+      reason: why,
+      ipAddress: params.ipAddress ?? null,
+      deviceId: params.deviceId ?? null,
+      latitude: params.latitude ?? null,
+      longitude: params.longitude ?? null,
+    });
+
+    return {
+      reissued: true,
+      invoiceId: raised.invoiceId,
+      invoiceNumber: raised.invoiceNumber,
+      transactionId: raised.transactionId,
+      transactionReference: raised.transactionReference,
+      totalKobo: parseKobo(old.total_amount_kobo),
+      expiresAt: raised.expiresAt,
+      replaces: { invoiceId: old.id, invoiceNumber: old.invoice_number },
+    };
+  });
 }
 
 export async function transitionTransaction(

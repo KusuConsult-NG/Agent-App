@@ -121,15 +121,13 @@ const NOT_DRAWN_ON_PURPOSE: Record<string, string> = {
     show the same value on every row and invite somebody to act on it in the
     place where they cannot.`,
 
-  'portal/Charge.tsx InvoiceRecord.transaction_status': `
-    The invoice screen renders the invoice's own status, and the transaction
-    is a link away with its own badge. Two statuses side by side on one
-    record is how somebody reads the wrong one.`,
-
   'agent/Collect.tsx Obligation.transaction_status': `
-    Same reason. The outstanding list is a list of debts; a transaction
-    status belongs to the payment attempt and is shown on the transaction
-    screen the row opens.`,
+    The outstanding list is a list of debts; a transaction status belongs to
+    the payment attempt and is shown on the transaction screen the row opens.
+    Two statuses side by side on one row is how somebody reads the wrong one.
+    (The portal's invoice screen held the same exemption until it needed the
+    status to tell a reversed bill from a payable one; it still draws no
+    second badge.)`,
 
   'agent/Collect.tsx Obligation.issued_at': `
     The list shows what is owed and what it is for. An agent standing in

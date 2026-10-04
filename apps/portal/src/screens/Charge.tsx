@@ -37,7 +37,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
 import {
   Alert,
   Badge,
@@ -82,6 +82,9 @@ interface InvoiceRecord {
   revenue_category_ha: string | null;
   transaction_reference: string | null;
   transaction_status: string | null;
+  /** The invoice issued in its place, when it has been issued again. */
+  reissued_as: string | null;
+  reissued_as_number: string | null;
 }
 
 interface AssessmentRecord {
@@ -200,12 +203,52 @@ export function InvoiceScreen({
   const { record, error, reload } = useRecord<InvoiceRecord>(
     `/revenue/invoices/${encodeURIComponent(id)}`,
   );
+  const [reissuing, setReissuing] = useState(false);
+  const [reissueError, setReissueError] = useState<ApiError | null>(null);
 
   if (error) return <Failed error={error} retry={reload} />;
   if (!record) return <div className="card"><Loading rows={6} /></div>;
 
   const owed = BigInt(record.total_amount_kobo) - BigInt(record.amount_paid_kobo);
-  const lapsed = record.status === 'EXPIRED';
+  /*
+   * Lapsed by the deadline as well as by the status. The expiry sweep writes
+   * EXPIRED up to an hour after the deadline, and the payment path refuses
+   * from the deadline itself; an officer in that hour was shown a payable bill.
+   */
+  const pastDeadline =
+    record.expires_at !== null && new Date(record.expires_at).getTime() <= Date.now();
+  const lapsed = record.status === 'EXPIRED' || (record.status === 'UNPAID' && pastDeadline);
+  /*
+   * Owed and unpayable for the other reason: a payment the taxpayer's bank or
+   * the gateway reversed puts the bill back to UNPAID, and its transaction is
+   * REVERSED for good.
+   */
+  const stranded =
+    record.status === 'UNPAID' &&
+    !pastDeadline &&
+    (record.transaction_status === 'REVERSED' || record.transaction_status === 'REFUNDED');
+  const mayReissue = (lapsed || stranded) && can('invoice:create');
+
+  /*
+   * Issue it again, and go to the bill that replaces it — the one the money
+   * is now taken against. Asked twice, the server answers with the same
+   * replacement, so a second press lands in the same place.
+   */
+  async function reissue() {
+    if (!record) return;
+    setReissuing(true);
+    setReissueError(null);
+    try {
+      const replacement = await api.post<{ invoiceId: string }>(
+        `/revenue/invoices/${encodeURIComponent(record.id)}/reissue`,
+      );
+      navigate(`/invoice/${replacement.invoiceId}`);
+    } catch (caught) {
+      setReissueError(asApiError(caught));
+    } finally {
+      setReissuing(false);
+    }
+  }
 
   return (
     <>
@@ -239,6 +282,29 @@ export function InvoiceScreen({
           </Alert>
         )}
 
+        {stranded && (
+          <Alert kind="warning" title="ofcChStrandedTitle">
+            <p style={{ margin: 0 }}>{t.ofcChStranded}</p>
+          </Alert>
+        )}
+
+        {record.reissued_as && (
+          <Alert kind="info" title="ofcChReplacedTitle">
+            <p style={{ margin: '0 0 0.5rem' }}>
+              {t.ofcChReplaced.replace('{{number}}', record.reissued_as_number ?? '')}
+            </p>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => navigate(`/invoice/${record.reissued_as}`)}
+            >
+              {t.ofcChOpenReplacement.replace('{{number}}', record.reissued_as_number ?? '')}
+            </button>
+          </Alert>
+        )}
+
+        <ErrorAlert error={reissueError} />
+
         <KeyValue
           items={[
             [
@@ -261,6 +327,11 @@ export function InvoiceScreen({
         />
 
         <div className="button-row">
+          {mayReissue && (
+            <button type="button" disabled={reissuing} onClick={reissue}>
+              {reissuing ? t.ofcChReissuing : t.ofcChReissue}
+            </button>
+          )}
           <button
             type="button"
             className="secondary"

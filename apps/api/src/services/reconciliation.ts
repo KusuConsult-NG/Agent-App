@@ -1915,8 +1915,9 @@ async function recordReversal(params: {
      * So a reversal the State caused withdraws the demand, as an upheld
      * objection does. One the taxpayer's bank or the gateway caused leaves it
      * owed, because it is: the money never stayed with the State. That debt
-     * still cannot be paid against this transaction, and collecting it means
-     * a fresh assessment — which is a gap, and one this does not close.
+     * cannot be paid against this transaction, which is REVERSED for good;
+     * it is collected by issuing the bill again (`reissueInvoice`), which
+     * gives it a fresh transaction against the same assessment and amount.
      */
     await client.query(
       `UPDATE invoices i

@@ -278,6 +278,8 @@ export const OVERLAP_CONSTRAINT_MESSAGES: Record<string, string> = {
     'policy an end date first, then adopt the new one.',
   presumptive_no_overlap:
     'This taxpayer already has a presumptive assessment covering part of that period.',
+  invoices_one_live_per_assessment:
+    'This bill has already been issued again. Open the bill that replaced it rather than issuing another.',
 };
 
 /**

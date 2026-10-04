@@ -314,11 +314,11 @@ out.push(
   'The reasons are not interchangeable, which is why they are written out ' +
     'per row rather than once here. `agent:read:own` and its siblings are ' +
     'scoped by which agent is asking, so nothing consults them and nothing ' +
-    'should. `invoice:create` is a different thing wearing the same dash: ' +
-    'the act it names is real — creating an assessment writes its invoice in ' +
-    'the same transaction — and it is enforced, by `assessment:create` on ' +
-    'the same role. **So revoking `invoice:create` here to stop an agent ' +
-    'raising invoices would achieve nothing.** A dash nobody has explained ' +
+    'should. `invoice:create` used to be a different thing wearing the same ' +
+    'dash — real authority, enforced by `assessment:create` instead — and ' +
+    'now guards the one act that creates an invoice and nothing else: ' +
+    'issuing a lapsed bill again. Raising a new assessment, which writes its ' +
+    'first invoice, is still `assessment:create`. A dash nobody has explained ' +
     'now fails the generator rather than printing.',
 );
 out.push('');
@@ -335,13 +335,10 @@ out.push('| --- | --- | --- | --- |');
  *   - `agent:read:own` and its siblings are scoped by which agent is asking.
  *     The permission names a shape of access that the query enforces by
  *     actor, so nothing consults it and nothing should.
- *   - `invoice:create` is not that. It is a create permission on a money
- *     record, and the act it names does happen: `createAssessmentIn` inserts
- *     an assessment and its invoice in one transaction. That path is guarded
- *     by `assessment:create`, which the same role holds. So the authority is
- *     real, it is enforced, and this is not the lever that controls it —
- *     revoking this one from the roles screen to stop agents raising invoices
- *     would achieve nothing at all.
+ *   - `invoice:create` was the other kind until it was given a route: real
+ *     authority, enforced by `assessment:create` on the same role, so that
+ *     revoking it achieved nothing. It now guards
+ *     `POST /revenue/invoices/:id/reissue` and is no longer a dash.
  *
  * Sharing one disclaimer let the second kind read as the first. Each entry
  * now carries its own reason, printed beside the dash, and `--check` refuses
@@ -356,7 +353,6 @@ const ACKNOWLEDGED_DASHES = new Map([
   ['agent:read:own', 'scoped by which agent is asking'],
   ['report:read:own', 'scoped by which agent is asking'],
   ['support:read:own', 'scoped by who raised the ticket'],
-  ['invoice:create', 'the act is guarded by `assessment:create`'],
 ]);
 
 for (const permission of catalogue) {

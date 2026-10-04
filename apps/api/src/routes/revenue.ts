@@ -429,7 +429,12 @@ revenueRouter.get(
          FROM assessments a
          JOIN revenue_items ri ON ri.id = a.revenue_item_id
          JOIN revenue_categories rc ON rc.id = ri.category_id
-         LEFT JOIN invoices i ON i.assessment_id = a.id
+         /*
+          * Its live invoice. An assessment whose bill was issued again has
+          * two, and joining both made this answer with whichever row came
+          * first — the cancelled one as often as not.
+          */
+         LEFT JOIN invoices i ON i.assessment_id = a.id AND i.reissued_as IS NULL
         WHERE a.id = $1`,
       [req.params.id],
     );
@@ -453,12 +458,15 @@ revenueRouter.get(
       `SELECT i.*, a.assessment_number, a.period_label, a.computation_trace,
               ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
               rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
-              t.transaction_reference, t.status AS transaction_status
+              t.transaction_reference, t.status AS transaction_status,
+              -- What replaced it, by number, so the screen can say so.
+              replacement.invoice_number AS reissued_as_number
          FROM invoices i
          JOIN assessments a ON a.id = i.assessment_id
          JOIN revenue_items ri ON ri.id = a.revenue_item_id
          JOIN revenue_categories rc ON rc.id = ri.category_id
          LEFT JOIN transactions t ON t.invoice_id = i.id
+         LEFT JOIN invoices replacement ON replacement.id = i.reissued_as
         WHERE i.id = $1`,
       [req.params.id],
     );
@@ -466,6 +474,50 @@ revenueRouter.get(
     assertOwnRecord(req, 'invoice:read:all', (invoice as { agent_id?: string | null }).agent_id ?? null, 'That invoice');
     res.json(invoice);
   }),
+);
+
+/**
+ * Issue a bill again that can no longer be paid (see `reissueInvoice`).
+ *
+ * `invoice:create`, which agents have held since the start and nothing
+ * consulted: creating an assessment writes its first invoice, and that act is
+ * guarded by `assessment:create`. This is the one route that creates an
+ * invoice and nothing else — a fresh demand for a liability already
+ * determined, at the amount already determined — so it is guarded by the
+ * permission that names it. Revenue officers hold it too, for the lapsed
+ * bills on their arrears list; they cannot raise an assessment, and this
+ * gives them no way to.
+ */
+revenueRouter.post(
+  '/invoices/:id/reissue',
+  requirePermission('invoice:create'),
+  requireActiveAgent(),
+  idempotent('invoice.reissue'),
+  validateBody(
+    z.object({
+      latitude: z.number().min(-90).max(90).optional(),
+      longitude: z.number().min(-180).max(180).optional(),
+    }),
+    async (req, res, data) => {
+      if (!uuidSchema.safeParse(req.params.id).success) throw notFound('That invoice');
+      const result = await revenue.reissueInvoice({
+        invoiceId: String(req.params.id),
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+        agentId: req.agent?.agentId ?? null,
+        territoryId: req.agent?.territoryId ?? null,
+        deviceId: req.agent?.deviceId ?? null,
+        latitude: data.latitude ?? null,
+        longitude: data.longitude ?? null,
+        channel: req.auth!.role === 'agent' ? 'AGENT_PWA' : 'OFFICER',
+        ipAddress: req.clientIp,
+      });
+      res.status(result.reissued ? 201 : 200).json({
+        ...result,
+        totalKobo: serialiseKobo(result.totalKobo),
+      });
+    },
+  ),
 );
 
 /** Render the invoice as a PDF the taxpayer can keep (PRD §15, §23). */
