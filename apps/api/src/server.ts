@@ -278,7 +278,13 @@ async function main() {
     // the same thing.
     schedule('invoice-expiry', async () => {
       const result = await expireLapsedInvoices({ ...SYSTEM_ACTOR, limit: 500 });
-      return result.expired > 0 ? `${result.expired} invoice(s) passed their deadline` : null;
+      const parts = [
+        result.expired > 0 ? `${result.expired} invoice(s) passed their deadline` : null,
+        result.failed.length > 0
+          ? `${result.failed.length} could not be expired (${result.failed.join(', ')})`
+          : null,
+      ].filter(Boolean);
+      return parts.length > 0 ? parts.join('; ') : null;
     }),
 
     // The control that proves government actually received the money. It ran

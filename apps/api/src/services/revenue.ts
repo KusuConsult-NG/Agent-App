@@ -27,6 +27,7 @@ import {
 } from '../lib/references';
 import { computeAmount, type ComputationInputs, type RateVersion } from './rate-engine';
 import { recordAudit } from './audit';
+import { log } from '../lib/logger';
 
 export async function listCategories(db: Db, options: { authorityId?: string } = {}) {
   return query(
@@ -714,7 +715,7 @@ export async function expireLapsedInvoices(params: {
   actorId: string | null;
   actorRole: string;
   limit?: number;
-}): Promise<{ expired: number }> {
+}): Promise<{ expired: number; failed: string[] }> {
   const lapsed = await query<{ id: string; assessment_id: string; invoice_number: string }>(
     pool,
     `SELECT id, assessment_id, invoice_number FROM invoices
@@ -725,54 +726,74 @@ export async function expireLapsedInvoices(params: {
   );
 
   let expired = 0;
+  /*
+   * One bill that cannot be expired does not stop the rest.
+   *
+   * Each bill is its own transaction already, but the loop had no catch, so
+   * the first one to throw ended the sweep — and it works in deadline order,
+   * so that bill sat at the front of every run and nothing behind it ever
+   * lapsed. That is how a single bill raised in a month since closed held
+   * back every lapsed bill in the State (migration 093). A failure is now
+   * logged by invoice number and reported back, and the sweep moves on.
+   */
+  const failed: string[] = [];
   for (const invoice of lapsed) {
-    await withTransaction(async (client) => {
-      // Re-read under the lock: a payment may have landed between the scan and
-      // now, and an invoice that has just been paid is not lapsed.
-      const current = await queryOne<{ status: string }>(
-        client,
-        'SELECT status FROM invoices WHERE id = $1 FOR UPDATE',
-        [invoice.id],
-      );
-      if (!current || current.status !== 'UNPAID') return;
+    try {
+      await withTransaction(async (client) => {
+        // Re-read under the lock: a payment may have landed between the scan and
+        // now, and an invoice that has just been paid is not lapsed.
+        const current = await queryOne<{ status: string }>(
+          client,
+          'SELECT status FROM invoices WHERE id = $1 FOR UPDATE',
+          [invoice.id],
+        );
+        if (!current || current.status !== 'UNPAID') return;
 
-      await client.query(`UPDATE invoices SET status = 'EXPIRED' WHERE id = $1`, [invoice.id]);
-      await client.query(
-        `UPDATE assessments SET status = 'EXPIRED' WHERE id = $1 AND status IN ('ACTIVE','INVOICED')`,
-        [invoice.assessment_id],
-      );
+        await client.query(`UPDATE invoices SET status = 'EXPIRED' WHERE id = $1`, [invoice.id]);
+        await client.query(
+          `UPDATE assessments SET status = 'EXPIRED' WHERE id = $1 AND status IN ('ACTIVE','INVOICED')`,
+          [invoice.assessment_id],
+        );
 
-      const transactions = await query<{ id: string }>(
-        client,
-        `SELECT id FROM transactions
-          WHERE invoice_id = $1 AND status IN ('ASSESSMENT_CREATED','INVOICE_GENERATED')`,
-        [invoice.id],
-      );
-      for (const transaction of transactions) {
-        await transitionTransaction(client, {
-          transactionId: transaction.id,
-          to: 'EXPIRED',
-          reason: `Invoice ${invoice.invoice_number} passed its payment deadline`,
+        const transactions = await query<{ id: string }>(
+          client,
+          `SELECT id FROM transactions
+            WHERE invoice_id = $1 AND status IN ('ASSESSMENT_CREATED','INVOICE_GENERATED')`,
+          [invoice.id],
+        );
+        for (const transaction of transactions) {
+          await transitionTransaction(client, {
+            transactionId: transaction.id,
+            to: 'EXPIRED',
+            reason: `Invoice ${invoice.invoice_number} passed its payment deadline`,
+            actorId: params.actorId,
+            source: 'SYSTEM',
+          });
+        }
+
+        await recordAudit(client, {
           actorId: params.actorId,
-          source: 'SYSTEM',
+          actorRole: params.actorRole,
+          action: 'invoice.expired',
+          entityType: 'invoice',
+          entityId: invoice.id,
+          oldValue: { status: 'UNPAID' },
+          newValue: { status: 'EXPIRED' },
+          reason: `Payment deadline passed without payment (${invoice.invoice_number})`,
         });
-      }
-
-      await recordAudit(client, {
-        actorId: params.actorId,
-        actorRole: params.actorRole,
-        action: 'invoice.expired',
-        entityType: 'invoice',
-        entityId: invoice.id,
-        oldValue: { status: 'UNPAID' },
-        newValue: { status: 'EXPIRED' },
-        reason: `Payment deadline passed without payment (${invoice.invoice_number})`,
+        expired += 1;
       });
-      expired += 1;
-    });
+    } catch (error) {
+      failed.push(invoice.invoice_number);
+      log.error('an invoice past its deadline could not be expired', {
+        component: 'revenue',
+        invoiceNumber: invoice.invoice_number,
+        error,
+      });
+    }
   }
 
-  return { expired };
+  return { expired, failed };
 }
 
 /**

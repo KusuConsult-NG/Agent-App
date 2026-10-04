@@ -292,6 +292,84 @@ describe('an invoice whose deadline has passed', () => {
  * which is what proves it counted the invoice in the first place; a reader
  * that never saw the invoice would pass "the sweep changed nothing" for free.
  */
+describe('the sweep, around what it cannot finish', () => {
+  it('does not stop at a bill it cannot expire', async () => {
+    // Each bill is its own transaction, but the loop had no catch: the first
+    // one to throw ended the run, and in deadline order it was first every
+    // time, so nothing behind it ever lapsed.
+    const auth = { token: agent.token, deviceId: agent.device };
+    const second = await post(
+      '/revenue/assessments',
+      { taxpayerId: raised.taxpayerId, revenueItemId: await revenueItemByCode('SHOPS-KIOSKS'), inputs: {} },
+      { ...auth, idempotencyKey: 'expiry-assessment-second' },
+    );
+    assert.equal(second.status, 201, JSON.stringify(second.body));
+    await pool.query(`UPDATE invoices SET expires_at = now() - interval '2 days' WHERE id = $1`, [
+      raised.invoiceId,
+    ]);
+    await pool.query(`UPDATE invoices SET expires_at = now() - interval '1 day' WHERE id = $1`, [
+      second.body.invoiceId,
+    ]);
+    const first = await queryOne<{ invoice_number: string }>(
+      pool,
+      'SELECT invoice_number FROM invoices WHERE id = $1',
+      [raised.invoiceId],
+    );
+
+    // The first in line refuses to change, for the length of one sweep.
+    await pool.query(`
+      CREATE FUNCTION refuse_one_invoice_for_the_test() RETURNS trigger AS $$
+      BEGIN
+        IF OLD.id = '${raised.invoiceId}' THEN RAISE EXCEPTION 'refused for the test'; END IF;
+        RETURN NEW;
+      END $$ LANGUAGE plpgsql`);
+    await pool.query(`
+      CREATE TRIGGER refuse_one_invoice_for_the_test BEFORE UPDATE ON invoices
+        FOR EACH ROW EXECUTE FUNCTION refuse_one_invoice_for_the_test()`);
+    let swept: { expired: number; failed: string[] };
+    try {
+      swept = await expireLapsedInvoices({ actorId: null, actorRole: 'system' });
+    } finally {
+      await pool.query('DROP TRIGGER refuse_one_invoice_for_the_test ON invoices');
+      await pool.query('DROP FUNCTION refuse_one_invoice_for_the_test()');
+    }
+
+    assert.deepEqual(swept, { expired: 1, failed: [first!.invoice_number] });
+    const after = await queryOne<{ status: string }>(pool, 'SELECT status FROM invoices WHERE id = $1', [
+      second.body.invoiceId,
+    ]);
+    assert.equal(after?.status, 'EXPIRED', 'the bill behind the one that failed never lapsed');
+  });
+
+  it('bills the assessment again when a payment already moving lands after it', async () => {
+    // The sweep marks the assessment EXPIRED with the invoice; a payment in
+    // flight can still land, and the assessment went on reading EXPIRED
+    // under a PAID invoice.
+    const auth = { token: agent.token, deviceId: agent.device };
+    const started = await post(
+      '/payments/initiate',
+      { transactionId: raised.transactionId },
+      { ...auth, idempotencyKey: 'expiry-late-payment' },
+    );
+    assert.equal(started.status, 201, JSON.stringify(started.body));
+    await lapse();
+    await expireLapsedInvoices({ actorId: null, actorRole: 'system' });
+    assert.equal((await statuses()).assessment, 'EXPIRED', 'the precondition: the sweep reached it');
+
+    await post(
+      '/payments/simulate',
+      { gatewayReference: started.body.gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
+      auth,
+    );
+    const after = await statuses();
+    assert.deepEqual(
+      { invoice: after.invoice, assessment: after.assessment },
+      { invoice: 'PAID', assessment: 'INVOICED' },
+      'a paid assessment recorded as one that lapsed unpaid',
+    );
+  });
+});
+
 describe('one lapsed invoice, before the sweep and after it', () => {
   const score = async () => {
     const client = await pool.connect();

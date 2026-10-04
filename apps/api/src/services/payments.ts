@@ -880,6 +880,22 @@ async function verifyAndRecord(params: {
       );
 
       /*
+       * And an assessment the expiry sweep gave up on is billed again.
+       *
+       * The sweep marks a bill's assessment EXPIRED with the invoice, and a
+       * payment already in flight can still land afterwards: the invoice then
+       * reads PAID and the assessment went on reading EXPIRED for good — a
+       * paid assessment recorded as one that lapsed unpaid. Issuing a bill
+       * again puts it back to INVOICED (`reissueInvoice`); so does paying it.
+       */
+      await client.query(
+        `UPDATE assessments SET status = 'INVOICED'
+          WHERE status = 'EXPIRED'
+            AND id = (SELECT assessment_id FROM invoices WHERE id = $1)`,
+        [payment.invoice_id],
+      );
+
+      /*
        * ---- What the taxpayer gets now, and what they get later -------------
        *
        * Not a receipt. The gateway confirming means the gateway holds the
