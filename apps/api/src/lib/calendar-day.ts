@@ -103,7 +103,9 @@ export const PLATEAU_TIME_ZONE = 'Africa/Lagos';
  * month and year, the agent's own "today" and their month against the last
  * all went on asking UTC. Measured: a collection at 2026-03-31T23:30Z, which
  * is 00:30 on 1 April in Jos, was in March's close and not April's. Migration
- * 058 then refuses to let anybody correct a closed period's figure.
+ * 058 then refuses to let anybody correct a closed period's figure — and its
+ * lock decided a row's month on UTC too, until migration 089 put it on this
+ * calendar, so that the lock and the close name the same month.
  *
  * These are the SQL forms of the rule above, so a query names the zone by
  * calling something rather than by remembering to.

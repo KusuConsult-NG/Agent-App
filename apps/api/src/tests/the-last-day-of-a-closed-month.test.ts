@@ -324,3 +324,60 @@ describe('a month closed on a process set to Plateau time', () => {
     assert.equal(answer.status, 422, JSON.stringify(answer.body));
   });
 });
+
+/**
+ * The lock and the close, in the hour they could disagree about.
+ *
+ * A close freezes figures counted on Plateau's calendar. The lock that keeps a
+ * closed month closed (migration 058) decided a row's month on the database
+ * session's calendar, UTC. For the hour after midnight in Jos on the first of
+ * a month they named different months, so the lock guarded a row the close
+ * did not count and left open one it did. Migration 089 puts the lock on the
+ * close's calendar. These read a month long past, so they give the same
+ * answer at any hour.
+ */
+describe('a closed month, and the hour after Plateau midnight', () => {
+  const APRIL = { start: new Date('2026-04-01T00:00:00Z'), end: new Date('2026-04-30T00:00:00Z') };
+
+  async function stamped(instant: string): Promise<string> {
+    await collectionAt(new Date(instant));
+    const row = await queryOne<{ id: string }>(
+      pool,
+      'SELECT id FROM transactions WHERE created_at = $1',
+      [new Date(instant)],
+    );
+    assert.ok(row, 'the stamped collection exists');
+    return row!.id;
+  }
+
+  async function closeApril(): Promise<void> {
+    const april = await openPeriod(APRIL);
+    const closed = await close(april.id);
+    assert.equal(closed.status, 200, JSON.stringify(closed.body));
+  }
+
+  const touch = (id: string) =>
+    pool.query('UPDATE transactions SET updated_at = now() WHERE id = $1', [id]);
+
+  it('leaves May’s first half-hour open when April closes', async () => {
+    // 2026-04-30T23:30Z is 00:30 on 1 May in Jos. It is May's money, May is
+    // open, and it has to stay settleable and reversible.
+    await collectOnce();
+    const may = await stamped('2026-04-30T23:30:00Z');
+    await closeApril();
+    await assert.doesNotReject(
+      touch(may),
+      'a collection from 1 May was locked inside April, which had closed without it',
+    );
+  });
+
+  it('locks April’s first half-hour with the rest of April', async () => {
+    // 2026-03-31T23:30Z is 00:30 on 1 April in Jos, and in April's frozen
+    // figure. Changing it would change a closed month.
+    await collectOnce();
+    const april = await stamped('2026-03-31T23:30:00Z');
+    await closeApril();
+    await assert.rejects(touch(april), /2026-04 is closed/);
+  });
+});
+
