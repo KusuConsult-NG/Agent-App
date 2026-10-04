@@ -58,6 +58,8 @@ const OBJECTIONS = [
     raisedAt: '2026-08-03T09:00:00.000Z',
     annualTaxKobo: '4800000',
     assessedBy: 'officer-other',
+    bill: 'PAID',
+    paidKobo: '4800000',
   },
   {
     objectionId: 'obj-2',
@@ -69,6 +71,8 @@ const OBJECTIONS = [
     raisedAt: '2026-08-04T09:00:00.000Z',
     annualTaxKobo: '2880000',
     assessedBy: ME,
+    bill: 'OWED',
+    paidKobo: '0',
   },
 ];
 
@@ -325,6 +329,63 @@ describe('objections', () => {
     render(<EnumerationScreen />);
     await waitFor(() => expect(screen.getByText('Open objections')).toBeTruthy());
     expect(screen.getByText(/₦76,800/)).toBeTruthy();
+  });
+
+  it('says which bills have been paid, and what upholding one does', async () => {
+    // Upholding an objection to a paid bill asks for a refund. The queue the
+    // decision is made from said nothing about whether the bill was paid.
+    render(<EnumerationScreen />);
+    await waitFor(() => expect(screen.getByText('Grace Bitrus')).toBeTruthy());
+    const paid = screen.getByText('Grace Bitrus').closest('tr')!;
+    expect(within(paid).getByText('Paid ₦48,000.00. Upholding this asks for a refund.')).toBeTruthy();
+    const owed = screen.getByText('Musa Haruna').closest('tr')!;
+    expect(within(owed).getByText('Not paid')).toBeTruthy();
+  });
+
+  it('says when a decision has to wait for a payment', async () => {
+    objections = [{ ...OBJECTIONS[0], bill: 'PAYMENT_IN_PROGRESS', paidKobo: '0' }];
+    render(<EnumerationScreen />);
+    await waitFor(() => expect(screen.getByText('Grace Bitrus')).toBeTruthy());
+    expect(screen.getByText('A payment is in progress. Decide once it has settled.')).toBeTruthy();
+  });
+
+  it('tells the officer the refund their decision asked for', async () => {
+    vi.spyOn(apiModule.api, 'post').mockImplementation(async (path: string, body?: unknown) => {
+      posted.push({ path, body });
+      return {
+        refundsRequested: [
+          { approvalId: 'ap-1', transactionReference: 'TXN-2026-000123', amountKobo: '4800000' },
+        ],
+      } as never;
+    });
+    render(<EnumerationScreen />);
+    await waitFor(() => expect(screen.getByText('Grace Bitrus')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Why are you deciding this way/i), {
+      target: { value: 'Confirmed on site: the trader works alone.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Uphold the objection/i }));
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          'A refund of ₦48,000.00 on TXN-2026-000123 has been asked for. Another officer grants it from the approvals queue.',
+        ),
+      ).toBeTruthy(),
+    );
+  });
+
+  it('says nothing about a refund when none was asked for', async () => {
+    vi.spyOn(apiModule.api, 'post').mockImplementation(async (path: string, body?: unknown) => {
+      posted.push({ path, body });
+      return { refundsRequested: [] } as never;
+    });
+    render(<EnumerationScreen />);
+    await waitFor(() => expect(screen.getByText('Grace Bitrus')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Why are you deciding this way/i), {
+      target: { value: 'Re-measured on site; the record is correct.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Reject the objection/i }));
+    await waitFor(() => expect(posted.some((entry) => entry.path.includes('/decide'))).toBe(true));
+    expect(screen.queryByText(/has been asked for/)).toBeNull();
   });
 
   it('hides the decision controls from an officer who may not review', async () => {

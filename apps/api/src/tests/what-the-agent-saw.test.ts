@@ -58,6 +58,7 @@ import {
   type Observations,
 } from '../services/presumptive';
 import { arrearsWorklist } from '../services/arrears';
+import { executeReversal } from '../services/reconciliation';
 import { sendDueReminders } from '../services/reminders';
 import {
   computeComplianceScore,
@@ -1213,13 +1214,15 @@ describe('objecting to it', () => {
       actorId: officerId,
       actorRole: 'admin',
     });
-    await decideObjection(pool, {
+    assert.equal((await openObjections(pool))[0]?.bill, 'OWED');
+    const decided = await decideObjection(pool, {
       objectionId: objection.id,
       uphold: true,
       reason: 'Confirmed on site: the trader works alone.',
       actorId: secondOfficerId,
       actorRole: 'admin',
     });
+    assert.deepEqual(decided, { refundsRequested: [] }, 'a refund asked for on a bill nobody paid');
 
     const charge = await chargeOf(assessment.id);
     assert.deepEqual(
@@ -1262,6 +1265,11 @@ describe('objecting to it', () => {
       { ...auth, idempotencyKey: 'objector-pays' },
     );
     assert.equal(started.status, 201, JSON.stringify(started.body));
+    assert.equal(
+      (await openObjections(pool)).find((row) => row.objectionId === objection.id)?.bill,
+      'PAYMENT_IN_PROGRESS',
+      'the queue did not say a decision would have to wait',
+    );
 
     await assert.rejects(
       decideObjection(pool, {
@@ -1297,8 +1305,9 @@ describe('objecting to it', () => {
     );
     assert.equal(settled.status, 200, JSON.stringify(settled.body));
 
-    // And the objection can be decided now; a paid bill is left for a refund.
-    await decideObjection(pool, {
+    // And the objection can be decided now; a paid bill is left for a refund,
+    // which the decision asks for.
+    const decided = await decideObjection(pool, {
       objectionId: objection.id,
       uphold: true,
       reason: 'Confirmed on site: the trader works alone.',
@@ -1306,6 +1315,7 @@ describe('objecting to it', () => {
       actorRole: 'admin',
     });
     assert.equal((await chargeOf(assessment.id)).invoice_status, 'PAID');
+    assert.equal(decided.refundsRequested.length, 1);
     assert.deepEqual(await getObligations(pool, taxpayer), []);
   });
 
@@ -1346,6 +1356,159 @@ describe('objecting to it', () => {
       { charge: after.status, invoice: after.invoice_status },
       { charge: 'CANCELLED', invoice: 'CANCELLED' },
     );
+  });
+
+  /** A presumptive bill raised, paid in full, and objected to afterwards. */
+  async function paidThenObjected(name: string) {
+    const { taxpayer, assessment } = await assessed(name);
+    const charge = await chargeOf(assessment.id);
+    const started = await post(
+      '/payments/initiate',
+      { transactionId: charge.id },
+      { ...auth, idempotencyKey: `paid-then-objected-${name}` },
+    );
+    assert.equal(started.status, 201, JSON.stringify(started.body));
+    await post(
+      '/payments/simulate',
+      { gatewayReference: started.body.gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
+      auth,
+    );
+    assert.equal((await chargeOf(assessment.id)).invoice_status, 'PAID', 'the precondition: a paid bill');
+    const objection = await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'There is no apprentice; the agent counted a customer.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    return { taxpayer, assessment, charge, objection };
+  }
+
+  it('asks for the money back when it upholds an objection to a paid bill', async () => {
+    /*
+     * Measured before it did: a trader paid ₦48,000, objected, and won. The
+     * assessment read WITHDRAWN, the bill read PAID, and there was no refund
+     * request and nothing in anybody's inbox — the State kept the money for
+     * an estimate it had agreed was wrong. Nor had the queue the decision was
+     * made from said the bill was paid.
+     */
+    const { assessment, charge, objection } = await paidThenObjected('Paid Objector');
+    const queued = (await openObjections(pool)).find((row) => row.objectionId === objection.id);
+    assert.deepEqual(
+      { bill: queued?.bill, paidKobo: queued?.paidKobo },
+      { bill: 'PAID', paidKobo: '4800000' },
+      'the officer deciding was not told the bill had been paid',
+    );
+
+    const decided = await decideObjection(pool, {
+      objectionId: objection.id,
+      uphold: true,
+      reason: 'Confirmed on site: the trader works alone.',
+      actorId: secondOfficerId,
+      actorRole: 'admin',
+    });
+    assert.equal(decided.refundsRequested.length, 1, 'the money was kept and nothing asked for it back');
+    assert.equal(decided.refundsRequested[0]!.amountKobo, '4800000');
+
+    const request = await queryOne<{
+      approval_type: string;
+      entity_id: string;
+      status: string;
+      requested_by: string;
+      payload: { amountKobo: string; refundType: string; attributableTo: string };
+    }>(pool, 'SELECT approval_type, entity_id, status, requested_by, payload FROM approvals WHERE id = $1', [
+      decided.refundsRequested[0]!.approvalId,
+    ]);
+    assert.deepEqual(
+      {
+        type: request?.approval_type,
+        transaction: request?.entity_id,
+        status: request?.status,
+        by: request?.requested_by,
+        refundType: request?.payload.refundType,
+        whose: request?.payload.attributableTo,
+      },
+      {
+        type: 'REFUND',
+        transaction: charge.id,
+        status: 'REQUESTED',
+        by: secondOfficerId,
+        refundType: 'FULL',
+        whose: 'GOVERNMENT',
+      },
+    );
+    const told = await queryOne<{ n: string }>(
+      pool,
+      `SELECT count(*)::text AS n FROM officer_notifications
+        WHERE kind = 'APPROVAL_WAITING' AND entity_id = $1`,
+      [decided.refundsRequested[0]!.approvalId],
+    );
+    assert.notEqual(told?.n, '0', 'and nobody who reviews refunds was told one was waiting');
+
+    /*
+     * And it is a request a refund can be carried out from: granted by a
+     * second officer, executed by a third, under the checks a refund asked
+     * for by hand goes through — the amount equal to the payment included.
+     */
+    await createGovernmentUser({ fullName: 'Granting Officer', phone: '+2348000000071', role: 'finance_officer' });
+    const executorId = await createGovernmentUser({
+      fullName: 'Paying Officer',
+      phone: '+2348000000072',
+      role: 'finance_officer',
+    });
+    const granting = await loginAs('+2348000000071');
+    const granted = await post(
+      `/government/approvals/${decided.refundsRequested[0]!.approvalId}/decide`,
+      { decision: 'APPROVE', reason: 'The objection was upheld; the estimate is withdrawn.' },
+      { token: granting.accessToken },
+    );
+    assert.equal(granted.status, 200, JSON.stringify(granted.body));
+    await executeReversal({
+      approvalId: decided.refundsRequested[0]!.approvalId,
+      actorId: executorId,
+      actorRole: 'finance_officer',
+    });
+    const after = await chargeOf(assessment.id);
+    assert.deepEqual(
+      { charge: after.status, invoice: after.invoice_status },
+      { charge: 'REFUNDED', invoice: 'CANCELLED' },
+      'the refund left the trader owing the estimate again',
+    );
+  });
+
+  it('does not ask twice for a payment already being refunded', async () => {
+    const { charge, objection } = await paidThenObjected('Already Asked');
+    await pool.query(
+      `INSERT INTO approvals (approval_type, entity_type, entity_id, payload, requested_by, requested_reason)
+       VALUES ('REFUND', 'transaction', $1, '{}', $2, 'Asked for by hand before the decision.')`,
+      [charge.id, officerId],
+    );
+    const decided = await decideObjection(pool, {
+      objectionId: objection.id,
+      uphold: true,
+      reason: 'Confirmed on site: the trader works alone.',
+      actorId: secondOfficerId,
+      actorRole: 'admin',
+    });
+    assert.deepEqual(decided.refundsRequested, []);
+    const open = await queryOne<{ n: string }>(
+      pool,
+      `SELECT count(*)::text AS n FROM approvals WHERE entity_id = $1 AND status = 'REQUESTED'`,
+      [charge.id],
+    );
+    assert.equal(open?.n, '1', 'two requests to refund one payment');
+  });
+
+  it('asks for no refund when the objection is rejected', async () => {
+    const { objection } = await paidThenObjected('Rejected Payer');
+    const decided = await decideObjection(pool, {
+      objectionId: objection.id,
+      uphold: false,
+      reason: 'Re-counted on site; the apprentice is real.',
+      actorId: secondOfficerId,
+      actorRole: 'admin',
+    });
+    assert.deepEqual(decided, { refundsRequested: [] });
   });
 
   it('costs the trader nothing on the compliance score once upheld', async () => {

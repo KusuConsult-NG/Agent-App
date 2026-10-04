@@ -25,7 +25,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, asApiError, can, getUser, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
-import { enumLabel } from '@psirs/shared';
+import { enumLabel, formatNaira } from '@psirs/shared';
 
 interface Disagreement {
   observationId: string;
@@ -72,6 +72,13 @@ interface Objection {
   raisedAt: string;
   annualTaxKobo: string;
   assessedBy: string;
+  /** Where the bill stands, which changes what deciding does. */
+  bill: 'OWED' | 'PAID' | 'PAYMENT_IN_PROGRESS';
+  paidKobo: string;
+}
+
+interface Decided {
+  refundsRequested: { approvalId: string; transactionReference: string; amountKobo: string }[];
 }
 
 export function EnumerationScreen() {
@@ -88,6 +95,7 @@ export function EnumerationScreen() {
   const [objections, setObjections] = useState<Objection[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [decisionError, setDecisionError] = useState<ApiError | null>(null);
+  const [refundsAsked, setRefundsAsked] = useState<Decided['refundsRequested']>([]);
   const [reason, setReason] = useState('');
   const [attestedBy, setAttestedBy] = useState('');
   const [objectionGround, setObjectionGround] = useState('FACTS_WRONG');
@@ -160,11 +168,18 @@ export function EnumerationScreen() {
     if (!reason.trim()) return;
     setBusy(true);
     setDecisionError(null);
+    setRefundsAsked([]);
     try {
-      await api.post(`/government/enumeration/objections/${objectionId}/decide`, {
+      /*
+       * Upholding an objection to a paid bill asks for the money back. Said
+       * here, to the officer who decided, so the request is something they
+       * know they set going rather than one a colleague finds in a queue.
+       */
+      const decided = await api.post<Decided>(`/government/enumeration/objections/${objectionId}/decide`, {
         uphold,
         reason: reason.trim(),
       });
+      setRefundsAsked(decided?.refundsRequested ?? []);
       setReason('');
       load();
     } catch (caught) {
@@ -472,6 +487,13 @@ export function EnumerationScreen() {
             ) : null}
 
             <ErrorAlert error={decisionError} />
+            {refundsAsked.map((refund) => (
+              <Alert kind="success" key={refund.approvalId}>
+                {t.ofcEnRefundAsked
+                  .replace('{{amount}}', formatNaira(BigInt(refund.amountKobo)))
+                  .replace('{{reference}}', refund.transactionReference)}
+              </Alert>
+            ))}
 
             <Table
               columns={[
@@ -492,6 +514,16 @@ export function EnumerationScreen() {
                   key: 'raisedAt',
                   label: 'ofcEnRaisedOn',
                   render: (row: Objection) => formatDate(row.raisedAt),
+                },
+                {
+                  key: 'bill',
+                  label: 'ofcEnBill',
+                  render: (row: Objection) =>
+                    row.bill === 'PAID'
+                      ? t.ofcEnBillPaid.replace('{{amount}}', formatNaira(BigInt(row.paidKobo)))
+                      : row.bill === 'PAYMENT_IN_PROGRESS'
+                        ? t.ofcEnBillPaying
+                        : t.ofcEnBillOwed,
                 },
                 {
                   key: 'objectionId',

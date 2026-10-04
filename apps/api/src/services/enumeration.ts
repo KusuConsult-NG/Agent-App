@@ -44,10 +44,12 @@
  * granted to them. Anyone who produces books leaves the regime.
  */
 
+import type { PoolClient } from 'pg';
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { createAssessmentIn, withdrawUnpaidBill } from './revenue';
 import { recordAudit } from './audit';
+import { openApprovalRequest } from './approval-requests';
 import { scopeParams, type ReportScope } from './report-scope';
 import {
   bandFor,
@@ -751,6 +753,8 @@ export async function raiseObjection(
  * figure computed from facts the taxpayer has just successfully contested
  * would be a second estimate resting on the first, and the honest route is a
  * fresh observation and a fresh assessment they can contest in turn.
+ *
+ * Answers with the refunds it asked for — see `askForRefundsOfWithdrawnEstimate`.
  */
 export async function decideObjection(
   db: Db,
@@ -761,13 +765,14 @@ export async function decideObjection(
     actorId: string;
     actorRole: string;
   },
-): Promise<void> {
+): Promise<{ refundsRequested: RefundRequested[] }> {
   // As above: the database requires this too, and holds it when this does not.
   if (!params.reason.trim()) {
     throw badRequest('Give a reason the taxpayer can read.');
   }
 
-  await withTransaction(async (client) => {
+  return withTransaction(async (client) => {
+    let refundsRequested: RefundRequested[] = [];
     const objection = await queryOne<{
       id: string;
       status: string;
@@ -827,6 +832,11 @@ export async function decideObjection(
           actorId: params.actorId,
           reason: `objection upheld (${params.reason.trim()})`,
         });
+        refundsRequested = await askForRefundsOfWithdrawnEstimate(client, assessment!.assessment_id, {
+          actorId: params.actorId,
+          actorRole: params.actorRole,
+          reason: params.reason.trim(),
+        });
       }
     } else {
       await client.query(
@@ -845,7 +855,86 @@ export async function decideObjection(
       newValue: { status: params.uphold ? 'UPHELD' : 'REJECTED' },
       reason: params.reason.trim(),
     });
+
+    return { refundsRequested };
   });
+}
+
+export interface RefundRequested {
+  approvalId: string;
+  transactionReference: string;
+  amountKobo: string;
+}
+
+/**
+ * Ask for the money back on an estimate the State has withdrawn.
+ *
+ * An objection can be raised after the bill is paid, and a payment can land
+ * while one is open. Upholding it left that bill PAID — rightly, because money
+ * that has reached a government account comes back through a refund and its
+ * accountability, not through an UPDATE — and then nothing asked for the
+ * refund. Measured: a trader paid ₦48,000, objected, and the objection was
+ * upheld. The assessment read WITHDRAWN, the bill read PAID, there was no
+ * refund request and nothing in anybody's inbox, and the objection queue the
+ * decision was made from had not said the bill was paid. The State kept the
+ * money for an estimate it had agreed was wrong, which is the decision in the
+ * taxpayer's favour costing them exactly what it would have cost to lose.
+ *
+ * So the decision opens the request, in full and attributed to the State.
+ * It is a request and not a refund. A second officer still grants it and a
+ * third still carries it out, under every check a refund asked for by hand
+ * goes through; this only makes sure there is something for them to decide.
+ * The requester is the officer who upheld the objection, which keeps them
+ * from also granting it. A payment already under a reversal or refund request
+ * is left to that one.
+ */
+async function askForRefundsOfWithdrawnEstimate(
+  client: PoolClient,
+  assessmentId: string,
+  params: { actorId: string; actorRole: string; reason: string },
+): Promise<RefundRequested[]> {
+  const paid = await query<{ id: string; transaction_reference: string; amount_kobo: string }>(
+    client,
+    `SELECT t.id, t.transaction_reference, p.amount_kobo::text AS amount_kobo
+       FROM invoices i
+       JOIN transactions t ON t.invoice_id = i.id
+       JOIN payments p ON p.transaction_id = t.id AND p.status = 'VERIFIED'
+      WHERE i.assessment_id = $1
+        AND i.status = 'PAID'
+        AND NOT EXISTS (
+          SELECT 1 FROM approvals a
+           WHERE a.entity_type = 'transaction' AND a.entity_id = t.id::text
+             AND a.approval_type IN ('REFUND', 'PAYMENT_REVERSAL')
+             AND a.status IN ('REQUESTED', 'REVIEWED', 'APPROVED'))
+      ORDER BY t.created_at`,
+    [assessmentId],
+  );
+
+  const requested: RefundRequested[] = [];
+  for (const charge of paid) {
+    const approval = await openApprovalRequest(client, {
+      approvalType: 'REFUND',
+      entityType: 'transaction',
+      entityId: charge.id,
+      payload: {
+        amountKobo: charge.amount_kobo,
+        refundType: 'FULL',
+        attributableTo: 'GOVERNMENT',
+        reason: `Objection upheld: ${params.reason}`,
+      },
+      requestedBy: params.actorId,
+      requestedByRole: params.actorRole,
+      reason:
+        `The objection to this presumptive assessment was upheld (${params.reason}), and ` +
+        `${charge.transaction_reference} had already paid it. Refund the payment in full.`,
+    });
+    requested.push({
+      approvalId: approval.id,
+      transactionReference: charge.transaction_reference,
+      amountKobo: charge.amount_kobo,
+    });
+  }
+  return requested;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1088,6 +1177,15 @@ export async function openObjections(
     annualTaxKobo: string;
     /** The officer who raised the assessment, and so may not decide this. */
     assessedBy: string;
+    /**
+     * Where the bill stands, which changes what deciding does. Upholding an
+     * objection to a PAID bill asks for a refund; one with a payment in
+     * progress is refused until the payment settles. The queue said neither,
+     * so an officer learnt the first from nothing and the second from a
+     * refusal.
+     */
+    bill: 'OWED' | 'PAID' | 'PAYMENT_IN_PROGRESS';
+    paidKobo: string;
   }[]
 > {
   const { statewide, lgaIds } = scopeParams(scope);
@@ -1101,12 +1199,31 @@ export async function openObjections(
     raised_at: Date;
     annual_tax_kobo: string;
     created_by: string;
+    bill: 'OWED' | 'PAID' | 'PAYMENT_IN_PROGRESS';
+    paid_kobo: string;
   }>(
     db,
     `SELECT o.id, o.presumptive_assessment_id, a.taxpayer_id,
             COALESCE(NULLIF(trim(t.business_name), ''),
                      trim(coalesce(t.first_name,'') || ' ' || coalesce(t.last_name,''))) AS taxpayer_name,
-            o.ground, o.statement, o.raised_at, a.annual_tax_kobo, a.created_by
+            o.ground, o.statement, o.raised_at, a.annual_tax_kobo, a.created_by,
+            -- The same two questions withdrawUnpaidBill and the refund ask.
+            CASE
+              WHEN EXISTS (
+                SELECT 1 FROM invoices i
+                  JOIN transactions tx ON tx.invoice_id = i.id
+                  JOIN payments p ON p.transaction_id = tx.id
+                 WHERE i.assessment_id = a.assessment_id
+                   AND i.status IN ('UNPAID', 'PARTIALLY_PAID', 'EXPIRED')
+                   AND p.status IN ('INITIATED', 'PENDING', 'SUCCESSFUL', 'VERIFIED'))
+                THEN 'PAYMENT_IN_PROGRESS'
+              WHEN EXISTS (
+                SELECT 1 FROM invoices i WHERE i.assessment_id = a.assessment_id AND i.status = 'PAID')
+                THEN 'PAID'
+              ELSE 'OWED'
+            END AS bill,
+            COALESCE((SELECT SUM(i.amount_paid_kobo) FROM invoices i
+                       WHERE i.assessment_id = a.assessment_id AND i.status = 'PAID'), 0)::text AS paid_kobo
        FROM assessment_objections o
        JOIN presumptive_assessments a ON a.id = o.presumptive_assessment_id
        JOIN taxpayers t ON t.id = a.taxpayer_id
@@ -1126,5 +1243,7 @@ export async function openObjections(
     raisedAt: row.raised_at,
     annualTaxKobo: row.annual_tax_kobo,
     assessedBy: row.created_by,
+    bill: row.bill,
+    paidKobo: row.paid_kobo,
   }));
 }

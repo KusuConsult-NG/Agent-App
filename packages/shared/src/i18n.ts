@@ -1334,6 +1334,11 @@ export interface TranslationDictionary {
   ofcEnReject: string;
   ofcEnReasonFirst: string;
   ofcEnNoObjections: string;
+  ofcEnBill: string;
+  ofcEnBillOwed: string;
+  ofcEnBillPaid: string;
+  ofcEnBillPaying: string;
+  ofcEnRefundAsked: string;
   ofcPsPublish: string;
   ofcPsPublishClass: string;
   ofcPsPublishFigure: string;
@@ -5206,6 +5211,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcEnReject: "Reject the objection",
     ofcEnReasonFirst: "Write the reason first.",
     ofcEnNoObjections: "No estimate is under objection.",
+    ofcEnBill: "Bill",
+    ofcEnBillOwed: "Not paid",
+    ofcEnBillPaid: "Paid {{amount}}. Upholding this asks for a refund.",
+    ofcEnBillPaying: "A payment is in progress. Decide once it has settled.",
+    ofcEnRefundAsked: "A refund of {{amount}} on {{reference}} has been asked for. Another officer grants it from the approvals queue.",
     ofcPsPublish: "Publishing",
     ofcPsPublishClass: "Publish a local government class",
     ofcPsPublishFigure: "Publish a schedule figure",
@@ -8825,6 +8835,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcEnReject: "Ki kalubalen",
     ofcEnReasonFirst: "Ka fara rubuta dalili.",
     ofcEnNoObjections: "Babu kiyasin da ake kalubalanta.",
+    ofcEnBill: "Takardar biya",
+    ofcEnBillOwed: "Ba a biya ba",
+    ofcEnBillPaid: "An biya {{amount}}. Amincewa da kalubalen zai nemi a mayar da kudin.",
+    ofcEnBillPaying: "Ana kan biya. A yanke hukunci bayan biyan ya kammala.",
+    ofcEnRefundAsked: "An nemi a mayar da {{amount}} na {{reference}}. Wani jami’i ne zai amince da shi daga jerin abubuwan da ke jiran amincewa.",
     ofcPsPublish: "Wallafawa",
     ofcPsPublishClass: "Wallafa matakin karamar hukuma",
     ofcPsPublishFigure: "Wallafa adadin jadawali",

@@ -80,6 +80,7 @@ import * as workbench from '../services/audit-workbench';
 import * as exporting from '../services/export';
 import * as officerDevices from '../services/officer-devices';
 import * as inbox from '../services/officer-inbox';
+import { openApprovalRequest } from '../services/approval-requests';
 import { integrationStatus } from '../integrations';
 import { integrationHealth } from '../services/integration-health';
 import { jobHealth, runOnDemand } from '../services/jobs';
@@ -893,14 +894,18 @@ governmentRouter.post(
   validateBody(
     z.object({ uphold: z.boolean(), reason: z.string().min(4).max(1000) }),
     async (req, res, data) => {
-      await decideObjection(pool, {
-        objectionId: req.params.id!,
-        uphold: data.uphold,
-        reason: data.reason,
-        actorId: req.auth!.userId,
-        actorRole: req.auth!.role,
-      });
-      res.status(204).end();
+      // 200 with what the decision asked for, where it was 204 with nothing:
+      // an upheld objection on a paid bill opens a refund request, and the
+      // officer who decided is told so rather than left to find it.
+      res.json(
+        await decideObjection(pool, {
+          objectionId: req.params.id!,
+          uphold: data.uphold,
+          reason: data.reason,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
     },
   ),
 );
@@ -1623,60 +1628,15 @@ governmentRouter.post(
           }
           await revenue.checkInvoiceWithdrawal(client, data.entityId);
         }
-        const row = await queryOne<{ id: string }>(
-          client,
-          `INSERT INTO approvals
-             (approval_type, entity_type, entity_id, payload, requested_by, requested_reason)
-           VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-          [
-            data.approvalType,
-            data.entityType,
-            data.entityId,
-            JSON.stringify(data.payload),
-            req.auth!.userId,
-            data.reason,
-          ],
-        );
-        await recordAudit(client, {
-          actorId: req.auth!.userId,
-          actorRole: req.auth!.role,
-          action: 'approval.requested',
-          entityType: 'approval',
-          entityId: row!.id,
-          newValue: { approvalType: data.approvalType, entityId: data.entityId },
+        return openApprovalRequest(client, {
+          approvalType: data.approvalType,
+          entityType: data.entityType,
+          entityId: data.entityId,
+          payload: data.payload,
+          requestedBy: req.auth!.userId,
+          requestedByRole: req.auth!.role,
           reason: data.reason,
         });
-
-        /*
-         * Tell whoever reviews these, rather than waiting for them to look.
-         *
-         * Addressed to a role, not a person: an approval waiting on a named
-         * officer waits through their leave, and a reversal or a refund
-         * sitting unreviewed is money the platform is holding from somebody.
-         *
-         * Which role is derived from the permission rather than named here --
-         * `approval:review` is what the reviewing endpoint requires, and since
-         * migration 059 which roles hold it is PSIRS's decision rather than a
-         * constant in this file.
-         */
-        const reviewers = await query<{ role: string }>(
-          client,
-          `SELECT DISTINCT role FROM role_permissions WHERE permission = 'approval:review'`,
-        );
-        for (const reviewer of reviewers) {
-          await inbox.raise(client, {
-            role: reviewer.role,
-            kind: 'APPROVAL_WAITING',
-            severity: 'WARNING',
-            subject: `${data.approvalType} is waiting for a decision`,
-            body: data.reason,
-            entityType: 'approval',
-            entityId: row!.id,
-            dedupeKey: `approval:${row!.id}:${reviewer.role}`,
-          });
-        }
-
-        return row!;
       });
 
       res.status(201).json({ approvalId: approval.id, status: 'REQUESTED' });
