@@ -34,6 +34,7 @@ import {
   pool,
   post,
   resetDatabase,
+  settleCollection,
   startTestServer,
   stopTestServer,
 } from './helpers';
@@ -258,11 +259,17 @@ describe('what a closed month still locks', () => {
     await assert.rejects(move(receipted!, 'REVERSED'), locked);
   });
 
-  it('keeps a row it counted frozen whole, as before', async () => {
-    // Even a move that changes no figure: what the close counted is a record
-    // somebody signed, and correcting it is what reopening the month is for.
+  it('lets money it counted be banked and receipted, and nothing else about it change', async () => {
+    // Carried forward along the money's path, which changes no frozen figure
+    // (migration 095). An edit that leaves the status alone is a correction,
+    // and correcting a closed month is what reopening it is for.
     const [id] = await closedWith('RECONCILIATION_PENDING');
-    await assert.rejects(move(id!, 'RECEIPT_GENERATED'), locked);
+    await assert.rejects(
+      query(pool, `UPDATE transactions SET status_reason = 'edited' WHERE id = $1`, [id]),
+      locked,
+    );
+    await move(id!, 'RECEIPT_GENERATED');
+    assert.equal((await stateOf(id!))?.transaction, 'RECEIPT_GENERATED');
   });
 
   it('lets a charge that took nothing be cancelled', async () => {
@@ -283,5 +290,71 @@ describe('what a closed month still locks', () => {
       .map((state) => state.trim().replace(/^'|'(::text)?$/g, ''))
       .sort();
     assert.deepEqual(listed, [...REVENUE_RECOGNISED_STATES].sort());
+  });
+});
+
+describe('money in transit when its month was closed', () => {
+  /*
+   * A month may be closed over money the gateway has confirmed and the bank
+   * has not yet credited — a month that refused to would refuse every month
+   * (`a-month-closed-over-a-reversal.test.ts`). Recording the credit when it
+   * lands was then refused, "… the payments in it cannot be changed", so the
+   * settlement could not be entered at all: no receipt for the taxpayer, and
+   * no commission for the agent, which waits for SETTLED.
+   */
+  async function verifiedLastMonth() {
+    const bill = await raise();
+    const started = await post(
+      '/payments/initiate',
+      { transactionId: bill.transactionId, paymentMethod: 'POS' },
+      { ...asAgent(), idempotencyKey: `transit-${bill.transactionId}` },
+    );
+    assert.equal(started.status, 201, JSON.stringify(started.body));
+    await post(
+      '/payments/simulate',
+      { gatewayReference: started.body.gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
+      asAgent(),
+    );
+    assert.equal((await stateOf(bill.transactionId))?.transaction, 'RECONCILIATION_PENDING');
+    await raisedLastMonth(bill.transactionId);
+    // And its payment, which carries its own month (`initiated_at`).
+    await query(pool, 'ALTER TABLE payments DISABLE TRIGGER payments_immutable');
+    try {
+      await query(pool, 'UPDATE payments SET initiated_at = $2 WHERE transaction_id = $1', [
+        bill.transactionId,
+        lastMonth().during,
+      ]);
+    } finally {
+      await query(pool, 'ALTER TABLE payments ENABLE TRIGGER payments_immutable');
+    }
+    return {
+      transactionId: bill.transactionId,
+      gatewayReference: started.body.gatewayReference as string,
+      amountKobo: BigInt(started.body.amountKobo),
+    };
+  }
+
+  it('is banked and receipted when the settlement lands', async () => {
+    const collected = await verifiedLastMonth();
+    await closeLastMonth();
+
+    await settleCollection({ gatewayReferences: [collected.gatewayReference], amountKobo: collected.amountKobo });
+
+    assert.equal((await stateOf(collected.transactionId))?.transaction, 'SETTLED');
+    const receipt = await queryOne<{ n: string }>(
+      pool,
+      'SELECT count(*)::text AS n FROM receipts WHERE transaction_id = $1',
+      [collected.transactionId],
+    );
+    assert.equal(receipt?.n, '1', 'the taxpayer was never given a receipt for money the State received');
+  });
+
+  it('is still not reversed while its month is closed', async () => {
+    const collected = await verifiedLastMonth();
+    await closeLastMonth();
+    await assert.rejects(
+      query(pool, `UPDATE payments SET status = 'REVERSED' WHERE transaction_id = $1`, [collected.transactionId]),
+      /is closed; the payments in it cannot be changed/,
+    );
   });
 });
