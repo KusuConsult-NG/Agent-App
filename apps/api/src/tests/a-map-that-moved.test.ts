@@ -22,6 +22,9 @@
 import './env';
 import { after, before, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
+import { Client } from 'pg';
 import { PERMISSIONS, ROLE_PERMISSIONS, ROLES, permissionsForRole } from '@psirs/shared';
 import {
   createGovernmentUser,
@@ -84,6 +87,76 @@ describe('the map that moved', () => {
    * fail either one. The failure message names the role and the permission,
    * because a diff of two hundred strings is not a fault report.
    */
+  /*
+   * What a deployment is actually given.
+   *
+   * The comparison below reads `role_permissions` after the `beforeEach`
+   * above, which empties it and refills it from the compiled map — so after
+   * the first reset it compares the code with a copy of the code, and cannot
+   * fail. A deployment's map is what the migrations wrote: 059 moved it, and
+   * 067, 075 and 091 each grant a permission that shipped later. Measured:
+   * migration 091's grant to revenue officers could be removed from the code
+   * and this file stayed green, while every officer test that needed the
+   * grant failed — the opposite of what the comparison exists to say.
+   *
+   * So this one builds the map the only way a deployment does: a fresh
+   * database, migrated, with no seed, and compared with the code.
+   */
+  it('grants each role, from the migrations alone, exactly what the compiled map grants it', async () => {
+    const name = `psirs_rolemap_${process.pid}_${Date.now()}`;
+    const base = new URL(process.env.DATABASE_URL!);
+    const at = (database: string) => {
+      const url = new URL(base.toString());
+      url.pathname = `/${database}`;
+      return url.toString();
+    };
+    const server = new Client({ connectionString: at('postgres') });
+    await server.connect();
+    try {
+      await server.query(`CREATE DATABASE ${name}`);
+      const fresh = at(name);
+      execFileSync(
+        'npx',
+        [
+          'tsx',
+          '-e',
+          "require('./src/tests/env'); require('./src/db/migrate').runMigrations({ silent: true })" +
+            '.then(() => process.exit(0), (error) => { console.error(error); process.exit(1); })',
+        ],
+        { cwd: join(__dirname, '..', '..'), env: { ...process.env, DATABASE_URL: fresh }, stdio: 'pipe' },
+      );
+
+      const migrated = new Client({ connectionString: fresh });
+      await migrated.connect();
+      try {
+        const rows = (
+          await migrated.query<{ role: string; permission: string }>(
+            'SELECT role, permission FROM role_permissions',
+          )
+        ).rows;
+        for (const role of ROLES) {
+          const compiled = [...(ROLE_PERMISSIONS[role] as readonly string[])].sort();
+          const stored = rows.filter((row) => row.role === role).map((row) => row.permission).sort();
+          assert.deepEqual(
+            stored.filter((permission) => !compiled.includes(permission)),
+            [],
+            `a deployment migrated today gives ${role} permission(s) the code does not`,
+          );
+          assert.deepEqual(
+            compiled.filter((permission) => !stored.includes(permission)),
+            [],
+            `the code gives ${role} permission(s) no migration grants, so a deployment never has them`,
+          );
+        }
+      } finally {
+        await migrated.end();
+      }
+    } finally {
+      await server.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+      await server.end();
+    }
+  });
+
   it('grants each role exactly what the compiled map granted it', async () => {
     for (const role of ROLES) {
       const compiled = [...(ROLE_PERMISSIONS[role] as readonly string[])].sort();
