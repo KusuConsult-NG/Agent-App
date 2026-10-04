@@ -1597,6 +1597,15 @@ describe('objecting to it', () => {
     });
 
     it('that it was upheld on a bill already paid, and a refund has been asked for', async () => {
+      // A service charge on the bill, so what was paid (₦48,100) is not what
+      // was assessed (₦48,000): the message has to name the first, the money
+      // actually going back, and a test where the two were equal could not
+      // tell which it named.
+      await pool.query(
+        `UPDATE revenue_items
+            SET assessment_rules = COALESCE(assessment_rules, '{}'::jsonb) || '{"serviceChargeKobo": "10000"}'::jsonb
+          WHERE code LIKE 'PIT-PRESUMPTIVE-%'`,
+      );
       const { objection } = await paidThenObjected('Told Refund');
       await decideObjection(pool, {
         objectionId: objection.id,
@@ -1607,7 +1616,7 @@ describe('objecting to it', () => {
       });
       const told = await toldAbout(objection.id);
       assert.deepEqual(told.map((row) => row.event), ['OBJECTION_RECEIVED', 'OBJECTION_UPHELD_REFUND_REQUESTED']);
-      assert.match(told[1]!.message, /refund of the ₦48,000\.00 you paid/);
+      assert.match(told[1]!.message, /refund of the ₦48,100\.00 you paid/);
     });
 
     it('that it was rejected, and the assessment stands', async () => {
