@@ -274,8 +274,16 @@ async function append(
  * whether an identifier belongs to a real officer: an unknown id is dropped
  * silently rather than reported.
  *
- * Only portal roles can be mentioned. Mentioning a field agent on an internal
- * case would put their name in a queue they cannot open.
+ * Only somebody who can open the case can be mentioned. Naming a field agent,
+ * or anybody else without `case:read:all`, would put their name in a queue
+ * they cannot open.
+ *
+ * This was written as a list of five role names — the portal roles the
+ * platform ships with — which stood in for that test and was not it. An
+ * administrator can create a role (`rbac-store.createRole`), so a colleague in
+ * one, able to open every case, was dropped from the comment without a word
+ * and never told they had been asked something. It now asks the question the
+ * list was standing in for, through the same role grants sign-in reads.
  */
 async function resolveMentions(
   db: Db,
@@ -286,7 +294,10 @@ async function resolveMentions(
     db,
     `SELECT id FROM users
       WHERE id = ANY($1::uuid[]) AND status = 'ACTIVE'
-        AND role IN ('supervisor','revenue_officer','finance_officer','auditor','admin')`,
+        AND EXISTS (SELECT 1 FROM role_permissions rp
+                      JOIN roles r ON r.name = rp.role
+                     WHERE rp.role = users.role AND r.status = 'ACTIVE'
+                       AND rp.permission = 'case:read:all')`,
     [[...new Set(ids)]],
   );
   return rows.map((row) => row.id);
