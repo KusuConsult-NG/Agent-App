@@ -1038,7 +1038,33 @@ export function ApprovalsScreen({ user }: { user: User }) {
               },
               { key: 'entity_type', label: 'ofcSpSubject' },
               { key: 'requested_by_name', label: 'ofcFnRequestedBy' },
-              { key: 'requested_reason', label: 'ofcAgReason' },
+              {
+                key: 'requested_reason',
+                label: 'ofcAgReason',
+                /*
+                 * And, for money going back, what is being decided: how much,
+                 * and whose doing the requester says it was. That second fact
+                 * decides whether the bill is withdrawn or owed again and
+                 * whether the citizen's score is touched, and it lives in the
+                 * payload where the queue never showed it. A request that did
+                 * not say is carried out as the State's, which is what this
+                 * prints for it.
+                 */
+                render: (row) =>
+                  ['PAYMENT_REVERSAL', 'REFUND'].includes(row.approval_type) && row.payload ? (
+                    <>
+                      {row.requested_reason}
+                      <br />
+                      <span className="muted">
+                        {row.payload.amountKobo ? <Money kobo={row.payload.amountKobo} /> : null}
+                        {row.payload.amountKobo ? ' · ' : ''}
+                        {t.ofcT3ReverseWhose}: {enumLabel(row.payload.attributableTo ?? 'GOVERNMENT', t)}
+                      </span>
+                    </>
+                  ) : (
+                    row.requested_reason
+                  ),
+              },
               {
                 key: 'requested_at',
                 label: 'ofcRhRequested',
