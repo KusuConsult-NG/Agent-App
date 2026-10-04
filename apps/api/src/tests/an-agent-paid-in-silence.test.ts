@@ -226,6 +226,49 @@ describe('when a payout reaches the agent’s bank', () => {
   });
 });
 
+describe('recording that a payout was paid', () => {
+  it('is refused to the officer who approved it, and done by another', async () => {
+    // One officer could approve a payout and then declare it paid against a
+    // bank reference nobody else looked at.
+    const payoutId = await approvedPayout();
+    await query(pool, 'UPDATE commission_payouts SET approved_by = $2 WHERE id = $1', [payoutId, officerId]);
+
+    await assert.rejects(
+      completePayout({
+        payoutId,
+        bankReference: 'FBN/2026/0042',
+        actorId: officerId,
+        actorRole: 'finance_officer',
+      }),
+      (error: { code?: string }) => error.code === 'SEGREGATION_OF_DUTIES',
+    );
+    const unpaid = await queryOne<{ status: string }>(
+      pool,
+      'SELECT status FROM commission_payouts WHERE id = $1',
+      [payoutId],
+    );
+    assert.equal(unpaid?.status, 'APPROVED', 'the refused attempt marked it paid anyway');
+
+    const colleague = await createGovernmentUser({
+      role: 'finance_officer',
+      phone: '+2348098000009',
+      fullName: 'Second Payout Officer',
+    });
+    await completePayout({
+      payoutId,
+      bankReference: 'FBN/2026/0042',
+      actorId: colleague,
+      actorRole: 'finance_officer',
+    });
+    const paid = await queryOne<{ status: string }>(
+      pool,
+      'SELECT status FROM commission_payouts WHERE id = $1',
+      [payoutId],
+    );
+    assert.equal(paid?.status, 'PAID');
+  });
+});
+
 describe('when the transfer bounces', () => {
   it('tells the agent, because only they can fix the account it bounced off', async () => {
     /*

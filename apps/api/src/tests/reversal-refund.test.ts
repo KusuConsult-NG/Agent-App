@@ -293,7 +293,8 @@ describe('Commission paid on a transaction later reversed is recovered', () => {
     await post(
       `/government/commissions/payouts/${payout.body.payoutId}/complete`,
       { bankReference: `BANK-${payout.body.payoutReference}` },
-      { token: approver },
+      // Recorded by somebody other than the officer who approved it.
+      { token: executor },
     );
   }
 

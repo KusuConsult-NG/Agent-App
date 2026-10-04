@@ -386,7 +386,7 @@ process would be a lost capture wearing the costume of a successful one.
 | `POST` | `/government/approvals/:id/execute-reversal` | `payment:reverse:approve` + step-up; approver may not execute |
 | `POST` | `/government/commissions/promote` | `commission:manage` |
 | `GET` | `/government/commissions/payouts` | `commission:read:all` |
-| `POST` | `/government/commissions/payouts/:id/approve` · `/complete` | segregation of duties |
+| `POST` | `/government/commissions/payouts/:id/approve` · `/complete` | segregation of duties: whoever asked for a payout may not approve it, and the officer who approved it may not record it paid (`SEGREGATION_OF_DUTIES`) |
 | `GET` | `/government/leakage` · `/fraud/flags` | `fraud:read` |
 | `POST` | `/government/fraud/flags/:id/review` · `/fraud/sweep` | `fraud:manage` |
 | `GET` | `/government/roles` | `user:manage` — every role, its permissions, its officers, and how many rows it may export |

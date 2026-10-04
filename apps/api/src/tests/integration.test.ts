@@ -1066,7 +1066,8 @@ describe('Reconciliation and settlement (PRD §46, §47)', () => {
     const completed = await post(
       `/government/commissions/payouts/${payout.body.payoutId}/complete`,
       { bankReference: 'BANK-TRF-99001' },
-      { token: ctx.financeToken },
+      // Recorded by somebody other than the officer who approved it.
+      { token: ctx.adminToken },
     );
     assert.equal(completed.status, 200);
 
