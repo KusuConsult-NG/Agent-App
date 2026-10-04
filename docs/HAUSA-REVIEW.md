@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,533 dictionary strings and 33 message
+It listed 78 strings. It now lists **3,533 dictionary strings and 34 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -59,7 +59,7 @@ and if your time runs out it is the right place for it to run out. The agent
 groups come first in the table for that reason.
 
 **Table C is new, and it is the one to read if you read nothing else.** Those
-thirty-three messages reach a citizen who holds no account, has no app, and has
+thirty-four messages reach a citizen who holds no account, has no app, and has
 nobody standing beside them to explain what arrived. The acknowledgement
 wording is the sharpest case: it has to be unmistakably **not** a receipt,
 because the money has not reached government yet, and a citizen who reads it
@@ -4186,7 +4186,7 @@ instructions — but they are what an agent reads all day.
 
 ### C · The messages PSIRS sends
 
-33 templates, and the highest-stakes strings in the project. A
+34 templates, and the highest-stakes strings in the project. A
 citizen holds no account here: the SMS is the entire record of the
 transaction as far as they are concerned, and nobody is standing beside
 them to explain it. Read the acknowledgement wording especially closely —
@@ -4227,6 +4227,7 @@ it has to be unmistakably **not** a receipt.
 | `OBJECTION_UPHELD_SMS_HA` | SMS | — | PSIRS: An amince da kalubalen da aka yi kan kimantawa {{reference}}: {{reason}}. An janye kiyasin, kuma babu bashin komai a kansa. | ☐ | |
 | `OBJECTION_UPHELD_REFUND_REQUESTED_SMS_HA` | SMS | — | PSIRS: An amince da kalubalen da aka yi kan kimantawa {{reference}}: {{reason}}. An janye kiyasin, kuma an nemi a mayar da {{amount}} da aka biya. | ☐ | |
 | `OBJECTION_REJECTED_SMS_HA` | SMS | — | PSIRS: Ba a amince da kalubalen da aka yi kan kimantawa {{reference}} ba: {{reason}}. Kimantawar {{amount}} tana nan. Idan ba a biya ba tukuna, a biya ta hannun wakilin karbar haraji ko ofishin PSIRS. | ☐ | |
+| `OBJECTION_RECEIVED_SMS_HA` | SMS | — | PSIRS: An karbi kalubalen da aka yi kan kimantawa {{reference}}. Ba a tilasta biya ba yayin da PSIRS ke duba shi, kuma za a aiko da hukuncin. Ba sai an yi komai ba a wannan lokaci. | ☐ | |
 
 <!-- END:GENERATED -->
 

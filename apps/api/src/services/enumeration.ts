@@ -742,6 +742,30 @@ export async function raiseObjection(
       reason: params.statement.trim(),
     });
 
+    /*
+     * And the trader is told it was received, in the same transaction.
+     *
+     * Often it was raised for them — by an agent at the stall, an officer at
+     * a desk — and they left with nothing to show for it. The reminder sweep
+     * stops chasing the bill from here on, on the strength of exactly this
+     * message, which nothing used to send.
+     */
+    const subject = await queryOne<{ taxpayer_id: string; assessment_number: string | null }>(
+      client,
+      `SELECT pa.taxpayer_id, a.assessment_number
+         FROM presumptive_assessments pa
+         LEFT JOIN assessments a ON a.id = pa.assessment_id
+        WHERE pa.id = $1`,
+      [params.presumptiveAssessmentId],
+    );
+    await queueNotification(client, {
+      event: 'OBJECTION_RECEIVED',
+      taxpayerId: subject!.taxpayer_id,
+      entityType: 'assessment_objection',
+      entityId: inserted!.id,
+      variables: { reference: subject!.assessment_number ?? '' },
+    });
+
     return { id: inserted!.id };
   });
 }

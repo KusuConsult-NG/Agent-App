@@ -1535,6 +1535,41 @@ describe('objecting to it', () => {
      * them: upheld, they went on believing they owed the money; rejected,
      * that collection was still suspended.
      */
+    it('that it was received, and nothing is enforced meanwhile', async () => {
+      // Often raised for the trader — by an agent at the stall, an officer at
+      // a desk — who left with nothing to show for it.
+      const { assessment } = await assessed('Told Received');
+      const objection = await raiseObjection(pool, {
+        presumptiveAssessmentId: assessment.id,
+        ground: 'FACTS_WRONG',
+        statement: 'There is no apprentice.',
+        actorId: officerId,
+        actorRole: 'admin',
+      });
+      const told = await toldAbout(objection.id);
+      assert.deepEqual(told.map((row) => [row.event, row.channel]), [['OBJECTION_RECEIVED', 'SMS']]);
+      assert.match(told[0]!.message, new RegExp(`assessment ${await numberOf(assessment.id)} has been received`));
+      assert.match(told[0]!.message, /Nothing is being enforced on it while PSIRS decides/);
+    });
+
+    it('once, when a second objection is refused', async () => {
+      const { assessment } = await assessed('Told Once');
+      const objection = {
+        presumptiveAssessmentId: assessment.id,
+        ground: 'FACTS_WRONG' as const,
+        statement: 'There is no apprentice.',
+        actorId: officerId,
+        actorRole: 'admin',
+      };
+      await raiseObjection(pool, objection);
+      await assert.rejects(raiseObjection(pool, objection));
+      const sent = await queryOne<{ n: string }>(
+        pool,
+        `SELECT count(*)::text AS n FROM notifications WHERE event = 'OBJECTION_RECEIVED'`,
+      );
+      assert.equal(sent?.n, '1', 'a refused objection was acknowledged as received');
+    });
+
     it('that it was upheld, and nothing is owed', async () => {
       const { assessment } = await assessed('Told Upheld');
       const objection = await raiseObjection(pool, {
@@ -1552,10 +1587,13 @@ describe('objecting to it', () => {
         actorRole: 'admin',
       });
       const told = await toldAbout(objection.id);
-      assert.deepEqual(told.map((row) => [row.event, row.channel]), [['OBJECTION_UPHELD', 'SMS']]);
-      assert.match(told[0]!.message, new RegExp(await numberOf(assessment.id)));
-      assert.match(told[0]!.message, /Confirmed on site: the trader works alone\./);
-      assert.match(told[0]!.message, /nothing is owed/);
+      assert.deepEqual(told.map((row) => [row.event, row.channel]), [
+        ['OBJECTION_RECEIVED', 'SMS'],
+        ['OBJECTION_UPHELD', 'SMS'],
+      ]);
+      assert.match(told[1]!.message, new RegExp(await numberOf(assessment.id)));
+      assert.match(told[1]!.message, /Confirmed on site: the trader works alone\./);
+      assert.match(told[1]!.message, /nothing is owed/);
     });
 
     it('that it was upheld on a bill already paid, and a refund has been asked for', async () => {
@@ -1568,8 +1606,8 @@ describe('objecting to it', () => {
         actorRole: 'admin',
       });
       const told = await toldAbout(objection.id);
-      assert.deepEqual(told.map((row) => row.event), ['OBJECTION_UPHELD_REFUND_REQUESTED']);
-      assert.match(told[0]!.message, /refund of the ₦48,000\.00 you paid/);
+      assert.deepEqual(told.map((row) => row.event), ['OBJECTION_RECEIVED', 'OBJECTION_UPHELD_REFUND_REQUESTED']);
+      assert.match(told[1]!.message, /refund of the ₦48,000\.00 you paid/);
     });
 
     it('that it was rejected, and the assessment stands', async () => {
@@ -1589,9 +1627,9 @@ describe('objecting to it', () => {
         actorRole: 'admin',
       });
       const told = await toldAbout(objection.id);
-      assert.deepEqual(told.map((row) => row.event), ['OBJECTION_REJECTED']);
-      assert.match(told[0]!.message, /was not upheld: Re-checked on site/);
-      assert.match(told[0]!.message, /assessment of ₦48,000\.00 stands/);
+      assert.deepEqual(told.map((row) => row.event), ['OBJECTION_RECEIVED', 'OBJECTION_REJECTED']);
+      assert.match(told[1]!.message, /was not upheld: Re-checked on site/);
+      assert.match(told[1]!.message, /assessment of ₦48,000\.00 stands/);
     });
 
     it('in Hausa, to a trader who reads Hausa', async () => {
@@ -1612,9 +1650,10 @@ describe('objecting to it', () => {
         actorRole: 'admin',
       });
       const told = await toldAbout(objection.id);
-      assert.deepEqual(told.map((row) => row.language), ['ha']);
-      assert.match(told[0]!.message, /An amince da kalubalen/);
-      assert.match(told[0]!.message, new RegExp(await numberOf(assessment.id)));
+      assert.deepEqual(told.map((row) => row.language), ['ha', 'ha']);
+      assert.match(told[0]!.message, /An karbi kalubalen/);
+      assert.match(told[1]!.message, /An amince da kalubalen/);
+      assert.match(told[1]!.message, new RegExp(await numberOf(assessment.id)));
     });
 
     it('about nothing, when the decision was refused', async () => {
@@ -1643,7 +1682,11 @@ describe('objecting to it', () => {
           actorRole: 'admin',
         }),
       );
-      assert.deepEqual(await toldAbout(objection.id), []);
+      assert.deepEqual(
+        (await toldAbout(objection.id)).map((row) => row.event),
+        ['OBJECTION_RECEIVED'],
+        'only that it was received',
+      );
     });
   });
 

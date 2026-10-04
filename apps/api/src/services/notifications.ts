@@ -83,7 +83,15 @@ export type NotificationEvent =
    */
   | 'OBJECTION_UPHELD'
   | 'OBJECTION_UPHELD_REFUND_REQUESTED'
-  | 'OBJECTION_REJECTED';
+  | 'OBJECTION_REJECTED'
+  /*
+   * And that it was received. An objection is often recorded by an agent at
+   * the stall or an officer at a desk, not by the trader, and the trader left
+   * with nothing to show for it — while the reminder sweep stopped chasing
+   * the bill on the strength of a message, its own comment said, that the
+   * trader had been sent. Nobody had sent it.
+   */
+  | 'OBJECTION_RECEIVED';
 
 /**
  * Render `{{placeholders}}` from a template.
