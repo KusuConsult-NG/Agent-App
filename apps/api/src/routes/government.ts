@@ -31,7 +31,7 @@ import * as reconciliation from '../services/reconciliation';
 import * as reports from '../services/reports';
 import { arrearsWorklist } from '../services/arrears';
 import { paymentHistory } from '../services/payment-history';
-import { recordTaxpayerAccess } from '../services/taxpayer-access';
+import { recordTaxpayerAccess, recordTaxpayerSearch } from '../services/taxpayer-access';
 import {
   assessFromObservation,
   attestObservation,
@@ -3093,7 +3093,30 @@ governmentRouter.get(
     }),
     async (req, res, data) => {
       const scope = await resolveReportScope(pool, req.auth!);
-      res.json(await investigation.globalSearch(pool, officer(req), { term: data.q, limit: data.limit }, scope));
+      const viewer = officer(req);
+      const found = await investigation.globalSearch(pool, viewer, { term: data.q, limit: data.limit }, scope);
+      /*
+       * A search of the register, wherever the box is.
+       *
+       * Migration 085 logs every search of `GET /taxpayers/search`, because a
+       * name typed into it returns everybody who matches. This box does the
+       * same for anybody holding `taxpayer:read:all` — names, TINs, and a
+       * phone number typed in comes back as whose phone it is — and logged
+       * nothing. Recorded on the same log, marked as the header box so an
+       * auditor can tell which door it came through.
+       */
+      if (investigation.searchesTheRegister(viewer)) {
+        await recordTaxpayerSearch({
+          searchedBy: req.auth!.userId,
+          actorRole: req.auth!.role,
+          filters: { q: data.q, from: 'GLOBAL_SEARCH' },
+          matched: found.hits.filter((hit) => hit.kind === 'taxpayer').length,
+          ipAddress: req.clientIp,
+          deviceId: req.auth!.deviceId,
+          requestId: req.requestId,
+        });
+      }
+      res.json(found);
     },
   ),
 );

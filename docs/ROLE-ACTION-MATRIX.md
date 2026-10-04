@@ -74,7 +74,7 @@ The reasons are not interchangeable, which is why they are written out per row r
 | Permission | Verb | Held by | Endpoints |
 | --- | --- | --- | --- |
 | `taxpayer:read:assigned` | View | agent, supervisor | `GET /revenue/taxpayers/:id/obligations`<br>`GET /taxpayers/search`<br>`GET /taxpayers/:id`<br>`GET /taxpayers/:id/obligations` |
-| `taxpayer:read:all` | View | revenue_officer, finance_officer, auditor, admin | `GET /government/revenue/defaulters`<br>`GET /government/taxpayers/analytics`<br>`GET /taxpayers/ended-with-arrears`<br>`GET /taxpayers/search`<br>…and 3 more |
+| `taxpayer:read:all` | View | revenue_officer, finance_officer, auditor, admin | `GET /government/revenue/defaulters`<br>`GET /government/taxpayers/analytics`<br>`GET /taxpayers/ended-with-arrears`<br>`GET /taxpayers/search`<br>…and 4 more |
 | `taxpayer:create` | Create | agent | `POST /taxpayers/duplicate-check`<br>`POST /taxpayers`<br>`POST /taxpayers/:id/tin`<br>`POST /drafts/sync` |
 | `taxpayer:update` | Edit | agent, revenue_officer | `POST /taxpayers/:id/tin`<br>`PUT /taxpayers/:id/obligations` |
 | `taxpayer:manage` | Edit | admin | `PUT /taxpayers/:id/obligations` |

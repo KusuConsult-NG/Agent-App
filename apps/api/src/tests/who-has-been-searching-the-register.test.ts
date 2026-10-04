@@ -161,6 +161,45 @@ describe('a search of the register', () => {
   });
 });
 
+describe('a search typed into the box at the top of every screen', () => {
+  /*
+   * `GET /government/search` searches the register as well, for anybody who
+   * holds `taxpayer:read:all`: names, TINs, and a phone number typed in comes
+   * back as whose phone it is. It logged nothing. Measured: "Musa" returned
+   * two people, and the search log stayed empty.
+   */
+  it('is logged like any other search of the register, and says which box', async () => {
+    const found = await get('/government/search?q=Musa', { token: officerToken });
+    assert.equal(found.status, 200, JSON.stringify(found.body));
+    const people = (found.body.hits as { kind: string }[]).filter((hit) => hit.kind === 'taxpayer');
+    assert.equal(people.length, 2, 'the fixture registers two people called Musa');
+
+    const rows = await searches();
+    assert.equal(rows.length, 1, 'a search of the register that left no trace');
+    assert.equal(rows[0]!.searched_by, officerId);
+    assert.deepEqual(rows[0]!.filters, { q: 'Musa', from: 'GLOBAL_SEARCH' });
+    assert.equal(rows[0]!.matched, 2);
+  });
+
+  it('logs nothing for somebody whose box does not reach the register', async () => {
+    // A supervisor holds `taxpayer:read:assigned`, not `:all`, so their box
+    // returns no people and there is no search of the register to record.
+    await createGovernmentUser({
+      fullName: 'Search Log Supervisor',
+      phone: '+2348091100004',
+      role: 'supervisor',
+    });
+    const supervisor = (await loginAs('+2348091100004')).accessToken;
+    const found = await get('/government/search?q=Musa', { token: supervisor });
+    assert.equal(found.status, 200, JSON.stringify(found.body));
+    assert.equal(
+      (found.body.hits as { kind: string }[]).filter((hit) => hit.kind === 'taxpayer').length,
+      0,
+    );
+    assert.deepEqual(await searches(), []);
+  });
+});
+
 describe('reading who has been searching', () => {
   it('answers an auditor', async () => {
     await get('/taxpayers/search?q=Musa', { token: adminToken });

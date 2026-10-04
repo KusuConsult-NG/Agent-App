@@ -144,6 +144,18 @@ function candidateKinds(term: string): Set<SearchKind> {
  * taxpayers and a few agents, not twenty taxpayers and nothing else because
  * taxpayers sorted first.
  */
+/**
+ * Whether this viewer's search box reaches the taxpayer register.
+ *
+ * Every term is a candidate name (see `candidateKinds`), so the register is
+ * searched whenever the viewer may read it. Exported because the route has to
+ * log that search, and it must log exactly when this answers yes: a second
+ * spelling of the rule in the route is how the two would come apart.
+ */
+export function searchesTheRegister(viewer: Viewer): boolean {
+  return holds(viewer, 'taxpayer:read:all');
+}
+
 export async function globalSearch(
   db: Db,
   viewer: Viewer,
@@ -288,7 +300,7 @@ export async function globalSearch(
     );
   }
 
-  if (wanted('taxpayer', 'taxpayer:read:all')) {
+  if (kinds.has('taxpayer') && searchesTheRegister(viewer)) {
     searches.push(
       query<SearchHit>(
         db,
