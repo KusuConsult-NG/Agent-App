@@ -41,6 +41,8 @@ function isPostgresError(error: unknown): error is PostgresError {
  */
 export const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
   taxpayers_tin_key: 'A taxpayer with this TIN already exists.',
+  approvals_one_open_invoice_withdrawal:
+    'A request to withdraw this invoice is already waiting for a decision.',
   /*
    * 086. Registration absorbs this one — `registerTaxpayer` catches it by name
    * and raises TAXPAYER_ALREADY_EXISTS, which names the record and is said in

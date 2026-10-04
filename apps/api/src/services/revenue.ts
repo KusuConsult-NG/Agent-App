@@ -1204,6 +1204,148 @@ export async function transitionTransaction(
   );
 }
 
+
+/**
+ * Why a bill cannot be withdrawn, if it cannot.
+ *
+ * Asked twice: when the withdrawal is requested, so an officer is told at once
+ * rather than after a colleague has spent time deciding, and again under lock
+ * when it is granted, because a bill can be paid in between.
+ */
+async function withdrawableInvoice(client: PoolClient, invoiceId: string, lock: boolean) {
+  const invoice = await queryOne<{
+    id: string;
+    invoice_number: string;
+    status: string;
+    amount_paid_kobo: string;
+    total_amount_kobo: string;
+    taxpayer_id: string;
+  }>(
+    client,
+    `SELECT id, invoice_number, status, amount_paid_kobo, total_amount_kobo, taxpayer_id
+       FROM invoices WHERE id = $1 ${lock ? 'FOR UPDATE' : ''}`,
+    [invoiceId],
+  );
+  if (!invoice) throw notFound('That invoice');
+  if (invoice.status === 'PAID') {
+    throw conflict(
+      'INVOICE_ALREADY_PAID',
+      `Invoice ${invoice.invoice_number} has been paid. A paid bill raised in error is put right by reversing the payment, not by withdrawing the bill.`,
+    );
+  }
+  if (invoice.status === 'PARTIALLY_PAID' || parseKobo(invoice.amount_paid_kobo) > 0n) {
+    throw conflict(
+      'INVOICE_PART_PAID',
+      `Part of invoice ${invoice.invoice_number} has been paid, so it cannot simply be withdrawn.`,
+      'What happens to the part already paid is a decision for a PSIRS officer.',
+    );
+  }
+  if (invoice.status === 'CANCELLED') {
+    throw conflict(
+      'INVOICE_WITHDRAWN',
+      `Invoice ${invoice.invoice_number} is no longer owed, so there is nothing to withdraw.`,
+    );
+  }
+
+  const transactions = await query<{ id: string; status: string }>(
+    client,
+    `SELECT id, status FROM transactions WHERE invoice_id = $1 ORDER BY created_at ${lock ? 'FOR UPDATE' : ''}`,
+    [invoiceId],
+  );
+  const paymentInFlight = await queryOne<{ id: string }>(
+    client,
+    `SELECT p.id FROM payments p
+       JOIN transactions t ON t.id = p.transaction_id
+      WHERE t.invoice_id = $1 AND p.status IN ('INITIATED','PENDING','SUCCESSFUL','VERIFIED')
+      LIMIT 1`,
+    [invoiceId],
+  );
+  if (paymentInFlight || transactions.some((t) => !(AT_REST as readonly string[]).includes(t.status))) {
+    throw conflict(
+      'INVOICE_PAYMENT_IN_PROGRESS',
+      `A payment against invoice ${invoice.invoice_number} is still being processed.`,
+      'Check the payment status first. A bill somebody is paying is not withdrawn.',
+    );
+  }
+  return { invoice, transactions };
+}
+
+/** The request-time half: refuses, by name, a bill that could not be withdrawn. */
+export async function checkInvoiceWithdrawal(client: PoolClient, invoiceId: string): Promise<void> {
+  await withdrawableInvoice(client, invoiceId, false);
+}
+
+/**
+ * Withdraw a bill raised in error, once a second officer has granted it.
+ *
+ * Called from the approval decision, inside its transaction, so a bill that
+ * can no longer be withdrawn — paid since it was asked for — refuses the
+ * decision as well, and the request stays open for somebody to reject.
+ *
+ * The bill is cancelled and its charge closed, so nothing can be collected
+ * on it; a vehicle renewal waiting on it is cancelled with it. The assessment
+ * is left as it was, as an upheld objection leaves it: what is withdrawn is
+ * the demand, and the record of what was assessed stays for the auditor.
+ */
+export async function withdrawInvoiceIn(
+  client: PoolClient,
+  params: { approvalId: string; actorId: string; actorRole: string },
+): Promise<{ invoiceId: string; invoiceNumber: string }> {
+  const approval = await queryOne<{ entity_id: string; requested_reason: string; requested_by: string }>(
+    client,
+    `SELECT entity_id, requested_reason, requested_by FROM approvals
+      WHERE id = $1 AND approval_type = 'INVOICE_WITHDRAWAL'`,
+    [params.approvalId],
+  );
+  if (!approval) throw notFound('That withdrawal request');
+
+  const { invoice, transactions } = await withdrawableInvoice(client, approval.entity_id, true);
+
+  await client.query(`UPDATE invoices SET status = 'CANCELLED' WHERE id = $1`, [invoice.id]);
+
+  for (const transaction of transactions) {
+    if (!['ASSESSMENT_CREATED', 'INVOICE_GENERATED', 'FAILED'].includes(transaction.status)) continue;
+    await transitionTransaction(client, {
+      transactionId: transaction.id,
+      to: 'CANCELLED',
+      reason: `Invoice ${invoice.invoice_number} withdrawn as raised in error`,
+      actorId: params.actorId,
+      source: 'OFFICER',
+      metadata: { approvalId: params.approvalId },
+    });
+  }
+
+  if (transactions.length) {
+    await client.query(
+      `UPDATE vehicle_renewals SET status = 'CANCELLED'
+        WHERE transaction_id = ANY($1::uuid[]) AND status = 'PENDING_PAYMENT'`,
+      [transactions.map((t) => t.id)],
+    );
+  }
+
+  await client.query(`UPDATE approvals SET status = 'EXECUTED', executed_at = now() WHERE id = $1`, [
+    params.approvalId,
+  ]);
+
+  await recordAudit(client, {
+    actorId: params.actorId,
+    actorRole: params.actorRole,
+    action: 'invoice.withdrawn',
+    entityType: 'invoice',
+    entityId: invoice.id,
+    oldValue: { status: invoice.status },
+    newValue: {
+      status: 'CANCELLED',
+      approvalId: params.approvalId,
+      requestedBy: approval.requested_by,
+      totalKobo: invoice.total_amount_kobo,
+    },
+    reason: approval.requested_reason,
+  });
+
+  return { invoiceId: invoice.id, invoiceNumber: invoice.invoice_number };
+}
+
 /**
  * Outstanding obligations for a taxpayer (PRD §5.2 "Know what they owe").
  *

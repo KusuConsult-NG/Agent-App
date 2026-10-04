@@ -220,6 +220,7 @@ export const ENUM_LABELS: Record<string, keyof TranslationDictionary> = {
   "INVOICE": 'enumInvoice',
   "INVOICED": 'enumInvoiced',
   "INVOICE_GENERATED": 'enumInvoiceGenerated',
+  "INVOICE_WITHDRAWAL": 'enumInvoiceWithdrawal',
   "IN_PROGRESS": 'enumInProgress',
   "IN_REVIEW": 'enumInReview',
   "ISSUED": 'enumIssued',

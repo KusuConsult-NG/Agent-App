@@ -829,7 +829,7 @@ async function sweepManualIntervention(client: PoolClient): Promise<number> {
        FROM approvals
       WHERE approval_type IN (
               'MANUAL_CORRECTION', 'TAXPAYER_ADJUSTMENT', 'PAYMENT_REVERSAL',
-              'REFUND', 'COMMISSION_ADJUSTMENT')
+              'REFUND', 'COMMISSION_ADJUSTMENT', 'INVOICE_WITHDRAWAL')
         AND status IN ('APPROVED', 'EXECUTED')
         AND requested_at > now() - interval '30 days'
       GROUP BY requested_by

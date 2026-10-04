@@ -382,6 +382,7 @@ process would be a lost capture wearing the costume of a successful one.
 | `GET`/`POST` | `/government/settlements` | `payment:reconcile` |
 | `GET`/`POST` | `/government/approvals` | maker-checker |
 | `POST` | `/government/approvals/:id/decide` | requester may never decide |
+| `POST` | `/government/approvals` with `INVOICE_WITHDRAWAL` | withdraw an unpaid bill raised in error — a duplicate, a charge against the wrong record. Asked for one invoice (`entityType: invoice`) by somebody holding `approval:request` and `invoice:create`; refused at once, by code, for a bill paid or part paid, already withdrawn, or with a payment in progress, and while another request for it is waiting. Granting it through `/decide` withdraws the bill in the same transaction: the invoice CANCELLED, its charge closed, a waiting vehicle renewal cancelled, the approval EXECUTED. A bill paid in the meantime refuses the decision, which stays open to be rejected. |
 | `POST` | `/government/approvals/:id/execute-reversal` | `payment:reverse:approve` + step-up; approver may not execute |
 | `POST` | `/government/commissions/promote` | `commission:manage` |
 | `GET` | `/government/commissions/payouts` | `commission:read:all` |

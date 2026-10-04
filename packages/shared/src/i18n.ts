@@ -464,6 +464,7 @@ export interface TranslationDictionary {
   enumInvited: string;
   enumInvoice: string;
   enumInvoiceGenerated: string;
+  enumInvoiceWithdrawal: string;
   enumInvoiced: string;
   enumIssued: string;
   enumKilogram: string;
@@ -2561,6 +2562,12 @@ export interface TranslationDictionary {
   ofcChOpenReplacement: string;
   ofcChReissue: string;
   ofcChReissuing: string;
+  ofcChWithdrawTitle: string;
+  ofcChWithdrawHint: string;
+  ofcChWithdrawReason: string;
+  ofcChWithdrawSend: string;
+  ofcChWithdrawSending: string;
+  ofcChWithdrawSent: string;
   ofcChHowComputed: string;
   ofcChTraceFrozen: string;
   ofcChNoTrace: string;
@@ -4387,6 +4394,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumInvited: "Invited",
     enumInvoice: "Invoice",
     enumInvoiceGenerated: "Invoice issued",
+    enumInvoiceWithdrawal: "Withdrawing an invoice raised in error",
     enumInvoiced: "Invoiced",
     enumIssued: "Issued",
     enumKilogram: "Kilogram",
@@ -6345,6 +6353,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcChOpenReplacement: "Open {{number}}",
     ofcChReissue: "Issue this invoice again",
     ofcChReissuing: "Issuing…",
+    ofcChWithdrawTitle: "Raised in error?",
+    ofcChWithdrawHint: "If this invoice should never have been raised — a duplicate, or a charge against the wrong record — ask for it to be withdrawn. Another officer decides, and nothing changes until they do.",
+    ofcChWithdrawReason: "What was wrong with it",
+    ofcChWithdrawSend: "Ask for it to be withdrawn",
+    ofcChWithdrawSending: "Sending…",
+    ofcChWithdrawSent: "Sent. Another officer must approve it before the invoice is withdrawn.",
     ofcChHowComputed: "How the figure was arrived at",
     ofcChTraceFrozen: "Recorded when the assessment was raised, and frozen since. This is what the calculation did on the day, not what it would do today.",
     ofcChNoTrace: "No calculation was recorded against this assessment.",
@@ -7960,6 +7974,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumInvited: "An gayyata",
     enumInvoice: "Takardar biya",
     enumInvoiceGenerated: "An fitar da takardar biya",
+    enumInvoiceWithdrawal: "Janye takardar biya da aka fitar bisa kuskure",
     enumInvoiced: "An fitar da takardar biya",
     enumIssued: "An bayar",
     enumKilogram: "Kilogiram",
@@ -9918,6 +9933,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcChOpenReplacement: "Bude {{number}}",
     ofcChReissue: "Sake fitar da wannan takardar biya",
     ofcChReissuing: "Ana fitarwa…",
+    ofcChWithdrawTitle: "An fitar da ita bisa kuskure?",
+    ofcChWithdrawHint: "Idan bai kamata a fitar da wannan takardar biya ba — kwafi ce, ko caji a kan bayanan da ba daidai ba — a nemi a janye ta. Wani jami’i ne zai yanke hukunci, kuma babu abin da zai canza kafin a yanke shi.",
+    ofcChWithdrawReason: "Abin da ba daidai ba a kanta",
+    ofcChWithdrawSend: "A nemi a janye ta",
+    ofcChWithdrawSending: "Ana aikawa…",
+    ofcChWithdrawSent: "An aika. Sai an samu amincewar wani jami’i kafin a janye takardar biyan.",
     ofcChHowComputed: "Yadda aka kai ga wannan adadi",
     ofcChTraceFrozen: "An rubuta shi lokacin da aka yi tantancewar, kuma ba a canza shi ba tun daga nan. Wannan shi ne abin da lissafin ya yi a ranar, ba abin da zai yi a yau ba.",
     ofcChNoTrace: "Ba a rubuta wani lissafi a kan wannan tantancewa ba.",

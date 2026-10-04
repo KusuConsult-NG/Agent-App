@@ -112,6 +112,7 @@ export const APPROVAL_TYPES = [
   'MANUAL_CORRECTION',
   'BANK_ACCOUNT_CHANGE',
   'TAXPAYER_ADJUSTMENT',
+  'INVOICE_WITHDRAWAL',
 ] as const;
 export type ApprovalType = (typeof APPROVAL_TYPES)[number];
 

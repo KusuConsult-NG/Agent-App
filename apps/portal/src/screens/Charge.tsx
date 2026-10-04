@@ -205,6 +205,10 @@ export function InvoiceScreen({
   );
   const [reissuing, setReissuing] = useState(false);
   const [reissueError, setReissueError] = useState<ApiError | null>(null);
+  const [withdrawReason, setWithdrawReason] = useState('');
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawSent, setWithdrawSent] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<ApiError | null>(null);
 
   if (error) return <Failed error={error} retry={reload} />;
   if (!record) return <div className="card"><Loading rows={6} /></div>;
@@ -228,6 +232,37 @@ export function InvoiceScreen({
     !pastDeadline &&
     (record.transaction_status === 'REVERSED' || record.transaction_status === 'REFUNDED');
   const mayReissue = (lapsed || stranded) && can('invoice:create');
+  /*
+   * A bill raised in error — a duplicate, a charge against the wrong record —
+   * is withdrawn by approval: asked here, decided by another officer in the
+   * approvals queue. Offered on a bill nobody has paid, to somebody who may
+   * both ask for approvals and issue bills, which is what the server checks.
+   */
+  const mayAskWithdrawal =
+    (record.status === 'UNPAID' || record.status === 'EXPIRED') &&
+    !record.reissued_as &&
+    can('approval:request') &&
+    can('invoice:create');
+
+  async function askWithdrawal() {
+    if (!record) return;
+    setWithdrawing(true);
+    setWithdrawError(null);
+    try {
+      await api.post('/government/approvals', {
+        approvalType: 'INVOICE_WITHDRAWAL',
+        entityType: 'invoice',
+        entityId: record.id,
+        payload: {},
+        reason: withdrawReason.trim(),
+      });
+      setWithdrawSent(true);
+    } catch (caught) {
+      setWithdrawError(asApiError(caught));
+    } finally {
+      setWithdrawing(false);
+    }
+  }
 
   /*
    * Issue it again, and go to the bill that replaces it — the one the money
@@ -359,6 +394,37 @@ export function InvoiceScreen({
           )}
         </div>
       </div>
+
+      {mayAskWithdrawal && (
+        <div className="card">
+          <h2 className="card__title">{t.ofcChWithdrawTitle}</h2>
+          <p className="card__hint">{t.ofcChWithdrawHint}</p>
+          {withdrawSent ? (
+            <Alert kind="success">{t.ofcChWithdrawSent}</Alert>
+          ) : (
+            <>
+              <ErrorAlert error={withdrawError} />
+              <div className="field">
+                <label htmlFor="withdraw-reason">{t.ofcChWithdrawReason}</label>
+                <textarea
+                  id="withdraw-reason"
+                  rows={3}
+                  value={withdrawReason}
+                  onChange={(event) => setWithdrawReason(event.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                className="secondary"
+                disabled={withdrawing || withdrawReason.trim().length < 10}
+                onClick={askWithdrawal}
+              >
+                {withdrawing ? t.ofcChWithdrawSending : t.ofcChWithdrawSend}
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       <Calculation trace={record.computation_trace} />
     </>

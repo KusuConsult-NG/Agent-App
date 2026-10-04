@@ -94,7 +94,7 @@ The reasons are not interchangeable, which is why they are written out per row r
 | `assessment:read:own` | View | agent | `GET /revenue/assessments/:id` |
 | `assessment:read:all` | View | supervisor, revenue_officer, finance_officer, auditor, admin | `GET /revenue/assessments/:id` |
 | `paye:file` | Other | revenue_officer, admin | `POST /government/paye/returns`<br>`POST /government/paye/returns/:id/cancel`<br>`POST /government/enumeration/observations`<br>`POST /government/enumeration/observations/:id/assess`<br>…and 1 more |
-| `invoice:create` | Create | agent, revenue_officer | `POST /revenue/invoices/:id/reissue` |
+| `invoice:create` | Create | agent, revenue_officer | `POST /government/approvals`<br>`POST /revenue/invoices/:id/reissue` |
 | `invoice:read:own` | View | agent | `GET /revenue/invoices/:id`<br>`POST /revenue/invoices/:id/document`<br>`GET /revenue/taxpayers/:id/obligations` |
 | `invoice:read:all` | View | supervisor, revenue_officer, finance_officer, auditor, admin | `GET /revenue/invoices/:id`<br>`POST /revenue/invoices/:id/document`<br>`GET /revenue/taxpayers/:id/obligations` |
 | `payment:initiate` | Create | agent | `POST /payments/initiate`<br>`POST /payments/:paymentId/confirm` |

@@ -29,6 +29,7 @@ import * as auth from '../services/auth';
 import * as agents from '../services/agents';
 import * as reconciliation from '../services/reconciliation';
 import * as reports from '../services/reports';
+import * as revenue from '../services/revenue';
 import { arrearsWorklist } from '../services/arrears';
 import { paymentHistory } from '../services/payment-history';
 import { recordTaxpayerAccess, recordTaxpayerSearch } from '../services/taxpayer-access';
@@ -1516,6 +1517,7 @@ governmentRouter.post(
         'BANK_ACCOUNT_CHANGE',
         'TAXPAYER_ADJUSTMENT',
         'AGENT_OVERRIDE_ACTIVATION',
+        'INVOICE_WITHDRAWAL',
       ]),
       entityType: z.string().min(2).max(60),
       entityId: z.string().min(1).max(80),
@@ -1540,6 +1542,13 @@ governmentRouter.post(
        */
       const ALSO_NEEDED: Partial<Record<typeof data.approvalType, Permission>> = {
         PAYMENT_REVERSAL: 'payment:reverse:request',
+        /*
+         * Asking for a bill to be withdrawn is asked by somebody who may
+         * issue one. The control on forgiving the debt is the second officer
+         * who decides; this keeps the asking with the people whose work bills
+         * are.
+         */
+        INVOICE_WITHDRAWAL: 'invoice:create',
       };
       const extra = ALSO_NEEDED[data.approvalType];
       if (extra && !req.auth!.permissions.includes(extra)) {
@@ -1551,6 +1560,19 @@ governmentRouter.post(
       }
 
       const approval = await withTransaction(async (client) => {
+        /*
+         * A withdrawal names one invoice, and one that could be withdrawn.
+         * Refused now, by the reason it would be refused when granted, so a
+         * colleague is not asked to decide on a bill that has been paid.
+         */
+        if (data.approvalType === 'INVOICE_WITHDRAWAL') {
+          if (data.entityType !== 'invoice' || !uuidSchema.safeParse(data.entityId).success) {
+            throw badRequest('A withdrawal is asked for one invoice, by its id.', [
+              { field: 'entityType', issue: 'Must be "invoice", with the invoice id as entityId' },
+            ]);
+          }
+          await revenue.checkInvoiceWithdrawal(client, data.entityId);
+        }
         const row = await queryOne<{ id: string }>(
           client,
           `INSERT INTO approvals
@@ -1737,6 +1759,16 @@ governmentRouter.post(
           }
         }
 
+        // Granted is carried out, in the same transaction as the decision.
+        let withdrawn: { invoiceNumber: string } | null = null;
+        if (approval.approval_type === 'INVOICE_WITHDRAWAL' && nextStatus === 'APPROVED') {
+          withdrawn = await revenue.withdrawInvoiceIn(client, {
+            approvalId: req.params.id!,
+            actorId: req.auth!.userId,
+            actorRole: req.auth!.role,
+          });
+        }
+
         if (approval.approval_type === 'BANK_ACCOUNT_CHANGE') {
           if (nextStatus === 'APPROVED') {
             applied = await agents.executeBankAccountChange(client, {
@@ -1755,8 +1787,11 @@ governmentRouter.post(
         }
 
         return {
-          status: nextStatus,
+          status: withdrawn ? 'EXECUTED' : nextStatus,
           approvalType: approval.approval_type,
+          ...(withdrawn
+            ? { message: `Invoice ${withdrawn.invoiceNumber} has been withdrawn. Nothing is owed on it.` }
+            : {}),
           ...(applied
             ? {
                 message:
