@@ -20,7 +20,7 @@ import { recordAudit } from './audit';
 import { scopeParams, type ReportScope } from './report-scope';
 import { likeContains } from '../lib/like';
 import { phoneLookupForms } from '../lib/phone';
-import { PAYABLE_INVOICE_SQL } from '../lib/payable-invoice';
+import { OWED_INVOICE_SQL } from '../lib/payable-invoice';
 import { queueNotification } from './notifications';
 
 export interface TaxpayerInput {
@@ -978,18 +978,19 @@ export async function searchTaxpayers(
    * item or category when one was given, so "defaulters on Market Levy" does
    * not return somebody who is square on Market Levy and behind on a shop rate.
    *
-   * Owed and still payable, by the deadline. This said "no deadline test",
-   * so that a lapsed bill would still count as unpaid — which was true for
-   * the hour before the expiry sweep wrote EXPIRED and the status filter
-   * dropped it, and false after. Lapsed money is counted, labelled, on the
-   * arrears worklist; `lib/payable-invoice.ts` says why it is not counted here.
+   * Owed, lapsed or not. This once said "no deadline test" so that a lapsed
+   * bill would still count, which held only until the expiry sweep wrote
+   * EXPIRED; it was then settled the other way, because a lapsed bill could
+   * never be cleared. It can now — issued again, or withdrawn if raised in
+   * error — so somebody whose bill has lapsed is somebody who owes.
+   * `lib/payable-invoice.ts` has the history.
    */
   if (params.outstandingOnly) {
     if (params.revenueItemId) {
       add(
         `t.id IN (SELECT i.taxpayer_id FROM invoices i
                     JOIN transactions tx ON tx.invoice_id = i.id
-                   WHERE ${PAYABLE_INVOICE_SQL}
+                   WHERE ${OWED_INVOICE_SQL}
                      AND i.total_amount_kobo > i.amount_paid_kobo
                      AND tx.revenue_item_id = $$)`,
         params.revenueItemId,
@@ -999,7 +1000,7 @@ export async function searchTaxpayers(
         `t.id IN (SELECT i.taxpayer_id FROM invoices i
                     JOIN transactions tx ON tx.invoice_id = i.id
                     JOIN revenue_items ri ON ri.id = tx.revenue_item_id
-                   WHERE ${PAYABLE_INVOICE_SQL}
+                   WHERE ${OWED_INVOICE_SQL}
                      AND i.total_amount_kobo > i.amount_paid_kobo
                      AND ri.category_id = $$)`,
         params.categoryId,
@@ -1007,7 +1008,7 @@ export async function searchTaxpayers(
     } else {
       conditions.push(
         `t.id IN (SELECT i.taxpayer_id FROM invoices i
-                   WHERE ${PAYABLE_INVOICE_SQL}
+                   WHERE ${OWED_INVOICE_SQL}
                      AND i.total_amount_kobo > i.amount_paid_kobo)`,
       );
     }
@@ -1491,16 +1492,16 @@ export async function setTaxpayerStatus(params: {
     // invoices, and it is reported back so the officer closing a record sees
     // the debt they are leaving behind at the moment they leave it.
     //
-    // Payable invoices, by the deadline. This said lapsed ones were
-    // included, and they were — until the expiry sweep wrote EXPIRED, after
-    // which the status filter left them out. Closing a record an hour after a
-    // deadline reported a different debt from closing it a minute after.
-    // `lib/payable-invoice.ts` says which way that was settled, and why.
+    // Everything owed, lapsed or not. Closing a record an hour after a
+    // deadline once reported a different debt from closing it a minute
+    // after; then a lapsed bill was left out altogether, because nothing
+    // could clear it. A lapsed bill is now issued again or withdrawn, so the
+    // debt an officer leaves behind includes it. `lib/payable-invoice.ts`.
     const owed = await queryOne<{ outstanding: string }>(
       client,
       `SELECT COALESCE(SUM(i.total_amount_kobo - i.amount_paid_kobo), 0)::text AS outstanding
          FROM invoices i
-        WHERE i.taxpayer_id = $1 AND ${PAYABLE_INVOICE_SQL}`,
+        WHERE i.taxpayer_id = $1 AND ${OWED_INVOICE_SQL}`,
       [params.taxpayerId],
     );
     const outstandingKobo = owed?.outstanding ?? '0';
@@ -1569,7 +1570,7 @@ export async function taxpayersEndedWithArrears(
        -- nothing left to pay does not occur. It went, rather than staying as a
        -- guard nobody could reach: an unreachable branch in a report is where
        -- a wrong belief about the report hides.
-       JOIN invoices i ON i.taxpayer_id = t.id AND ${PAYABLE_INVOICE_SQL}
+       JOIN invoices i ON i.taxpayer_id = t.id AND ${OWED_INVOICE_SQL}
        LEFT JOIN lgas l ON l.id = t.lga_id
        LEFT JOIN users u ON u.id = t.status_changed_by
       WHERE t.status IN ('SUSPENDED', 'CLOSED')

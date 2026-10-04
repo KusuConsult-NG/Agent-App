@@ -894,6 +894,40 @@ describe('objecting to it', () => {
     assert.equal(link?.assessment_id, presumptive?.assessment_id, 'the new bill is for the assessment objected to');
   });
 
+  it('does not count against the score once lapsed, while the objection is open', async () => {
+    /*
+     * A lapsed bill counts as owed (OWED_INVOICE_SQL), so the part of it under
+     * objection has to be measured the same way. Counted as owed but not as
+     * disputed, a trader whose objection outlasted the bill's thirty days
+     * would lose the score's twenty-five points for objecting — the price on
+     * objecting the disputed figure exists to remove.
+     */
+    const { taxpayer, assessment } = await assessed('Patient Objector');
+    await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'The shop is shared with my sister.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    await pool.query(
+      `UPDATE invoices SET expires_at = now() - interval '1 hour'
+        WHERE assessment_id = (SELECT assessment_id FROM presumptive_assessments WHERE id = $1)`,
+      [assessment.id],
+    );
+    await expireLapsedInvoices({ actorId: null, actorRole: 'system' });
+
+    const client = await pool.connect();
+    try {
+      const breakdown = await computeComplianceScore(client, taxpayer);
+      const liabilities = breakdown.components.find((c) => /outstanding liabilities/i.test(c.factor));
+      assert.equal(liabilities?.factor, 'No outstanding liabilities', JSON.stringify(breakdown.components));
+      assert.match(liabilities!.detail, /under objection/);
+    } finally {
+      client.release();
+    }
+  });
+
   it('is withdrawn, not issued again, when the objection is upheld', async () => {
     const { taxpayer, assessment } = await assessed('Upheld Objector');
     const bill = (await getObligations(pool, taxpayer)) as { invoice_id: string }[];

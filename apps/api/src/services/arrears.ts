@@ -30,13 +30,14 @@
  * is people an officer can ring today and who can pay while still on the
  * phone, which is the only version of this list that turns into revenue. It is
  * ranked by what each one owes, and within that by whose window shuts first,
- * because a debt about to lapse is a debt about to need re-assessing.
+ * because a debt about to lapse is a debt about to need issuing again.
  *
  * The money on lapsed invoices has not gone anywhere, and it is reported in
  * the summary rather than dropped — but as its own figure, because it needs a
- * different action. Collecting it means raising a fresh assessment first. That
- * is a re-assessment queue, not a call list, and merging the two would have
- * officers making calls that cannot end in a payment.
+ * different action. Collecting it means issuing the bill again first
+ * (`reissueInvoice`), which the officer or the agent can do on the spot, but
+ * which a payment link sent by text cannot. It is reported as its own line so
+ * an officer knows which calls need that step before money can change hands.
  *
  * FOUR MORE THINGS THIS QUERY IS CAREFUL ABOUT.
  *
@@ -110,7 +111,7 @@ export interface ArrearsRow {
   oldestDaysOutstanding: number;
   /**
    * Days until the soonest of these invoices stops being payable, after which
-   * collecting needs a fresh assessment. Null when none of them expires.
+   * collecting needs the bill issued again. Null when none of them expires.
    * This is the officer's ordering within a day's calls: the debt about to
    * fall off the edge is the one worth ringing first.
    */
@@ -138,9 +139,10 @@ export interface ArrearsSummary {
   /**
    * Owed on invoices that have passed their payment deadline. Real money, and
    * excluded from the list above for a reason an officer needs told: the
-   * platform will refuse a payment against these, so collecting means raising
-   * a fresh assessment first. Kept as its own figure so nobody mistakes it for
-   * money a phone call can bring in.
+   * platform will refuse a payment against these, so collecting means issuing
+   * the bill again first. Kept as its own figure so nobody mistakes it for
+   * money a phone call alone can bring in. Still owed — it counts against the
+   * taxpayer wherever what they owe is the question (`OWED_INVOICE_SQL`).
    */
   lapsedKobo: string;
   /** How many invoices that lapsed money sits on. */

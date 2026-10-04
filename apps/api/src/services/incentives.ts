@@ -20,7 +20,7 @@ import { UNDER_OPEN_OBJECTION_SQL } from '../lib/enforcement-suspended';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, notFound } from '../lib/errors';
 import { endOfDay } from '../lib/calendar-day';
-import { PAYABLE_INVOICE_SQL } from '../lib/payable-invoice';
+import { OWED_INVOICE_SQL } from '../lib/payable-invoice';
 import { recordAudit } from './audit';
 
 export interface ComplianceBreakdown {
@@ -79,17 +79,16 @@ export async function computeComplianceScore(
          WHERE t.verified_at > (SELECT min(d.expires_at) FROM invoices d
                                  WHERE d.assessment_id = i.assessment_id)
        )::text AS late_count,
-       -- Owed and still payable, by the deadline rather than the status.
+       -- Owed, lapsed or not.
        --
-       -- This said "no deadline test, deliberately", so that letting a bill
-       -- lapse could not improve the score. It held for an hour: the expiry
-       -- sweep then wrote EXPIRED, the status filter dropped the bill, and the
-       -- score rose by the twenty-five points below. And an expired invoice
-       -- can never be paid or cleared, so counting it for good would cost a
-       -- citizen those points permanently, however they settled up after.
-       -- lib/payable-invoice.ts has the measurement and the trade-off.
+       -- This counted only what was still payable, because a lapsed bill could
+       -- never be cleared and counting it would have cost a citizen these
+       -- twenty-five points for good. A lapsed bill is now issued again and
+       -- paid, and one raised in error is withdrawn, so both clear; and
+       -- leaving it out meant letting a bill lapse raised the score by
+       -- twenty-five points at the deadline. lib/payable-invoice.ts has both.
        COALESCE((SELECT SUM(i.total_amount_kobo - i.amount_paid_kobo) FROM invoices i
-                  WHERE i.taxpayer_id = $1 AND ${PAYABLE_INVOICE_SQL}), 0)::text
+                  WHERE i.taxpayer_id = $1 AND ${OWED_INVOICE_SQL}), 0)::text
          AS outstanding_kobo,
        /*
         * And how much of that is suspended, because it is under objection.
@@ -103,7 +102,7 @@ export async function computeComplianceScore(
         * decides the objection — see migration 078.
         */
        COALESCE((SELECT SUM(i.total_amount_kobo - i.amount_paid_kobo) FROM invoices i
-                  WHERE i.taxpayer_id = $1 AND ${PAYABLE_INVOICE_SQL}
+                  WHERE i.taxpayer_id = $1 AND ${OWED_INVOICE_SQL}
                     AND ${UNDER_OPEN_OBJECTION_SQL}), 0)::text
          AS disputed_kobo,
        /*

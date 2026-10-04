@@ -25,7 +25,7 @@ import {
 } from '../lib/calendar-day';
 import { outstandingExceptionSql } from './reconciliation';
 import { CURRENT_FINDINGS_SQL } from '../lib/reconciliation-findings';
-import { PAYABLE_INVOICE_SQL } from '../lib/payable-invoice';
+import { OWED_INVOICE_SQL, PAYABLE_INVOICE_SQL } from '../lib/payable-invoice';
 import {
   lgaScopeSql,
   scopeParams,
@@ -247,16 +247,16 @@ export async function executiveDashboard(
           * invoiced and owed, which is a fact, and the forecast is a separate
           * figure that says out loud that it is arithmetic.
           */
-         -- Invoiced, owed and still payable, by the deadline. This said
-         -- lapsed invoices were counted, and they were for the hour before the
-         -- expiry sweep wrote EXPIRED; after it the status filter left them
-         -- out, so the floor fell an hour after each deadline with nothing
-         -- collected. Lapsed money is the arrears worklist's own line, and
-         -- lib/payable-invoice.ts says why it is not counted here as well.
+         -- Invoiced and owed, lapsed or not. The floor once fell an hour after
+         -- each deadline, when the expiry sweep wrote EXPIRED; then it fell at
+         -- the deadline itself, because a lapsed bill could not be collected.
+         -- It can now — issued again — so money invoiced and not paid stays in
+         -- the floor until it is paid, replaced or withdrawn.
+         -- lib/payable-invoice.ts has the history.
          (SELECT COALESCE(SUM(i.total_amount_kobo - i.amount_paid_kobo),0)::text
             FROM invoices i
             JOIN taxpayers tp ON tp.id = i.taxpayer_id
-           WHERE ${PAYABLE_INVOICE_SQL}
+           WHERE ${OWED_INVOICE_SQL}
              AND ($1 OR tp.lga_id = ANY($3::uuid[]))) AS expected_revenue_kobo`,
       [statewide, territoryIds, lgaIds],
     ),
@@ -1444,8 +1444,10 @@ export async function revenueOfficerHome(db: Db) {
        -- lapsed CTE keys on the deadline rather than the status and so is
        -- also right immediately.
        --
-       -- Both halves now ask PAYABLE_INVOICE_SQL, which is what the other
-       -- readers of "owed" were found to need as well.
+       -- Both halves ask PAYABLE_INVOICE_SQL: this tile is what can be
+       -- collected today, with the expired count beside it as its own figure.
+       -- Readers of what is owed, lapsed or not, ask OWED_INVOICE_SQL;
+       -- lib/payable-invoice.ts says which is which.
        (SELECT COALESCE(SUM(i.total_amount_kobo),0)::text FROM invoices i
          WHERE ${PAYABLE_INVOICE_SQL})
          AS unpaid_kobo`,
@@ -1836,9 +1838,12 @@ export async function defaultersByCategory(
 ) {
   const limit = Math.min(params.limit ?? 100, 500);
   const conditions: string[] = [
-    // Payable, by the deadline: a collection round is calls that can end in a
-    // payment, which a lapsed invoice cannot. See `lib/payable-invoice.ts`.
-    PAYABLE_INVOICE_SQL,
+    // Owed, lapsed or not. This kept to what was payable, on the ground that a
+    // call about a lapsed invoice could not end in a payment; it can now, with
+    // the bill issued again at the stall. A report of who owes that loses
+    // them at their deadline is a report that rewards the deadline.
+    // See `lib/payable-invoice.ts`.
+    OWED_INVOICE_SQL,
     'i.total_amount_kobo > i.amount_paid_kobo',
   ];
   const values: unknown[] = [];

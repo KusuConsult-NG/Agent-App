@@ -367,9 +367,9 @@ export async function readConnections(
  *
  * `payable` is carried per row for the same reason the arrears worklist keeps
  * lapsed debt off its call list: an officer looking at a total needs to know
- * which part of it can be taken today and which part needs a fresh assessment
- * first, or the conversation ends with the platform refusing money the citizen
- * has just agreed to pay.
+ * which part of it can be taken today and which part needs the bill issued
+ * again first, or the conversation ends with the platform refusing money the
+ * citizen has just agreed to pay.
  */
 export async function liabilitiesFor(db: Db, taxpayerId: string): Promise<Liability[]> {
   const invoices = await query<{

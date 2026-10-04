@@ -1,5 +1,5 @@
 /**
- * When an invoice is owed and can still be paid, rendered for SQL.
+ * When an invoice can still be paid, and when it is owed, rendered for SQL.
  *
  * An invoice stops being payable at `expires_at` — the payment path refuses it
  * with INVOICE_EXPIRED from that moment — and stops being UNPAID up to an hour
@@ -17,37 +17,45 @@
  * home tile had been fixed for exactly this earlier the same day, one reader
  * at a time; ten other queries still asked the status.
  *
- * So every reader of "owed" asks this instead, and the sweep changes no
- * figure. `an-invoice-stops-being-owed.test.ts` reads each one three times —
- * in date, lapsed, swept — and holds the last two equal.
+ * So every reader asks a fragment from this file instead of the status, and
+ * the sweep changes no figure.
  *
- * WHICH WAY, AND WHAT IT COSTS
+ * TWO QUESTIONS, TWO FRAGMENTS
  *
- * It could have gone the other way: treat EXPIRED as owed everywhere. Five of
- * these call sites said they already did — "the debt does not lapse with the
- * paper" — and they were describing the hour before the sweep. They were
- * also describing something nothing can undo. An EXPIRED invoice is never
- * discharged: no route reissues it, none cancels it, and the payment path
- * refuses it. Counting it as owed would hold a citizen who paid the
- * replacement bill out of every `requires_no_arrears` programme for good, by
- * a score component no action of theirs could recover — and "a score that
- * cannot be earned by doing everything asked is not measuring compliance" is
- * this repository's own rule, in `incentives.ts`.
+ * "What can be paid today" and "what is owed" were answered by this one
+ * fragment, and for a while they were the same question: an EXPIRED invoice
+ * could never be discharged — no route reissued it, none withdrew it, and the
+ * payment path refused it — so counting it as owed would have held a citizen
+ * out of every `requires_no_arrears` programme for good, by a figure no action
+ * of theirs could clear. The choice was stated here, with its cost: a bill
+ * left to lapse stopped counting against the person who did not pay it.
  *
- * The cost of this direction is real and is stated rather than hidden: a bill
- * left to lapse stops counting against the person who did not pay it. It
- * always did, an hour after the deadline; now it does at the deadline. The
- * fix for that is a reissue that supersedes the lapsed invoice — which now
- * exists, `reissueInvoice` and migration 091 — and not a figure that counts a
- * debt nobody can settle.
+ * Both reasons have gone. A lapsed bill is issued again by
+ * `reissueInvoice` (migration 091), which cancels it and puts one payable
+ * bill in its place, so paying clears it; and a bill raised in error is
+ * withdrawn by two officers (migration 092), so a duplicate does not count for
+ * ever either. So the questions now get different answers:
  *
- * WHERE LAPSED MONEY IS STILL COUNTED
+ *   PAYABLE_INVOICE_SQL — can be paid today, by the deadline. For the places
+ *   that send somebody to collect: the officer's unpaid tile (beside its own
+ *   count of expired invoices), the arrears call list (which reports lapsed
+ *   money on its own line, as needing to be issued again), and the payment
+ *   path itself.
  *
- * Two readers include EXPIRED on purpose, and each labels it: the arrears
- * worklist's lapsed figure, and the per-row `payable` flag on what a person
- * owes across the State (`connections.ts`). Lapsed money is reported there, as
- * money that needs a fresh assessment before anyone can collect it. Nothing
- * else should include it.
+ *   OWED_INVOICE_SQL — owed, whether or not its window is open: unpaid, part
+ *   paid, or lapsed, and not withdrawn or replaced. For the places that judge
+ *   or report what somebody owes: the compliance score and the no-arrears
+ *   gate, the only-unpaid search, the debt left behind on a closed record,
+ *   expected revenue, and the defaulters report. Letting a bill lapse no longer
+ *   improves any of them.
+ *
+ * Either way, the sweep changes no figure: in date, lapsed and swept read the
+ * same for every OWED reader, and lapsed and swept read the same for every
+ * PAYABLE one. `an-invoice-stops-being-owed.test.ts` reads each one three
+ * times.
+ *
+ * A replaced invoice is CANCELLED (migration 091 makes that a rule), so
+ * neither fragment can count a debt and its replacement twice.
  *
  * Written against the alias `i`, like `UNDER_OPEN_OBJECTION_SQL`, so a caller
  * that names `invoices` something else fails in Postgres rather than matching
@@ -55,3 +63,9 @@
  */
 export const PAYABLE_INVOICE_SQL = `(i.status IN ('UNPAID', 'PARTIALLY_PAID')
   AND (i.expires_at IS NULL OR i.expires_at > now()))`;
+
+/**
+ * Owed, whatever the state of its payment window. See the header above for
+ * which question each fragment answers. Same alias, same reason.
+ */
+export const OWED_INVOICE_SQL = `(i.status IN ('UNPAID', 'PARTIALLY_PAID', 'EXPIRED'))`;
