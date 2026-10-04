@@ -35,7 +35,8 @@ export type TransactionState = (typeof TRANSACTION_STATES)[number];
  *
  * Two properties are load-bearing and enforced here rather than in prose:
  *   1. Nothing reaches PAYMENT_SUCCESSFUL except from a payment-in-flight
- *      state, and only the gateway verification path may drive it (PRD §95).
+ *      state — including one held UNDER_REVIEW, see below — and only the
+ *      gateway verification path may drive it (PRD §95).
  *   2. RECEIPT_GENERATED is reachable only from RECONCILIATION_PENDING, so a
  *      failed payment, an unverified one, or one the gateway confirmed and
  *      never handed over can never produce a valid receipt (PRD §84, §88.26).
@@ -63,7 +64,39 @@ export const TRANSACTION_TRANSITIONS: Record<TransactionState, readonly Transact
   RECONCILIATION_PENDING: ['RECEIPT_GENERATED', 'SETTLED', 'UNDER_REVIEW', 'REVERSED', 'REFUNDED'],
   RECEIPT_GENERATED: ['SETTLED', 'UNDER_REVIEW', 'REVERSED', 'REFUNDED'],
   SETTLED: ['REVERSED', 'REFUNDED', 'UNDER_REVIEW'],
-  UNDER_REVIEW: ['SETTLED', 'RECONCILIATION_PENDING', 'REVERSED', 'REFUNDED', 'RECEIPT_GENERATED'],
+  /*
+   * A payment held for review is settled by the gateway's next answer.
+   *
+   * The one thing that puts a transaction here is the gateway confirming a
+   * payment for an amount that is not the bill's: the payment is held, a
+   * CRITICAL flag raised, and the agent told it is under review. Nothing led
+   * out. Measured: the gateway corrected its figure and Confirm was refused
+   * with "Transaction cannot move from UNDER_REVIEW to PAYMENT_SUCCESSFUL";
+   * the gateway returned the money and its webhook was acknowledged with
+   * "cannot move from UNDER_REVIEW to FAILED". The bill could then not be
+   * paid, issued again, withdrawn or have an objection to it upheld — every
+   * one of those waits for a payment to finish, and this one never could.
+   *
+   * So the gateway verification path may take it on, as it would have from
+   * PAYMENT_PENDING: to PAYMENT_SUCCESSFUL when the gateway now reports the
+   * bill's amount, which is still checked before anything is recorded; to
+   * FAILED when it reports the payment failed or the money went back. Both
+   * are moves for a payment still in flight — a payment already VERIFIED is
+   * answered before either is considered — so property 1 above holds.
+   *
+   * RECEIPT_GENERATED is no longer reachable from here. Property 2 says the
+   * only door into a receipt is RECONCILIATION_PENDING, and this edge was a
+   * second one; with a held payment now able to become successful, it would
+   * have been a way to a receipt that skipped verification altogether.
+   */
+  UNDER_REVIEW: [
+    'PAYMENT_SUCCESSFUL',
+    'FAILED',
+    'SETTLED',
+    'RECONCILIATION_PENDING',
+    'REVERSED',
+    'REFUNDED',
+  ],
   /*
    * A failed attempt is not a failed debt.
    *

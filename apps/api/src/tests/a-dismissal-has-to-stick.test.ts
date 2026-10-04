@@ -38,6 +38,7 @@ import { queryOne, withTransaction } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
 import { evaluateTransactionRisk } from '../services/fraud';
+import { recoverUnverifiedPayments } from '../services/reconciliation';
 
 const OFFICER = '+2348030000400';
 const SECOND_OFFICER = '+2348030000402';
@@ -461,5 +462,81 @@ describe('a gateway confirming the wrong amount', () => {
       [invoice.transactionId],
     );
     assert.equal(Number(receipts!.n), 0);
+  });
+
+  /*
+   * And the review ends when the gateway answers again.
+   *
+   * Nothing led out of UNDER_REVIEW. Measured: the gateway corrected its
+   * figure and Confirm was refused with "Transaction cannot move from
+   * UNDER_REVIEW to PAYMENT_SUCCESSFUL"; the gateway sent the money back and
+   * its webhook was acknowledged with "cannot move from UNDER_REVIEW to
+   * FAILED". The bill could then never be paid, issued again or withdrawn.
+   */
+  const state = () =>
+    queryOne<{ transaction: string; invoice: string }>(
+      pool,
+      `SELECT t.status AS transaction, i.status AS invoice
+         FROM transactions t JOIN invoices i ON i.id = t.invoice_id WHERE t.id = $1`,
+      [invoice.transactionId],
+    );
+  const gatewayReferenceOf = async (paymentId: string) =>
+    (await queryOne<{ gateway_reference: string }>(
+      pool,
+      'SELECT gateway_reference FROM payments WHERE id = $1',
+      [paymentId],
+    ))!.gateway_reference;
+
+  it('completes once the gateway reports the amount the bill asked for', async () => {
+    const { paymentId } = await mismatchedConfirm();
+    await pool.query(
+      'UPDATE mock_gateway_transactions SET amount_kobo = amount_kobo - 100000 WHERE gateway_reference = $1',
+      [await gatewayReferenceOf(paymentId)],
+    );
+
+    const confirmed = await confirmAgain(paymentId);
+    assert.equal(confirmed.status, 200, JSON.stringify(confirmed.body));
+    assert.equal(confirmed.body.status, 'VERIFIED');
+    assert.deepEqual(await state(), { transaction: 'RECONCILIATION_PENDING', invoice: 'PAID' });
+  });
+
+  it('stays under review while the gateway still names the wrong amount', async () => {
+    const { paymentId } = await mismatchedConfirm();
+    const again = await confirmAgain(paymentId);
+    assert.equal(again.body.error.code, 'PAYMENT_AMOUNT_MISMATCH');
+    assert.deepEqual(await state(), { transaction: 'UNDER_REVIEW', invoice: 'UNPAID' });
+  });
+
+  it('ends the attempt when the gateway sends the money back, so the bill can be paid', async () => {
+    const { paymentId } = await mismatchedConfirm();
+    const returned = await post(
+      '/payments/simulate',
+      { gatewayReference: await gatewayReferenceOf(paymentId), outcome: 'REVERSED', deliverWebhook: true },
+      { token: agent.token, deviceId: agent.device },
+    );
+    assert.equal(returned.status, 200, JSON.stringify(returned.body));
+    assert.deepEqual(await state(), { transaction: 'FAILED', invoice: 'UNPAID' });
+
+    const next = await post(
+      '/payments/initiate',
+      { transactionId: invoice.transactionId, paymentMethod: 'POS' },
+      { token: agent.token, deviceId: agent.device, idempotencyKey: 'mismatch-next-attempt' },
+    );
+    assert.equal(next.status, 201, JSON.stringify(next.body));
+    assert.notEqual(next.body.paymentId, paymentId, 'a second attempt, not the held one handed back');
+  });
+
+  it('is picked up by the recovery job without anybody pressing Confirm', async () => {
+    const { paymentId } = await mismatchedConfirm();
+    await pool.query(
+      'UPDATE mock_gateway_transactions SET amount_kobo = amount_kobo - 100000 WHERE gateway_reference = $1',
+      [await gatewayReferenceOf(paymentId)],
+    );
+    const recovered = await recoverUnverifiedPayments({
+      from: new Date(Date.now() - 3600_000),
+      to: new Date(Date.now() + 60_000),
+    });
+    assert.equal(recovered.verified, 1, JSON.stringify(recovered));
+    assert.deepEqual(await state(), { transaction: 'RECONCILIATION_PENDING', invoice: 'PAID' });
   });
 });
