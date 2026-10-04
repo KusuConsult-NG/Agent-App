@@ -208,6 +208,33 @@ describe('FORMULA rate — safe arithmetic evaluator', () => {
     assert.equal(evaluateFormula('7 / 3', {}), 2n);
   });
 
+  it('checks each formula input the way the other rate types check theirs', () => {
+    // A bare money parser read these: "15.5" was a 422 about kobo naming no
+    // field, and "-3" was accepted, so `area * 5` came to -15.
+    const refusal = (value: unknown) => {
+      try {
+        evaluateFormula('area * 5', { area: value as string });
+      } catch (error) {
+        return error as { statusCode?: number; message: string; details?: { field: string }[] };
+      }
+      return null;
+    };
+    for (const value of ['15.5', 'abc', 15.5]) {
+      const error = refusal(value);
+      assert.equal(error?.statusCode, 400, `${JSON.stringify(value)} was not refused as a bad input`);
+      assert.equal(error?.details?.[0]?.field, 'area');
+      assert.match(error!.message, /"area" must be a whole number/);
+    }
+    const negative = refusal('-3');
+    assert.equal(negative?.statusCode, 400, 'a negative area was accepted and lowered the bill');
+    assert.equal(negative?.details?.[0]?.field, 'area');
+    assert.match(negative!.message, /cannot be negative/);
+    // And the ones that were always fine still are.
+    assert.equal(evaluateFormula('area * 5', { area: '15' }), 75n);
+    assert.equal(evaluateFormula('area * 5', { area: 0 }), 0n);
+    assert.equal(evaluateFormula('extra * 500', { extra: true }), 500n);
+  });
+
   it('throws 400 on division by zero', () => {
     assert.throws(
       () => computeAmount(baseRate({ rate_type: 'FORMULA', formula: 'baseAmountKobo / 0' }), { baseAmountKobo: '100000' }),

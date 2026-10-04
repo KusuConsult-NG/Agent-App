@@ -250,6 +250,42 @@ function tokenise(formula: string): Token[] {
 
 const PRECEDENCE: Record<string, number> = { '+': 1, '-': 1, '*': 2, '/': 2 };
 
+/**
+ * One value a formula reads, checked the way every other rate type checks its
+ * own.
+ *
+ * The other rate types read their base through `requireNumericInput`, which
+ * names the field and refuses a negative. A formula read its inputs with the
+ * bare money parser instead. Measured: "15.5" or "abc" came back 422 —
+ * "Amount must be a whole number of kobo" — naming no field and calling an
+ * area money; and "-3" was accepted, so `area * 5` came to -15, and a
+ * negative input under a minimum, or beside a flat charge, quietly lowered
+ * the bill instead of being refused. A formula's inputs are counts and
+ * measurements — square metres, rooms, months — so the refusal says so.
+ */
+function readFormulaInput(inputs: ComputationInputs, name: string): bigint {
+  const raw = readInput(inputs, name);
+  if (raw === undefined || raw === null || raw === '') {
+    throw badRequest(`This revenue item needs a value for "${name}".`, [
+      { field: name, issue: 'Required input is missing' },
+    ]);
+  }
+  let value: bigint;
+  try {
+    value = parseKobo(typeof raw === 'boolean' ? Number(raw) : raw);
+  } catch {
+    throw badRequest(`"${name}" must be a whole number.`, [
+      { field: name, issue: 'Not a whole number' },
+    ]);
+  }
+  if (value < 0n) {
+    throw badRequest(`"${name}" cannot be negative.`, [
+      { field: name, issue: 'Must be zero or more' },
+    ]);
+  }
+  return value;
+}
+
 /** An exact value: numerator over a positive denominator, kept in lowest terms. */
 interface Fraction {
   n: bigint;
@@ -314,13 +350,7 @@ function evaluateFormula(formula: string, inputs: ComputationInputs): Kobo {
     if (token.type === 'number') {
       values.push({ n: token.value, d: 1n });
     } else if (token.type === 'ident') {
-      const raw = readInput(inputs, token.value);
-      if (raw === undefined || raw === null || raw === '') {
-        throw badRequest(`This revenue item needs a value for "${token.value}".`, [
-          { field: token.value, issue: 'Required input is missing' },
-        ]);
-      }
-      values.push({ n: parseKobo(typeof raw === 'boolean' ? Number(raw) : raw), d: 1n });
+      values.push({ n: readFormulaInput(inputs, token.value), d: 1n });
     } else if (token.value === '(') {
       operators.push(token.value);
     } else if (token.value === ')') {
