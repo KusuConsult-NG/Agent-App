@@ -30,7 +30,7 @@ import { useEffect, useState } from 'react';
 import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
 import { Alert, Badge, BeforeAfter, Empty, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
-import { enumLabel } from '@psirs/shared';
+import { enumLabel, formatNaira } from '@psirs/shared';
 
 interface TimelineEntry {
   at: string;
@@ -83,6 +83,14 @@ export function TransactionScreen({
 
   const tx = full.transaction;
   const payment = full.payments[full.payments.length - 1] ?? null;
+  /*
+   * A reversal is carried out against a verified payment on a collection that
+   * has reached reconciliation, and returns the whole of it.
+   */
+  const verified = full.payments.find((p) => p.status === 'VERIFIED') ?? null;
+  const reversible =
+    verified !== null &&
+    ['RECONCILIATION_PENDING', 'RECEIPT_GENERATED', 'SETTLED', 'UNDER_REVIEW'].includes(tx.status);
 
   return (
     <>
@@ -476,7 +484,111 @@ export function TransactionScreen({
           </button>
         )}
       </div>
+
+      {reversible && can('approval:request') && can('payment:reverse:request') && (
+        <ReversalRequest transactionId={tx.id} amountKobo={String(verified!.amount_kobo)} />
+      )}
     </>
+  );
+}
+
+type Attributable = 'GOVERNMENT' | 'TAXPAYER' | 'GATEWAY';
+
+/**
+ * Asking for a payment to be reversed.
+ *
+ * The finance screen could decide a reversal and execute one, and nothing in
+ * the portal could ask for one: the request was a POST only an API client
+ * could make, so the three-person path began outside the platform and an
+ * officer who found a duplicate charge had no button to press. This is that
+ * button, on the record of the payment itself.
+ *
+ * Whose doing it was is asked, not defaulted. It decides what happens to the
+ * bill — withdrawn when the State caused it, owed again when the payer's bank
+ * or the gateway did — and whether the citizen's compliance score is touched,
+ * so it is the officer's statement and not a default nobody chose.
+ */
+function ReversalRequest({ transactionId, amountKobo }: { transactionId: string; amountKobo: string }) {
+  const { t } = usePortalI18n();
+  const [reason, setReason] = useState('');
+  const [whose, setWhose] = useState<Attributable | null>(null);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  async function send() {
+    if (!whose) return;
+    setSending(true);
+    setError(null);
+    try {
+      await api.post('/government/approvals', {
+        approvalType: 'PAYMENT_REVERSAL',
+        entityType: 'transaction',
+        entityId: transactionId,
+        payload: { amountKobo, refundType: 'REVERSAL', attributableTo: whose, reason: reason.trim() },
+        reason: reason.trim(),
+      });
+      setSent(true);
+    } catch (caught) {
+      setError(asApiError(caught));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const choices: [Attributable, string][] = [
+    ['GOVERNMENT', t.ofcT3ReverseGovernment],
+    ['TAXPAYER', t.ofcT3ReverseTaxpayer],
+    ['GATEWAY', t.ofcT3ReverseGateway],
+  ];
+
+  return (
+    <div className="card">
+      <h3>{t.ofcT3ReverseTitle}</h3>
+      <p className="card__hint">{t.ofcT3ReverseHint}</p>
+      {sent ? (
+        <Alert kind="success">{t.ofcT3ReverseSent}</Alert>
+      ) : (
+        <>
+          <ErrorAlert error={error} />
+          <p>
+            <strong>{t.ofcT3ReverseAmount.replace('{{amount}}', formatNaira(amountKobo))}</strong>
+          </p>
+          <fieldset className="field">
+            <legend>{t.ofcT3ReverseWhose}</legend>
+            {choices.map(([value, label]) => (
+              <label key={value} style={{ display: 'block' }}>
+                <input
+                  type="radio"
+                  name="reversal-whose"
+                  value={value}
+                  checked={whose === value}
+                  onChange={() => setWhose(value)}
+                />{' '}
+                {label}
+              </label>
+            ))}
+          </fieldset>
+          <div className="field">
+            <label htmlFor="reversal-reason">{t.ofcT3ReverseReason}</label>
+            <textarea
+              id="reversal-reason"
+              rows={3}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          </div>
+          <button
+            type="button"
+            className="secondary"
+            disabled={sending || !whose || reason.trim().length < 10}
+            onClick={send}
+          >
+            {sending ? t.ofcT3ReverseSending : t.ofcT3ReverseSend}
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 

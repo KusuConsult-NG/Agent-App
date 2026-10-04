@@ -2541,6 +2541,17 @@ export interface TranslationDictionary {
   ofcT3After: string;
   ofcT3CasesAndFlags: string;
   ofcT3OpenCaseAbout: string;
+  ofcT3ReverseTitle: string;
+  ofcT3ReverseHint: string;
+  ofcT3ReverseAmount: string;
+  ofcT3ReverseWhose: string;
+  ofcT3ReverseGovernment: string;
+  ofcT3ReverseTaxpayer: string;
+  ofcT3ReverseGateway: string;
+  ofcT3ReverseReason: string;
+  ofcT3ReverseSend: string;
+  ofcT3ReverseSending: string;
+  ofcT3ReverseSent: string;
   ofcT3Withheld: string;
   ofcT3WithheldBody: string;
   ofcT3NoPayment: string;
@@ -6353,6 +6364,17 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcT3After: "After",
     ofcT3CasesAndFlags: "Cases and risk flags",
     ofcT3OpenCaseAbout: "Open a case about this transaction",
+    ofcT3ReverseTitle: "Ask for this payment to be reversed",
+    ofcT3ReverseHint: "The whole payment goes back to the payer, its receipt is voided and the agent's commission is recovered. A second officer decides, and a third carries it out.",
+    ofcT3ReverseAmount: "Amount returned: {{amount}}",
+    ofcT3ReverseWhose: "Whose doing was it",
+    ofcT3ReverseGovernment: "The State's — a duplicate, or a charge on the wrong record. The bill is withdrawn.",
+    ofcT3ReverseTaxpayer: "The payer's — their bank recalled the payment, or they asked. The bill is owed again.",
+    ofcT3ReverseGateway: "The gateway's. The bill is owed again.",
+    ofcT3ReverseReason: "What happened",
+    ofcT3ReverseSend: "Send for a decision",
+    ofcT3ReverseSending: "Sending…",
+    ofcT3ReverseSent: "Sent. A second officer decides it, and a third carries it out.",
     ofcT3Withheld: "Not shown to your role",
     ofcT3WithheldBody: "These parts exist and your permissions do not reach them. They are named so an empty section is never mistaken for an empty record.",
     ofcT3NoPayment: "No payment has been attempted.",
@@ -9954,6 +9976,17 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcT3After: "Bayan",
     ofcT3CasesAndFlags: "Kararraki da alamun hadari",
     ofcT3OpenCaseAbout: "Bude kara game da wannan ma’amala",
+    ofcT3ReverseTitle: "A nemi a mayar da wannan biyan",
+    ofcT3ReverseHint: "Za a mayar wa mai biya da dukan kudin, a soke rasit dinsa kuma a dawo da kwamishan din wakili. Jami’i na biyu ne zai yanke hukunci, kuma na uku ne zai aiwatar.",
+    ofcT3ReverseAmount: "Adadin da za a mayar: {{amount}}",
+    ofcT3ReverseWhose: "Laifin wane ne",
+    ofcT3ReverseGovernment: "Na Gwamnati — kwafi, ko caji a kan bayanan da ba daidai ba. Za a janye takardar biyan.",
+    ofcT3ReverseTaxpayer: "Na mai biya — bankinsu ya janye biyan, ko sun nema. Za a ci gaba da bin takardar biyan.",
+    ofcT3ReverseGateway: "Na hanyar biya. Za a ci gaba da bin takardar biyan.",
+    ofcT3ReverseReason: "Abin da ya faru",
+    ofcT3ReverseSend: "Aika don a yanke hukunci",
+    ofcT3ReverseSending: "Ana aikawa…",
+    ofcT3ReverseSent: "An aika. Jami’i na biyu ne zai yanke hukunci, kuma na uku ne zai aiwatar.",
     ofcT3Withheld: "Ba a nuna wa matsayinka ba",
     ofcT3WithheldBody: "Wadannan sassan suna nan amma izininka bai kai gare su ba. An ambace su domin kada a dauki sashe mara komai a matsayin rijista mara komai.",
     ofcT3NoPayment: "Ba a yi yunkurin biyan kudi ba.",
