@@ -48,6 +48,7 @@ let authoriser = '';
 let agentId = '';
 let taxpayerId = '';
 let transactionId = '';
+let invoiceId = '';
 let revenueItemId = '';
 
 before(async () => {
@@ -103,6 +104,7 @@ beforeEach(async () => {
   );
   assert.equal(assessment.status, 201, JSON.stringify(assessment.body));
   transactionId = assessment.body.transactionId;
+  invoiceId = assessment.body.invoiceId;
 });
 
 /**
@@ -137,15 +139,35 @@ function everyType() {
       reason: 'Business closed mid-year; annual obligation to be prorated.' },
     { approvalType: 'AGENT_OVERRIDE_ACTIVATION', entityType: 'agent', entityId: agentId,
       reason: 'Referee unreachable for six weeks; activating on documentary evidence.' },
+    { approvalType: 'INVOICE_WITHDRAWAL', entityType: 'invoice', entityId: invoiceId,
+      reason: 'Raised twice for the same kiosk in the same quarter.' },
   ];
 }
+
+/**
+ * The kinds something in the platform carries out once granted.
+ *
+ * The others are accepted by the table and acted on by nothing: an
+ * AGENT_SUSPENSION was approved and the agent stayed ACTIVE. They are refused
+ * when asked — see `NOT_CARRIED_OUT` in `routes/government.ts`.
+ */
+const NOT_CARRIED_OUT = [
+  'AGENT_ACTIVATION',
+  'AGENT_SUSPENSION',
+  'COMMISSION_ADJUSTMENT',
+  'REVENUE_RATE_CHANGE',
+  'MANUAL_CORRECTION',
+  'TAXPAYER_ADJUSTMENT',
+];
+const carriedOut = () => everyType().filter((t) => !NOT_CARRIED_OUT.includes(t.approvalType));
+const notCarriedOut = () => everyType().filter((t) => NOT_CARRIED_OUT.includes(t.approvalType));
 
 const raise = (body: Record<string, unknown>) =>
   post('/government/approvals', { payload: {}, ...body }, { token: requester });
 
 describe('Every approval type the endpoint accepts can actually be raised', () => {
-  it('stores each one and shows it back on the queue', async () => {
-    for (const request of everyType()) {
+  it('stores each one something carries out, and shows it back on the queue', async () => {
+    for (const request of carriedOut()) {
       const response = await raise(request);
       assert.equal(
         response.status,
@@ -166,18 +188,55 @@ describe('Every approval type the endpoint accepts can actually be raised', () =
     const queue = await get('/government/approvals', { token: reviewer });
     assert.equal(queue.status, 200, JSON.stringify(queue.body));
     const seen = new Set(queue.body.approvals.map((row: { approval_type: string }) => row.approval_type));
-    for (const request of everyType()) {
+    for (const request of carriedOut()) {
       assert.ok(seen.has(request.approvalType), `${request.approvalType} is missing from the queue`);
     }
 
     // And the reviewer can narrow to one type, which is how a finance officer
     // finds the reversals among ninety agent activations.
-    const filtered = await get('/government/approvals?type=REVENUE_RATE_CHANGE', { token: reviewer });
+    const filtered = await get('/government/approvals?type=REFUND', { token: reviewer });
     assert.equal(filtered.status, 200);
     assert.equal(filtered.body.approvals.length, 1);
     assert.equal(filtered.body.matched, 1);
-    assert.equal(filtered.body.approvals[0].approval_type, 'REVENUE_RATE_CHANGE');
+    assert.equal(filtered.body.approvals[0].approval_type, 'REFUND');
     assert.equal(filtered.body.approvals[0].requested_by_name, 'Queue Requester');
+  });
+
+  it('refuses, by name, a kind nothing carries out, and stores nothing', async () => {
+    for (const request of notCarriedOut()) {
+      const response = await raise(request);
+      assert.equal(response.status, 409, `${request.approvalType}: ${JSON.stringify(response.body)}`);
+      assert.equal(response.body.error.code, 'APPROVAL_NOT_CARRIED_OUT');
+    }
+    const count = await queryOne<{ n: string }>(pool, 'SELECT count(*)::text AS n FROM approvals');
+    assert.equal(count?.n, '0');
+  });
+
+  it('lets one already waiting be rejected, but not reviewed or granted', async () => {
+    const requesterId = (
+      await queryOne<{ id: string }>(pool, 'SELECT id FROM users WHERE phone = $1', ['+2348030000301'])
+    )!.id;
+    const waiting = await queryOne<{ id: string }>(
+      pool,
+      `INSERT INTO approvals (approval_type, entity_type, entity_id, payload, requested_by, requested_reason)
+       VALUES ('AGENT_SUSPENSION', 'agent', $1, '{}'::jsonb, $2, 'Raised before these were refused.')
+       RETURNING id`,
+      [agentId, requesterId],
+    );
+    const decide = (decision: string) =>
+      post(
+        `/government/approvals/${waiting!.id}/decide`,
+        { decision, reason: 'Deciding a request raised earlier.' },
+        { token: authoriser },
+      );
+    for (const decision of ['APPROVE', 'REVIEW']) {
+      const refused = await decide(decision);
+      assert.equal(refused.status, 409, `${decision}: ${JSON.stringify(refused.body)}`);
+      assert.equal(refused.body.error.code, 'APPROVAL_NOT_CARRIED_OUT');
+    }
+    const rejected = await decide('REJECT');
+    assert.equal(rejected.status, 200, JSON.stringify(rejected.body));
+    assert.equal(rejected.body.status, 'REJECTED');
   });
 
   it('refuses a type it does not know rather than storing it', async () => {
@@ -201,20 +260,21 @@ describe('A request that has been looked at but not yet authorised', () => {
    * it, so the queue could show a request as reviewed by nobody and no test
    * would have noticed.
    */
-  async function raiseRateChange() {
+  // A refund: a kind something carries out, so it can be reviewed and granted.
+  async function raiseRefund() {
     const response = await raise({
-      approvalType: 'REVENUE_RATE_CHANGE',
-      entityType: 'revenue_item',
-      entityId: revenueItemId,
-      payload: { proposedAmountKobo: '750000' },
-      reason: 'Executive Council approved a revised rate for this item.',
+      approvalType: 'REFUND',
+      entityType: 'transaction',
+      entityId: transactionId,
+      payload: { amountKobo: '300000', refundType: 'REFUND' },
+      reason: 'Taxpayer paid twice for the same kiosk in the same quarter.',
     });
     assert.equal(response.status, 201, JSON.stringify(response.body));
     return response.body.approvalId as string;
   }
 
   it('records who reviewed it, and leaves the authorising to somebody else', async () => {
-    const approvalId = await raiseRateChange();
+    const approvalId = await raiseRefund();
 
     const reviewed = await post(
       `/government/approvals/${approvalId}/decide`,
@@ -254,7 +314,7 @@ describe('A request that has been looked at but not yet authorised', () => {
   });
 
   it('will not let the officer who reviewed it also authorise it', async () => {
-    const approvalId = await raiseRateChange();
+    const approvalId = await raiseRefund();
     await post(
       `/government/approvals/${approvalId}/decide`,
       { decision: 'REVIEW', reason: 'Council minute sighted and the item matches.' },

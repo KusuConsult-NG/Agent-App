@@ -337,10 +337,10 @@ describe('an officer is told, and it is recorded that they were', () => {
       {
         // A kind the administrator may request: `PAYMENT_REVERSAL` needs
         // `payment:reverse:request`, which they deliberately do not hold.
-        approvalType: 'COMMISSION_ADJUSTMENT',
-        entityType: 'commission',
-        entityId: 'CMS-2026-000001',
-        reason: 'The commission was accrued at the wrong rate for this ward.',
+        approvalType: 'AGENT_OVERRIDE_ACTIVATION',
+        entityType: 'agent',
+        entityId: 'AGT-2026-000001',
+        reason: 'The referee has been unreachable for six weeks.',
       },
       auth('admin'),
     );
@@ -393,6 +393,21 @@ describe('an officer is told, and it is recorded that they were', () => {
     assert.equal(admin.status, 403, JSON.stringify(admin.body));
     assert.match(JSON.stringify(admin.body), /payment:reverse:request/);
 
+    // Nor by calling it a refund: the same money goes back by the same
+    // function, and this was the way round the permission.
+    const refund = await post(
+      '/government/approvals',
+      {
+        approvalType: 'REFUND',
+        entityType: 'transaction',
+        entityId: 'TXN-2026-000002',
+        reason: 'The same request, under the other name.',
+      },
+      auth('admin'),
+    );
+    assert.equal(refund.status, 403, JSON.stringify(refund.body));
+    assert.match(JSON.stringify(refund.body), /payment:reverse:request/);
+
     // And the roles that hold it are unaffected.
     const officer = await post(
       '/government/approvals',
@@ -410,10 +425,10 @@ describe('an officer is told, and it is recorded that they were', () => {
     const ordinary = await post(
       '/government/approvals',
       {
-        approvalType: 'COMMISSION_ADJUSTMENT',
-        entityType: 'commission',
-        entityId: 'CMS-1',
-        reason: 'The commission was accrued at the wrong rate.',
+        approvalType: 'AGENT_OVERRIDE_ACTIVATION',
+        entityType: 'agent',
+        entityId: 'AGT-1',
+        reason: 'The referee has been unreachable for six weeks.',
       },
       auth('admin'),
     );

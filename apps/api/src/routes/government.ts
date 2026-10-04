@@ -1500,6 +1500,45 @@ governmentRouter.get(
   ),
 );
 
+/**
+ * Approval kinds the table accepts and nothing in the platform carries out.
+ *
+ * Each could be requested and approved, and the approval changed nothing.
+ * Measured: an AGENT_SUSPENSION requested, approved by a second officer,
+ * answered APPROVED — and the agent still ACTIVE, collecting. A reviewer
+ * granting one believes they have suspended somebody, or changed a rate, and
+ * the record says they decided it. The acts themselves exist, each on its own
+ * screen with its own controls; this queue was a second door that opened onto
+ * nothing.
+ *
+ * So these are refused when asked, and one already waiting can be rejected
+ * but not approved. The values stay in the table's CHECK, for the rows that
+ * already carry them.
+ */
+const NOT_CARRIED_OUT: Partial<Record<string, string>> = {
+  AGENT_ACTIVATION:
+    "An agent is activated from their record, through the clearance review.",
+  AGENT_SUSPENSION:
+    "An agent is suspended from their record, under step-up, and it takes effect at once.",
+  REVENUE_RATE_CHANGE:
+    'A rate is changed in the catalogue, under step-up, which keeps every version.',
+  COMMISSION_ADJUSTMENT:
+    "Commission is not adjusted by hand; reversing a payment takes its commission back with it.",
+  MANUAL_CORRECTION:
+    'A record is corrected on its own screen, and a bill raised in error is withdrawn as INVOICE_WITHDRAWAL.',
+  TAXPAYER_ADJUSTMENT:
+    "A taxpayer's record is corrected from the record itself, under step-up.",
+};
+
+function refuseNotCarriedOut(approvalType: string): void {
+  const where = NOT_CARRIED_OUT[approvalType];
+  if (!where) return;
+  throw conflict(
+    'APPROVAL_NOT_CARRIED_OUT',
+    `Nothing in the platform carries out a ${approvalType.toLowerCase().replace(/_/g, ' ')} approval, so granting one would change nothing. ${where}`,
+  );
+}
+
 governmentRouter.post(
   '/approvals',
   requirePermission('approval:request'),
@@ -1543,6 +1582,15 @@ governmentRouter.post(
       const ALSO_NEEDED: Partial<Record<typeof data.approvalType, Permission>> = {
         PAYMENT_REVERSAL: 'payment:reverse:request',
         /*
+         * And a refund, which is the same money going back by the same
+         * function: `recordReversal` executes either kind. Guarding one name
+         * and not the other left the door this permission was made to shut
+         * standing open beside it. Measured: an administrator refused a
+         * PAYMENT_REVERSAL asked for a REFUND of the same transaction instead,
+         * it was granted and executed, and the ₦3,000 went back.
+         */
+        REFUND: 'payment:reverse:request',
+        /*
          * Asking for a bill to be withdrawn is asked by somebody who may
          * issue one. The control on forgiving the debt is the second officer
          * who decides; this keeps the asking with the people whose work bills
@@ -1550,6 +1598,8 @@ governmentRouter.post(
          */
         INVOICE_WITHDRAWAL: 'invoice:create',
       };
+      refuseNotCarriedOut(data.approvalType);
+
       const extra = ALSO_NEEDED[data.approvalType];
       if (extra && !req.auth!.permissions.includes(extra)) {
         throw forbidden(
@@ -1673,6 +1723,8 @@ governmentRouter.post(
             `This request is already ${approval.status.toLowerCase()}.`,
           );
         }
+        // One raised before these were refused can be cleared, not granted.
+        if (data.decision !== 'REJECT') refuseNotCarriedOut(approval.approval_type);
 
         const nextStatus =
           data.decision === 'REVIEW' ? 'REVIEWED' : data.decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';

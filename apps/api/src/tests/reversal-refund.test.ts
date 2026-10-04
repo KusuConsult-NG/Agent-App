@@ -42,6 +42,7 @@ import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
 import { computeComplianceScore } from '../services/incentives';
+import { forget } from '../services/rbac-store';
 
 let agent: { token: string; device: string; id: string };
 let requester = '';
@@ -408,6 +409,55 @@ describe('A reversal needs three people', () => {
     );
     assert.equal(selfExecute.status, 409);
     assert.equal(selfExecute.body.error.code, 'SEGREGATION_OF_DUTIES');
+  });
+
+  it('refuses the requester executing, however the roles have been arranged', async () => {
+    /*
+     * The seeded roles keep asking and executing apart — no role holds both —
+     * so the rule was held by configuration alone. Since migration 059 an
+     * administrator arranges the roles. Here finance officers are given
+     * approval:request, which is all it takes to ask and execute.
+     */
+    await query(
+      pool,
+      `INSERT INTO role_permissions (role, permission, reason)
+       VALUES ('finance_officer', 'approval:request', 'arranged by an administrator')`,
+    );
+    forget();
+    const collected = await collect('9');
+    const request = await post(
+      '/government/approvals',
+      {
+        approvalType: 'PAYMENT_REVERSAL',
+        entityType: 'transaction',
+        entityId: collected.transactionId,
+        payload: { amountKobo: '300000', reason: 'Charged in error', refundType: 'REVERSAL' },
+        reason: 'Duplicate assessment for the same premises this period.',
+      },
+      { token: executor },
+    );
+    assert.equal(request.status, 201, JSON.stringify(request.body));
+    const approved = await post(
+      `/government/approvals/${request.body.approvalId}/decide`,
+      { decision: 'APPROVE', reason: 'Duplicate confirmed against the record.' },
+      { token: approver },
+    );
+    assert.equal(approved.status, 200, JSON.stringify(approved.body));
+
+    await grantStepUp('+2348000000023', executor);
+    const ownRequest = await post(
+      `/government/approvals/${request.body.approvalId}/execute-reversal`,
+      {},
+      { token: executor },
+    );
+    assert.equal(ownRequest.status, 409, JSON.stringify(ownRequest.body));
+    assert.equal(ownRequest.body.error.code, 'SEGREGATION_OF_DUTIES');
+    const transaction = await queryOne<{ status: string }>(
+      pool,
+      'SELECT status FROM transactions WHERE id = $1',
+      [collected.transactionId],
+    );
+    assert.notEqual(transaction?.status, 'REVERSED', 'no money went back on two people');
   });
 });
 

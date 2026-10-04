@@ -674,7 +674,7 @@ failed, a step-up the officer walked away from. `STEP_UP_REQUIRED` has now been
 added, because it guards every consequential money action in the portal and its
 instruction was already in Hausa under an English heading.
 
-**The scale, counted rather than estimated.** The platform raises **181
+**The scale, counted rather than estimated.** The platform raises **182
 distinct error codes**; the officer portal says 8 of them in Hausa, and the
 agent application says 39. The last two are `CASE_MOVED`, raised when two
 officers escalate one case together and the second finds it already with
@@ -695,7 +695,7 @@ exists to keep honest, which is why all three figures are now recomputed by
 `scripts/build-hausa-review.mjs` and the build refuses when this sentence
 disagrees with them.
 
-Not all 181 can reach an officer. Many are the agent's, many are the platform
+Not all 182 can reach an officer. Many are the agent's, many are the platform
 talking to itself — a storage write that did not complete, a malformed body, a
 route that does not exist. The ones below are a **sample, not the set**: those
 an officer meets while doing the work the portal is for, each carrying a code

@@ -380,7 +380,7 @@ process would be a lost capture wearing the costume of a successful one.
 | `GET` | `/government/reconciliation/exceptions` | exception queue |
 | `POST` | `/government/reconciliation/exceptions/:id/resolve` | resolution required |
 | `GET`/`POST` | `/government/settlements` | `payment:reconcile` |
-| `GET`/`POST` | `/government/approvals` | maker-checker |
+| `GET`/`POST` | `/government/approvals` | maker-checker. Only kinds something carries out once granted can be asked for: `PAYMENT_REVERSAL`, `REFUND`, `COMMISSION_PAYOUT`, `BANK_ACCOUNT_CHANGE`, `AGENT_OVERRIDE_ACTIVATION`, `INVOICE_WITHDRAWAL`. The other kinds the table holds are refused with `APPROVAL_NOT_CARRIED_OUT`, naming where that act is really done; one already waiting can be rejected but not granted |
 | `POST` | `/government/approvals/:id/decide` | requester may never decide |
 | `POST` | `/government/approvals` with `INVOICE_WITHDRAWAL` | withdraw an unpaid bill raised in error — a duplicate, a charge against the wrong record. Asked for one invoice (`entityType: invoice`) by somebody holding `approval:request` and `invoice:create`; refused at once, by code, for a bill paid or part paid, already withdrawn, or with a payment in progress, and while another request for it is waiting. Granting it through `/decide` withdraws the bill in the same transaction: the invoice CANCELLED, its charge closed, a waiting vehicle renewal cancelled, the approval EXECUTED. A bill paid in the meantime refuses the decision, which stays open to be rejected. |
 | `POST` | `/government/approvals/:id/execute-reversal` | `payment:reverse:approve` + step-up; approver may not execute |

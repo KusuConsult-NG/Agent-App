@@ -1679,6 +1679,25 @@ async function recordReversal(params: {
         'The officer who approved a reversal may not also execute it.',
       );
     }
+    /*
+     * Nor the officer who asked for it.
+     *
+     * Three people, none doing two of the jobs, is the control the reversal
+     * path describes itself by. The table refuses a requester approving, and
+     * the check above refuses an approver executing; nothing refused the
+     * requester executing. The seeded roles happened to keep those apart —
+     * no role both asks and executes — but since migration 059 which role
+     * holds what is PSIRS's to change, and the rule must not depend on how
+     * they change it. Measured: finance officers granted approval:request,
+     * one asked, a colleague approved, and the first executed it; the money
+     * went back on two people's word.
+     */
+    if (approval.requested_by === params.actorId) {
+      throw conflict(
+        'SEGREGATION_OF_DUTIES',
+        'The officer who asked for a reversal may not also execute it.',
+      );
+    }
 
     const transactionId = approval.entity_id;
     const transaction = await queryOne<{

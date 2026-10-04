@@ -166,7 +166,10 @@ function readEndpoints() {
         if (!byPermission.has(permission)) byPermission.set(permission, []);
         // `receiptRouter.get('/')` is `GET /receipts`, not `GET /receipts/`.
         const url = prefix + (path[1] === '/' ? '' : path[1]);
-        byPermission.get(permission).push(`${start[2].toUpperCase()} ${url}`);
+        const endpoint = `${start[2].toUpperCase()} ${url}`;
+        // Once per endpoint: a route that names one permission for two of
+        // the kinds it accepts is still one door.
+        if (!byPermission.get(permission).includes(endpoint)) byPermission.get(permission).push(endpoint);
       }
     }
   }

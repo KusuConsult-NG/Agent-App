@@ -140,6 +140,25 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
     'A pending request is withdrawn by a second officer rejecting it, which keeps the unwinding in the one branch that does it.',
 
   /*
+   * Approval kinds the table accepts and nothing in the platform carries out.
+   *
+   * Each could be asked for and granted, and the grant changed nothing — an
+   * approved AGENT_SUSPENSION left the agent ACTIVE. They are refused when
+   * asked (APPROVAL_NOT_CARRIED_OUT, `routes/government.ts`), and stay in the
+   * CHECK only for rows written before. AGENT_SUSPENSION and
+   * MANUAL_CORRECTION are not listed because tests still write them directly,
+   * as rows raised before the refusal.
+   */
+  'approvals.approval_type: AGENT_ACTIVATION':
+    'Refused when asked: an agent is activated through the clearance review, and nothing carries out this approval.',
+  'approvals.approval_type: COMMISSION_ADJUSTMENT':
+    'Refused when asked: commission is not adjusted by hand, and nothing carries out this approval.',
+  'approvals.approval_type: REVENUE_RATE_CHANGE':
+    'Refused when asked: a rate is changed in the catalogue under step-up, and nothing carries out this approval.',
+  'approvals.approval_type: TAXPAYER_ADJUSTMENT':
+    'Refused when asked: a record is corrected from the record itself, and nothing carries out this approval.',
+
+  /*
    * A module nobody opens, only sits.
    *
    * There is no "start the module" endpoint: the applicant reads the material
