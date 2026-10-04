@@ -1415,8 +1415,16 @@ export async function revenueOfficerHome(db: Db) {
        (SELECT count(*)::text FROM taxpayers WHERE tin_status IN ('PENDING','FAILED'))
          AS tins_outstanding,
        (SELECT count(*)::text FROM taxpayers WHERE tin_status = 'FAILED') AS tins_failed,
-       (SELECT count(*)::text FROM approvals
-         WHERE status IN ('REQUESTED','REVIEWED') AND approval_type = 'TAXPAYER_CORRECTION')
+       -- Requests to change somebody's record, which arrive as cases.
+       --
+       -- This counted approvals of type TAXPAYER_CORRECTION, which the
+       -- approvals table's own CHECK refuses, so no such row could ever exist
+       -- and the tile read 0 on every deployment however many people had
+       -- asked. Measured: a DATA_CORRECTION case opened, the tile unmoved.
+       -- A record is corrected directly, by taxpayer:correct with step-up;
+       -- what waits is the request, and the request is a case.
+       (SELECT count(*)::text FROM cases
+         WHERE category = 'DATA_CORRECTION' AND status NOT IN ('RESOLVED','CLOSED'))
          AS corrections_awaiting_review,
        (SELECT count(*)::text FROM invoices i WHERE ${PAYABLE_INVOICE_SQL}) AS invoices_unpaid,
        (SELECT count(*)::text FROM invoices WHERE status = 'EXPIRED') AS invoices_expired,

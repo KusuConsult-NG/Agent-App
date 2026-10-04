@@ -112,6 +112,15 @@ export function CasesScreen({
    */
   const about = params.get('about');
   const aboutReference = params.get('reference');
+  /*
+   * Arriving already narrowed to one kind of work — the officer home's
+   * "corrections awaiting review" tile sends `?category=DATA_CORRECTION`, so
+   * the count it showed and the list it opens are the same set. A category
+   * this screen does not know is ignored rather than filtering to nothing.
+   */
+  const category = params.get('category');
+  const initialCategory =
+    category && (CATEGORIES as readonly string[]).includes(category) ? category : '';
 
   return openCaseId ? (
     <CaseDetail caseId={openCaseId} user={user} navigate={navigate} />
@@ -120,6 +129,7 @@ export function CasesScreen({
       user={user}
       navigate={navigate}
       about={about ? { transactionId: about, reference: aboutReference } : null}
+      initialCategory={initialCategory}
     />
   );
 }
@@ -129,10 +139,12 @@ function CaseQueue({
   user,
   navigate,
   about,
+  initialCategory = '',
 }: {
   user: User;
   navigate: (path: string) => void;
   about: { transactionId: string; reference: string | null } | null;
+  initialCategory?: string;
 }) {
   const { t } = usePortalI18n();
   const [rows, setRows] = useState<CaseRow[] | null>(null);
@@ -157,7 +169,7 @@ function CaseQueue({
     overdue: false,
     department: '',
     status: '',
-    category: '',
+    category: initialCategory,
   });
   const [opening, setOpening] = useState(about !== null);
 

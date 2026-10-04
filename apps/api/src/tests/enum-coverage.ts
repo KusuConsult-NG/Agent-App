@@ -344,9 +344,6 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
    */
   'transactions.status: ASSESSMENT_CREATED':
     'Recorded as an event in transaction_events; the row itself is INVOICE_GENERATED from creation.',
-  'transactions.status: CANCELLED':
-    'A transaction expires, fails, is abandoned or is reversed; nothing cancels one.',
-
   /*
    * An agent account that is ended rather than paused.
    *
