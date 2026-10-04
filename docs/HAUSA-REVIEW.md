@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > nineteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,501 strings; that one is two pages and links back
+> because it carries all 3,504 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,501 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,504 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,501 strings is worse than no sheet, because it looks complete; this one cannot
+3,504 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,501 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,504 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,501 strings: where the
+- The glossary below is applied consistently across all 3,504 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -410,6 +410,8 @@ quietly leave it.
 | `colLapsedBody` | No money has been taken. It can no longer be paid as it stands — issue it again, for the same amount, to take the payment. | Ba a karbi kudi ba. Ba za a iya biyanta yadda take ba — a sake fitar da ita, a kan adadin kudi daya, don a karbi biyan. | ☐ | |
 | `colReplacedBody` | No money was taken against this one. Take the payment against the new bill. | Ba a karbi kudi a kan wannan ba. A karbi biyan a kan sabuwar takardar. | ☐ | |
 | `errInvoicePaymentInProgress` | A payment against this bill is still being processed. Check its status first, and do not collect again. | Ana kan sarrafa wani biya da aka yi kan wannan takardar biya. A duba matsayinsa tukuna, kuma kada a sake karbar kudi. | ☐ | |
+| `colReversedOwedBody` | The money went back to the payer, so the receipt no longer stands and the bill is owed again. Issue it again to collect it. | Kudin ya koma ga mai biya, don haka rasit din bai tsaya ba kuma ana bin takardar biyan kuma. A sake fitar da ita don a karba. | ☐ | |
+| `colReversedWithdrawnBody` | The money went back to the payer and the bill was withdrawn. Nothing is owed on it. | Kudin ya koma ga mai biya kuma an janye takardar biyan. Babu bashin komai a kanta. | ☐ | |
 | `paymentUnconfirmed` | Payment not yet confirmed | Ba a tabbatar da biyan kudin ba tukuna | ☐ | |
 | `paymentUnconfirmedBody` | This payment has NOT been marked as received. Do not ask the taxpayer to pay again — check again in a moment. | BA A nuna an karbi wannan kudin ba. Kada ka ce wa mai biyan haraji ya sake biya — ka sake dubawa nan da dan lokaci. | ☐ | |
 | `findTaxpayerFirst` | Find the taxpayer first. Every payment must be attributed. | Ka nemo mai biyan haraji tukuna. Dole a danganta kowane biyan kudi ga wani. | ☐ | |
@@ -487,7 +489,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3416 strings, grouped by where an agent meets them. Lower stakes
+3417 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2687,6 +2689,7 @@ instructions — but they are what an agent reads all day.
 | `colLapsedTitle` | This bill has lapsed | Wannan takardar biya ta kare | ☐ | |
 | `colReplacedTitle` | This bill was issued again | An sake fitar da wannan takardar biya | ☐ | |
 | `colOpenReplacement` | Open the new bill | Bude sabuwar takardar | ☐ | |
+| `colReversedTitle` | This payment was reversed | An mayar da wannan biyan | ☐ | |
 | `colUnderObjection` | Under objection | Ana kalubalanta | ☐ | |
 | `colUnderObjectionBody` | the trader has formally disputed this estimate. PSIRS is not pursuing it while the objection is decided, so do not ask for this payment. | mai sana’ar ya kalubalanci wannan kiyasi a hukumance. PSIRS ba ta neman wannan kudi har sai an yanke hukunci kan kalubalen, don haka kada a nemi wannan biyan. | ☐ | |
 | `colChargeRaisedTitle` | The charge was raised. The payment was not. | An yi kimantawa, amma ba a fara biyan kudi ba. | ☐ | |

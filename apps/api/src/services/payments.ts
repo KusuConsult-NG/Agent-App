@@ -1222,6 +1222,13 @@ export async function getTransactionStatus(db: Db, transactionReference: string)
             p.paid_at, p.verified_at AS payment_verified_at, p.failure_reason,
             r.id AS receipt_id, r.receipt_number, r.verification_code AS receipt_code,
             r.document_id,
+            /*
+             * Whether the receipt still stands. A reversal marks it REVERSED
+             * and keeps the row, as it must; the agent's screen read the
+             * number alone as "paid", and showed a payment whose money had
+             * gone back as successful, with the receipt offered for sharing.
+             */
+            r.status AS receipt_status,
             ack.id AS acknowledgement_id, ack.document_number AS acknowledgement_number,
             ack.verification_code AS acknowledgement_code
        FROM transactions t

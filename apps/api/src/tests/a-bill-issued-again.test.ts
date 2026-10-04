@@ -414,6 +414,22 @@ describe('A bill a reversal left owed', () => {
     assert.deepEqual(await listed(), [[reissued.body.invoiceId, false]], 'one bill, and payable');
   });
 
+  it('tells the agent the receipt no longer stands', async () => {
+    // The agent's transaction screen read the receipt number alone as paid.
+    const first = await collectedAndReversed('TAXPAYER');
+    const reference = (
+      await queryOne<{ transaction_reference: string }>(
+        pool,
+        'SELECT transaction_reference FROM transactions WHERE id = $1',
+        [first.transactionId],
+      )
+    )!.transaction_reference;
+    const status = await get(`/payments/transactions/${reference}/status`, asAgent());
+    assert.equal(status.status, 200, JSON.stringify(status.body));
+    assert.equal(status.body.transaction.status, 'REVERSED');
+    assert.equal(status.body.transaction.receipt_status, 'REVERSED');
+  });
+
   it('is not issued again when the State withdrew it', async () => {
     const first = await collectedAndReversed('GOVERNMENT');
     const refused = await reissue(first.invoiceId);

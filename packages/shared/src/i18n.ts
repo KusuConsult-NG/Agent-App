@@ -2782,6 +2782,9 @@ export interface TranslationDictionary {
   colReplacedTitle: string;
   colReplacedBody: string;
   colOpenReplacement: string;
+  colReversedTitle: string;
+  colReversedOwedBody: string;
+  colReversedWithdrawnBody: string;
   colUnderObjection: string;
   colUnderObjectionBody: string;
   colChargeRaisedTitle: string;
@@ -6577,6 +6580,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     colReplacedTitle: "This bill was issued again",
     colReplacedBody: "No money was taken against this one. Take the payment against the new bill.",
     colOpenReplacement: "Open the new bill",
+    colReversedTitle: "This payment was reversed",
+    colReversedOwedBody: "The money went back to the payer, so the receipt no longer stands and the bill is owed again. Issue it again to collect it.",
+    colReversedWithdrawnBody: "The money went back to the payer and the bill was withdrawn. Nothing is owed on it.",
     colUnderObjection: "Under objection",
     colUnderObjectionBody: "the trader has formally disputed this estimate. PSIRS is not pursuing it while the objection is decided, so do not ask for this payment.",
     colChargeRaisedTitle: "The charge was raised. The payment was not.",
@@ -10175,6 +10181,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     colReplacedTitle: "An sake fitar da wannan takardar biya",
     colReplacedBody: "Ba a karbi kudi a kan wannan ba. A karbi biyan a kan sabuwar takardar.",
     colOpenReplacement: "Bude sabuwar takardar",
+    colReversedTitle: "An mayar da wannan biyan",
+    colReversedOwedBody: "Kudin ya koma ga mai biya, don haka rasit din bai tsaya ba kuma ana bin takardar biyan kuma. A sake fitar da ita don a karba.",
+    colReversedWithdrawnBody: "Kudin ya koma ga mai biya kuma an janye takardar biyan. Babu bashin komai a kanta.",
     colUnderObjection: "Ana kalubalanta",
     colUnderObjectionBody: "mai sana’ar ya kalubalanci wannan kiyasi a hukumance. PSIRS ba ta neman wannan kudi har sai an yanke hukunci kan kalubalen, don haka kada a nemi wannan biyan.",
     colChargeRaisedTitle: "An yi kimantawa, amma ba a fara biyan kudi ba.",

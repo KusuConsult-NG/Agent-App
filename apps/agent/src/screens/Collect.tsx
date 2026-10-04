@@ -787,6 +787,8 @@ interface TransactionStatus {
     failure_reason: string | null;
     receipt_id: string | null;
     receipt_number: string | null;
+    /** VALID, or REVERSED / REFUNDED / VOID once the money has gone back. */
+    receipt_status?: string | null;
     receipt_code: string | null;
     document_id: string | null;
     acknowledgement_id: string | null;
@@ -1009,7 +1011,20 @@ export function TransactionScreen({
   if (!data) return null;
 
   const transaction = data.transaction;
-  const paid = transaction.receipt_number !== null;
+  /*
+   * Paid means a receipt that still stands.
+   *
+   * A reversal keeps the receipt row and marks it REVERSED, and this read
+   * the number alone: a payment whose money went back to the payer showed
+   * "Payment successful" with its receipt offered for download and sharing,
+   * over a bill that was owed again. Measured on a settled payment reversed
+   * for a reason that was the payer's.
+   */
+  const reversed = transaction.status === 'REVERSED' || transaction.status === 'REFUNDED';
+  const paid =
+    transaction.receipt_number !== null &&
+    !reversed &&
+    (transaction.receipt_status ?? 'VALID') === 'VALID';
   /*
    * The middle state, and the one an agent standing at a stall most needs.
    *
@@ -1018,7 +1033,7 @@ export function TransactionScreen({
    * tell the agent the payment had not gone through and invite them to collect
    * a second time from someone who has already paid.
    */
-  const acknowledged = !paid && transaction.acknowledgement_number !== null;
+  const acknowledged = !paid && !reversed && transaction.acknowledgement_number !== null;
   const failed = ['FAILED', 'CANCELLED', 'EXPIRED'].includes(transaction.status);
   /*
    * A declined attempt, on a bill that can still be paid, can be tried again.
@@ -1104,6 +1119,20 @@ export function TransactionScreen({
               {t.acknowledgementLabel} {transaction.acknowledgement_number}
             </strong>
           </p>
+        </Alert>
+      ) : reversed ? (
+        <Alert kind="error" title={t.colReversedTitle}>
+          {transaction.invoice_status === 'CANCELLED' && !replaced ? (
+            <p style={{ margin: 0 }}>{t.colReversedWithdrawnBody}</p>
+          ) : (
+            <>
+              <p style={{ margin: '0 0 0.5rem' }}>{t.colReversedOwedBody}</p>
+              <button type="button" disabled={issuing} onClick={issueAgain}>
+                {issuing ? <Spinner /> : null}
+                {replaced ? t.colOpenReplacement : issuing ? t.colIssuingAgain : t.colIssueAgain}
+              </button>
+            </>
+          )}
         </Alert>
       ) : replaced ? (
         <Alert kind="info" title={t.colReplacedTitle}>
@@ -1293,7 +1322,7 @@ export function TransactionScreen({
         </div>
       )}
 
-      {!paid && !replaced && !lapsedBill && (!failed || canTryAgain) && (
+      {!paid && !reversed && !replaced && !lapsedBill && (!failed || canTryAgain) && (
         <>
           {/*
             The artefact a taxpayer pays against later.
