@@ -265,30 +265,57 @@ export const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
 /**
  * Map overlap-constraint names to language the caller can act on.
  *
- * The same idea as the unique map above, for `EXCLUDE USING gist`. Four tables
- * carry one, and each is a rule about a period of time not being covered
- * twice: two financial months, two classes for one LGA, two constructions of
- * the nano exemption, two presumptive assessments of one taxpayer for one year.
+ * The same idea as the unique map above, for exclusion constraints. Five carry
+ * one, and each is a rule about something not being covered twice: two
+ * financial months, two classes for one LGA, two readings of the nano
+ * exemption, two figures for one cell of the presumptive schedule, and two
+ * live bills for one assessment.
  *
- * These are reference data with dated windows, so the ordinary mistake is not
- * exotic. Reclassifying an LGA or adopting a replacement policy without first
- * giving the current one an end date is exactly what somebody does the first
- * time they use the screen, and the answer they need is "close the current one
- * first", not a reference number.
+ * Each carries its own next step, because the remedy differs and the shared
+ * one was wrong for all five. It said "close the existing record by giving it
+ * an end date", which no screen could do for the three presumptive tables,
+ * which a financial period already has, and which means nothing for a bill.
+ * And the sentence under `presumptive_no_overlap` described a taxpayer's
+ * assessment, where the constraint is on the schedule: an officer publishing a
+ * figure was told about somebody's bill.
+ *
+ * A new presumptive record now replaces the one in force on its start date
+ * (`endWhatThisReplaces`), so these three fire only when the new record would
+ * run into one already published from a later date.
  */
-export const OVERLAP_CONSTRAINT_MESSAGES: Record<string, string> = {
-  financial_periods_do_not_overlap:
-    'A financial period already covers part of those dates. Periods cannot overlap.',
-  lga_class_no_overlap:
-    'This LGA already has a class covering part of that period. Give the current ' +
-    'classification an end date first, then publish the new one.',
-  nano_policy_no_overlap:
-    'A nano exemption policy already covers part of that period. Give the current ' +
-    'policy an end date first, then adopt the new one.',
-  presumptive_no_overlap:
-    'This taxpayer already has a presumptive assessment covering part of that period.',
-  invoices_one_live_per_assessment:
-    'This bill has already been issued again. Open the bill that replaced it rather than issuing another.',
+export const OVERLAP_CONSTRAINT_MESSAGES: Record<string, { message: string; nextStep: string }> = {
+  financial_periods_do_not_overlap: {
+    message: 'A financial period already covers part of those dates. Periods cannot overlap.',
+    nextStep: 'Choose dates that begin after the existing period ends, or end before it begins.',
+  },
+  lga_class_no_overlap: {
+    message:
+      'This LGA already has a class published from a later date, and the new class would ' +
+      'run into it.',
+    nextStep:
+      'Give the new class an end date on or before the later one begins, or publish it ' +
+      'from that date.',
+  },
+  nano_policy_no_overlap: {
+    message:
+      'A reading of the nano exemption has already been adopted from a later date, and the ' +
+      'new one would run into it.',
+    nextStep: 'Adopt the new reading from the date the later one takes effect, or after it.',
+  },
+  presumptive_no_overlap: {
+    message:
+      'This cell of the presumptive schedule already has a figure published from a later ' +
+      'date, and the new figure would run into it.',
+    nextStep:
+      'Give the new figure an end date on or before the later one begins, or publish it ' +
+      'from that date.',
+  },
+  invoices_one_live_per_assessment: {
+    message:
+      'This bill has already been issued again. Open the bill that replaced it rather than ' +
+      'issuing another.',
+    nextStep: "Open the replacement bill from the taxpayer's record.",
+  },
 };
 
 /**
@@ -663,9 +690,7 @@ export function errorHandler(
      * is the only thing refusing, and the refusal had nowhere to go.
      */
     if (error.code === '23P01') {
-      const message =
-        (error.constraint && OVERLAP_CONSTRAINT_MESSAGES[error.constraint]) ??
-        'That period overlaps one that already exists. Nothing has been changed.';
+      const words = (error.constraint && OVERLAP_CONSTRAINT_MESSAGES[error.constraint]) || null;
       log.warn('an overlap rule blocked the request', {
         requestId: req.requestId,
         component: 'http',
@@ -677,10 +702,10 @@ export function errorHandler(
         new AppError({
           statusCode: 409,
           code: 'OVERLAPPING_PERIOD',
-          message,
+          message:
+            words?.message ?? 'That period overlaps one that already exists. Nothing has been changed.',
           moneyStatus: refusalMoney(req),
-          nextStep:
-            'Close the existing record by giving it an end date, then try again.',
+          nextStep: words?.nextStep ?? 'Choose dates that do not overlap the existing record.',
         }).toJSON(),
       );
       return;

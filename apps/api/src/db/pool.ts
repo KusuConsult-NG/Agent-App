@@ -278,6 +278,27 @@ export const LOCK_NAMESPACE = {
    * owner and the document type, the columns the unique index is keyed on.
    */
   KYC_DOCUMENT: 15,
+  /**
+   * One trader's presumptive assessment, while a year's bill is being raised.
+   *
+   * `assessFromObservation` refuses a second bill for a year the trader has
+   * already been billed for, and the bill it looks for may be one another
+   * officer is raising at that moment from a different observation. Keyed on
+   * the taxpayer, because the duplicate is two observations of one person.
+   */
+  PRESUMPTIVE_TAXPAYER: 16,
+  /**
+   * One series of presumptive records — a schedule cell, an LGA's classes, or
+   * the nano exemption — while a new record replaces the one in force.
+   *
+   * Publishing ends the record in force on the new record's start date and
+   * then inserts. Two publications at once both found the same record in
+   * force; the second waited on its row, found it no longer matched once the
+   * first had ended it, and inserted into the first's period — refused as an
+   * overlap with a remedy that did not apply, where a second apart it would
+   * have been told exactly why its date could not be used.
+   */
+  PRESUMPTIVE_SERIES: 17,
 } as const;
 
 /**

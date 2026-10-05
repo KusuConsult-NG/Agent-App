@@ -24,12 +24,15 @@
  * `POST /presumptive/nano-policy`. Nothing had ever called them, so nothing had
  * ever seen what the refusal looked like.
  *
- * THE MISTAKE IS THE ORDINARY ONE
+ * WHAT IS LEFT FOR THESE SENTENCES
  *
- * Not an exotic race. Reclassifying an LGA, or adopting a replacement reading
- * of the nano exemption, without first giving the current record an end date is
- * what somebody does the first time they use the screen. The answer they need
- * is "close the current one first" — which is now what they get.
+ * This file first told the officer to "close the current one first", and no
+ * screen could: nothing on the platform gave a published record an end date.
+ * Publishing a replacement now ends the record in force itself
+ * (`a-figure-that-could-not-be-revised`), so an overlap here means the new
+ * record would run into one already published from a later date — and the
+ * answer the officer needs is about that record, with a next step that can be
+ * taken.
  */
 
 import './env';
@@ -87,24 +90,25 @@ const lgaClass = (effectiveFrom: string, effectiveTo?: string) => ({
 // ===========================================================================
 describe('a second record covering time that is already covered', () => {
   it('tells an officer the nano policy overlaps, rather than failing', async () => {
-    const first = await post('/government/presumptive/nano-policy', nanoPolicy('2030-01-01'), auth());
-    assert.equal(first.status, 201, JSON.stringify(first.body));
+    const later = await post('/government/presumptive/nano-policy', nanoPolicy('2031-01-01'), auth());
+    assert.equal(later.status, 201, JSON.stringify(later.body));
 
-    const second = await post('/government/presumptive/nano-policy', nanoPolicy('2030-06-01'), auth());
-    assert.equal(second.status, 409, JSON.stringify(second.body));
-    assert.equal(second.body.error.code, 'OVERLAPPING_PERIOD');
-    assert.match(second.body.error.message, /nano exemption policy already covers/i);
-    assert.match(second.body.error.nextStep, /end date/i);
+    const earlier = await post('/government/presumptive/nano-policy', nanoPolicy('2030-01-01'), auth());
+    assert.equal(earlier.status, 409, JSON.stringify(earlier.body));
+    assert.equal(earlier.body.error.code, 'OVERLAPPING_PERIOD');
+    assert.match(earlier.body.error.message, /already been adopted from a later date/i);
+    assert.match(earlier.body.error.nextStep, /from the date the later one takes effect/i);
   });
 
   it('tells an officer the LGA is already classified for those dates', async () => {
-    const first = await post('/government/presumptive/lga-classes', lgaClass('2030-01-01'), auth());
-    assert.equal(first.status, 201, JSON.stringify(first.body));
+    const later = await post('/government/presumptive/lga-classes', lgaClass('2034-01-01'), auth());
+    assert.equal(later.status, 201, JSON.stringify(later.body));
 
-    const second = await post('/government/presumptive/lga-classes', lgaClass('2030-06-01'), auth());
-    assert.equal(second.status, 409, JSON.stringify(second.body));
-    assert.equal(second.body.error.code, 'OVERLAPPING_PERIOD');
-    assert.match(second.body.error.message, /already has a class covering/i);
+    const earlier = await post('/government/presumptive/lga-classes', lgaClass('2030-01-01'), auth());
+    assert.equal(earlier.status, 409, JSON.stringify(earlier.body));
+    assert.equal(earlier.body.error.code, 'OVERLAPPING_PERIOD');
+    assert.match(earlier.body.error.message, /already has a class published from a later date/i);
+    assert.match(earlier.body.error.nextStep, /end date on or before the later one begins/i);
   });
 
   /*
@@ -114,8 +118,9 @@ describe('a second record covering time that is already covered', () => {
    * interchangeably either — the remedy is on a different screen for each.
    */
   it('does not put the constraint name in front of the officer', async () => {
-    await post('/government/presumptive/nano-policy', nanoPolicy('2030-01-01'), auth());
-    const second = await post('/government/presumptive/nano-policy', nanoPolicy('2030-06-01'), auth());
+    await post('/government/presumptive/nano-policy', nanoPolicy('2031-01-01'), auth());
+    const second = await post('/government/presumptive/nano-policy', nanoPolicy('2030-01-01'), auth());
+    assert.equal(second.status, 409, 'there has to be a refusal for this to say anything');
 
     const body = JSON.stringify(second.body);
     assert.ok(!body.includes('nano_policy_no_overlap'), `constraint name leaked: ${body}`);

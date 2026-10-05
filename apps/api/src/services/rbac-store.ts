@@ -57,7 +57,7 @@
 import { PERMISSIONS, permissionsForRole as compiledPermissionsFor, type Permission } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
-import { badRequest, conflict, notFound } from '../lib/errors';
+import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { log } from '../lib/logger';
 import { recordAudit } from './audit';
 
@@ -281,6 +281,22 @@ export async function setExportLimit(
     }
 
     /*
+     * Nor does anybody raise their own role's limit, for the reason `grant`
+     * refuses a grant to the caller's own role. The limit is how much of the
+     * taxpayer register one export can carry out of the building; measured
+     * through the route, an administrator raised the admin role's from 50,000
+     * to 1,000,000 and the next export would have carried that. Lowering it
+     * is not widening anything, and stays open.
+     */
+    if (roleName === actor.role && limit > previous!.export_row_limit) {
+      throw forbidden(
+        'You cannot raise the export limit of your own role. A role that can widen itself ' +
+          'can become anything, so this has to be done by somebody in a different role.',
+        'Ask an officer whose role also manages users, but is not yours, to raise it.',
+      );
+    }
+
+    /*
      * The bounds are the database's, checked here so the administrator gets a
      * sentence rather than a constraint violation. The ceiling is not a policy
      * -- it is what the XLSX writer can actually produce, and a limit above it
@@ -319,6 +335,9 @@ export async function setExportLimit(
  * a permission nobody currently holds is still a permission — and listing only
  * what is granted would make the ungranted ones ungrantable.
  */
+/** The permission that grants every other one, including itself. */
+const USER_MANAGE = 'user:manage';
+
 export function grantablePermissions(): readonly string[] {
   return PERMISSIONS;
 }
@@ -337,6 +356,31 @@ export async function grant(
   input: { role: string; permission: string; reason: string },
 ): Promise<void> {
   assertRealPermission(input.permission);
+
+  /*
+   * Nobody widens their own role.
+   *
+   * `changeUserRole` refuses an officer changing their own role, because "an
+   * account with user:manage that could promote itself needs no other
+   * weakness to become anything it likes". This was the same attack by a
+   * different door: the role editor took any role, including the caller's.
+   * Measured through the route: an administrator granted the admin role
+   * payment:reverse:approve, approval:authorise, commission:payout:approve and
+   * period:close — four 204s — and then held every power the separation of
+   * duties keeps away from the role that manages users.
+   *
+   * A grant to a role is a grant to everybody holding it, so it is refused for
+   * the whole role rather than only for the caller. If no other role holds
+   * user:manage, the administrator role is widened outside the platform, by a
+   * change somebody else reviews.
+   */
+  if (input.role === actor.role) {
+    throw forbidden(
+      'You cannot add to what your own role may do. A role that can widen itself can ' +
+        'become anything, so this grant has to be made by somebody in a different role.',
+      'Ask an officer whose role also manages users, but is not yours, to make this grant.',
+    );
+  }
 
   await withTransaction(async (client) => {
     const role = await loadRole(client, input.role);
@@ -387,6 +431,14 @@ export async function revoke(
 ): Promise<{ sessionsEnded: number }> {
   const ended = await withTransaction(async (client) => {
     const role = await loadRole(client, input.role);
+    if (input.permission === USER_MANAGE) {
+      // Two revocations from two roles at once would each see the other's
+      // grant still standing. Taking every user:manage row first queues them.
+      await client.query(
+        'SELECT 1 FROM role_permissions WHERE permission = $1 FOR UPDATE',
+        [USER_MANAGE],
+      );
+    }
     const removed = await queryOne<{ permission: string }>(
       client,
       'DELETE FROM role_permissions WHERE role = $1 AND permission = $2 RETURNING permission',
@@ -394,6 +446,39 @@ export async function revoke(
     );
     if (!removed) {
       throw notFound(`${role.label}'s ${input.permission} grant`);
+    }
+
+    /*
+     * Somebody has to be left who can manage users.
+     *
+     * user:manage is the permission that grants every other one, including
+     * itself. Revoking it from the last role that held it succeeded, and from
+     * then on nobody could open the roles screen, change a role or create an
+     * officer — measured through the route: 200, no holder left, and the roles
+     * screen 403 for the administrator who did it. The only way back was a
+     * change made directly in the database. A role counts only while it is
+     * active and somebody active holds it, because a grant to an empty role
+     * manages nothing.
+     */
+    if (input.permission === USER_MANAGE) {
+      const remaining = await queryOne<{ role: string }>(
+        client,
+        `SELECT rp.role
+           FROM role_permissions rp
+           JOIN roles r ON r.name = rp.role AND r.status = 'ACTIVE'
+          WHERE rp.permission = $1
+            AND EXISTS (SELECT 1 FROM users u WHERE u.role = rp.role AND u.status = 'ACTIVE')
+          LIMIT 1`,
+        [USER_MANAGE],
+      );
+      if (!remaining) {
+        throw conflict(
+          'LAST_USER_MANAGER',
+          `Removing ${USER_MANAGE} from ${role.label} would leave nobody who can manage ` +
+            'users, roles or permissions, and nothing on the platform could give it back.',
+          `Grant ${USER_MANAGE} to another role, and move an officer into it, first.`,
+        );
+      }
     }
 
     /*

@@ -21,13 +21,21 @@ import { Alert, ErrorAlert, Loading, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
 
+/**
+ * A count is null when the API withheld it — between one and
+ * USAGE_MIN_GROUP_SIZE − 1, small enough to single somebody out. The table
+ * shows a null cell as a dash already; the two places that do arithmetic with
+ * one have to as well, rather than reading it as nought.
+ */
+type Withheld = string | null;
+
 interface Funnel {
   event: string;
-  started: string;
-  completed: string;
-  abandoned: string;
-  failed: string;
-  median_completion_ms: string;
+  started: Withheld;
+  completed: Withheld;
+  abandoned: Withheld;
+  failed: Withheld;
+  median_completion_ms: Withheld;
 }
 
 interface Overview {
@@ -35,7 +43,7 @@ interface Overview {
   abandonment: { event: string; step: string; abandoned_here: string }[];
   offline: { event: string; events: string; median_delay_seconds: string }[];
   language: { language: string; events: string }[];
-  reach: { lga: string; zone: string; started: string; completed: string; events: string }[];
+  reach: { lga: string; zone: string; started: Withheld; completed: Withheld; events: string }[];
   screens: { surface: string; screen: string; views: string }[];
 }
 
@@ -53,13 +61,17 @@ function flowLabel(event: string, t: TranslationDictionary): string {
   return key ? t[key] : event;
 }
 
-const percent = (part: string, whole: string) => {
+const percent = (part: Withheld, whole: Withheld) => {
+  if (part === null || whole === null) return '—';
   const total = Number(whole);
   if (!total) return '—';
   return `${Math.round((Number(part) / total) * 100)}%`;
 };
 
-const seconds = (ms: string) => {
+/** "<5" where a count was withheld, so a hint never reads "null started". */
+const shown = (count: Withheld) => count ?? `<${USAGE_MIN_GROUP_SIZE}`;
+
+const seconds = (ms: Withheld) => {
   const value = Number(ms);
   if (!value) return '—';
   return value >= 60_000 ? `${(value / 60_000).toFixed(1)} min` : `${Math.round(value / 1000)}s`;
@@ -130,7 +142,7 @@ export function UsageScreen() {
           variant="accent"
           hint={
             registration
-              ? { text: t.ofcUsStartedCount.replace('{{n}}', String(registration.started)) }
+              ? { text: t.ofcUsStartedCount.replace('{{n}}', shown(registration.started)) }
               : 'ofcUsNoAttempts'
           }
         />
@@ -139,7 +151,7 @@ export function UsageScreen() {
           value={collection ? percent(collection.completed, collection.started) : '—'}
           hint={
             collection
-              ? { text: t.ofcUsStartedCount.replace('{{n}}', String(collection.started)) }
+              ? { text: t.ofcUsStartedCount.replace('{{n}}', shown(collection.started)) }
               : 'ofcUsNoAttempts'
           }
         />
@@ -220,7 +232,7 @@ export function UsageScreen() {
             {
               key: 'rate',
               label: 'ofcUsCompletion',
-              render: (row: { completed: string; started: string }) =>
+              render: (row: { completed: Withheld; started: Withheld }) =>
                 percent(row.completed, row.started),
             },
           ]}
