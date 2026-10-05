@@ -252,7 +252,7 @@ const PRECEDENCE: Record<string, number> = { '+': 1, '-': 1, '*': 2, '/': 2 };
 
 /**
  * One value a formula reads, checked the way every other rate type checks its
- * own.
+ * own, and read exactly.
  *
  * The other rate types read their base through `requireNumericInput`, which
  * names the field and refuses a negative. A formula read its inputs with the
@@ -260,25 +260,31 @@ const PRECEDENCE: Record<string, number> = { '+': 1, '-': 1, '*': 2, '/': 2 };
  * "Amount must be a whole number of kobo" — naming no field and calling an
  * area money; and "-3" was accepted, so `area * 5` came to -15, and a
  * negative input under a minimum, or beside a flat charge, quietly lowered
- * the bill instead of being refused. A formula's inputs are counts and
- * measurements — square metres, rooms, months — so the refusal says so.
+ * the bill instead of being refused.
+ *
+ * A formula's inputs are counts and measurements — square metres, rooms,
+ * months — and a measurement is often not whole: a shop is 15.5 m². Now that
+ * the arithmetic is exact and rounds once, at the end, a decimal is read as
+ * the exact fraction it writes (15.5 is 31/2) rather than refused or rounded
+ * on the way in. What is refused is what is not a number, and a negative.
  */
-function readFormulaInput(inputs: ComputationInputs, name: string): bigint {
+function readFormulaInput(inputs: ComputationInputs, name: string): Fraction {
   const raw = readInput(inputs, name);
   if (raw === undefined || raw === null || raw === '') {
     throw badRequest(`This revenue item needs a value for "${name}".`, [
       { field: name, issue: 'Required input is missing' },
     ]);
   }
-  let value: bigint;
-  try {
-    value = parseKobo(typeof raw === 'boolean' ? Number(raw) : raw);
-  } catch {
-    throw badRequest(`"${name}" must be a whole number.`, [
-      { field: name, issue: 'Not a whole number' },
-    ]);
+  if (typeof raw === 'boolean') return { n: raw ? 1n : 0n, d: 1n };
+
+  const text = typeof raw === 'number' ? (Number.isFinite(raw) ? String(raw) : '') : String(raw).trim();
+  const written = /^(-?)(\d+)(?:\.(\d+))?$/.exec(text);
+  if (!written) {
+    throw badRequest(`"${name}" must be a number.`, [{ field: name, issue: 'Not a number' }]);
   }
-  if (value < 0n) {
+  const decimals = written[3] ?? '';
+  const value = fraction(BigInt(written[2]! + decimals), 10n ** BigInt(decimals.length));
+  if (written[1] === '-' && value.n !== 0n) {
     throw badRequest(`"${name}" cannot be negative.`, [
       { field: name, issue: 'Must be zero or more' },
     ]);
@@ -350,7 +356,7 @@ function evaluateFormula(formula: string, inputs: ComputationInputs): Kobo {
     if (token.type === 'number') {
       values.push({ n: token.value, d: 1n });
     } else if (token.type === 'ident') {
-      values.push({ n: readFormulaInput(inputs, token.value), d: 1n });
+      values.push(readFormulaInput(inputs, token.value));
     } else if (token.value === '(') {
       operators.push(token.value);
     } else if (token.value === ')') {
