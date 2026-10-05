@@ -125,6 +125,7 @@ interface CaseRow {
   subject: string;
   priority: string;
   due_at: Date | null;
+  subject_user_id: string | null;
 }
 
 /**
@@ -134,6 +135,7 @@ interface CaseRow {
  * `requirePermission` on the route: the row decides, not the role.
  */
 function mayWork(viewer: Viewer, row: CaseRow): boolean {
+  if (isAbout(viewer, row)) return false;
   return (
     holds(viewer, 'case:manage') ||
     row.opened_by === viewer.userId ||
@@ -142,6 +144,7 @@ function mayWork(viewer: Viewer, row: CaseRow): boolean {
 }
 
 function assertMayWork(viewer: Viewer, row: CaseRow): void {
+  assertNotAbout(viewer, row);
   if (mayWork(viewer, row)) return;
   throw forbidden(
     `Case ${row.case_number} is not assigned to you and you did not open it.`,
@@ -156,6 +159,37 @@ function assertMayWork(viewer: Viewer, row: CaseRow): void {
  * re-concluded is a conclusion with no date on it; the way to revisit a closed
  * finding is a new case that links to it, which leaves both records standing.
  */
+/**
+ * Whether this case is about the officer looking at it.
+ *
+ * A case can name the officer it concerns (`subject_user_id`), and nothing
+ * read that column after it was written. So the officer a case was about
+ * could be assigned it, read it — every officer role holds case:read:all —
+ * and close it. Measured through the routes: a case about a revenue officer
+ * was opened and assigned to them (201); they listed it, read it (200) and
+ * resolved it — "Looked into it myself; nothing wrong" (204); and an
+ * administrator a second case was about resolved that one through
+ * case:manage (204).
+ *
+ * The officer a case is about is now kept out of it entirely: not assigned
+ * it, not escalated to, not mentioned in it, not shown it in any list, and
+ * refused it by number. Holding case:manage does not change that.
+ */
+function isAbout(viewer: Viewer, row: { subject_user_id: string | null }): boolean {
+  return row.subject_user_id !== null && row.subject_user_id === viewer.userId;
+}
+
+function assertNotAbout(
+  viewer: Viewer,
+  row: { subject_user_id: string | null; case_number: string },
+): void {
+  if (!isAbout(viewer, row)) return;
+  throw forbidden(
+    `Case ${row.case_number} is about you, so you cannot open it or work on it.`,
+    'Other officers handle it.',
+  );
+}
+
 function assertOpen(row: CaseRow): void {
   if (!TERMINAL.includes(row.status)) return;
   throw conflict(
@@ -209,7 +243,7 @@ async function load(db: Db, id: string): Promise<CaseRow> {
   const row = await queryOne<CaseRow>(
     db,
     `SELECT id, case_number, status, assignee_id, opened_by, department, department_id,
-            subject, priority, due_at
+            subject, priority, due_at, subject_user_id
        FROM cases WHERE id = $1`,
     [id],
   );
@@ -339,6 +373,9 @@ export async function openCase(
   input: OpenCaseInput,
 ): Promise<{ id: string; caseNumber: string }> {
   if (input.assigneeId) await assertAssignable(db, input.assigneeId);
+  if (input.assigneeId && input.assigneeId === input.subjectUserId) {
+    throw badRequest('A case cannot be assigned to the officer it is about.');
+  }
 
   return withTransaction(async (client) => {
     const caseNumber = await nextCaseNumber(client);
@@ -434,7 +471,12 @@ export async function comment(
 ): Promise<void> {
   const row = await load(db, caseId);
   assertOpen(row);
-  const mentions = await resolveMentions(db, input.mentions);
+  assertNotAbout(viewer, row);
+  // The officer the case is about is dropped like anybody else who may not
+  // read it: a mention reaches them through their inbox.
+  const mentions = (await resolveMentions(db, input.mentions)).filter(
+    (id) => id !== row.subject_user_id,
+  );
 
   await withTransaction(async (client) => {
     await append(client, caseId, viewer, {
@@ -480,6 +522,7 @@ export async function attachEvidence(
 ): Promise<void> {
   const row = await load(db, caseId);
   assertOpen(row);
+  assertNotAbout(viewer, row);
 
   const document = await queryOne<{ id: string }>(
     db,
@@ -707,6 +750,9 @@ export async function assign(
   assertOpen(row);
   assertMayWork(viewer, row);
   if (input.assigneeId) await assertAssignable(db, input.assigneeId);
+  if (input.assigneeId && input.assigneeId === row.subject_user_id) {
+    throw badRequest('A case cannot be assigned to the officer it is about.');
+  }
 
 
   /*
@@ -848,6 +894,13 @@ export async function escalate(
       'NOBODY_ABOVE',
       'There is nobody above this case to escalate it to.',
       'Set a supervisor or a department head for the officer holding it, then try again.',
+    );
+  }
+  if (target.id === row.subject_user_id) {
+    throw conflict(
+      'NOBODY_ABOVE',
+      `The next officer up is ${target.full_name}, and this case is about them.`,
+      'Assign it to another officer directly instead.',
     );
   }
 
@@ -1077,6 +1130,8 @@ export interface CaseFilter {
   taxpayerId?: string;
   overdue?: boolean;
   limit?: number;
+  /** The viewer, whose own cases — those about them — are left out. */
+  excludeAboutUserId?: string;
 }
 
 /**
@@ -1171,6 +1226,7 @@ export async function listCases(
         AND ($11::boolean IS NOT TRUE
              OR (c.due_at IS NOT NULL AND c.due_at < now()
                  AND c.status NOT IN ('RESOLVED','CLOSED')))
+        AND ($13::uuid IS NULL OR c.subject_user_id IS DISTINCT FROM $13)
        ) page
       ORDER BY
         CASE page.priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'NORMAL' THEN 2 ELSE 3 END,
@@ -1190,6 +1246,7 @@ export async function listCases(
       filter.taxpayerId ?? null,
       filter.overdue ?? null,
       cap,
+      filter.excludeAboutUserId ?? null,
     ],
   );
 
@@ -1235,6 +1292,7 @@ export async function getCase(db: Db, viewer: Viewer, caseId: string) {
     [caseId],
   );
   if (!detail) throw notFound('That case');
+  assertNotAbout(viewer, detail as { subject_user_id: string | null; case_number: string });
 
   const events = await query(
     db,
@@ -1331,7 +1389,12 @@ export async function myWork(db: Db, viewer: Viewer) {
     await Promise.all([
       // `.cases` — `listCases` carries its own counts now, and this panel has
       // its own unbounded ones below. Only the rows are wanted here.
-      listCases(db, { assigneeId: viewer.userId, open: true, limit: 50 }).then((r) => r.cases),
+      listCases(db, {
+        assigneeId: viewer.userId,
+        open: true,
+        limit: 50,
+        excludeAboutUserId: viewer.userId,
+      }).then((r) => r.cases),
       query(
         db,
         `SELECT c.id, c.case_number, c.subject, c.status, c.priority, c.due_at,
@@ -1341,6 +1404,7 @@ export async function myWork(db: Db, viewer: Viewer) {
            LEFT JOIN users assignee ON assignee.id = c.assignee_id
           WHERE c.opened_by = $1 AND c.status NOT IN ('RESOLVED','CLOSED')
             AND (c.assignee_id IS DISTINCT FROM $1)
+            AND c.subject_user_id IS DISTINCT FROM $1
           ORDER BY c.updated_at DESC LIMIT 25`,
         [viewer.userId],
       ),
@@ -1360,6 +1424,7 @@ export async function myWork(db: Db, viewer: Viewer) {
            JOIN cases c ON c.id = e.case_id
            JOIN users u ON u.id = e.actor_id
           WHERE $1 = ANY(e.mentions) AND e.actor_id <> $1
+            AND c.subject_user_id IS DISTINCT FROM $1
           ORDER BY e.case_id, e.sequence_no DESC
           LIMIT 25`,
         [viewer.userId],
@@ -1388,6 +1453,7 @@ export async function myWork(db: Db, viewer: Viewer) {
            LEFT JOIN departments d ON d.id = c.department_id
           WHERE c.assignee_id IS NULL
             AND c.status NOT IN ('RESOLVED','CLOSED')
+            AND c.subject_user_id IS DISTINCT FROM $1
             AND (
                   c.department = $2
                OR (c.department_id IS NOT NULL
@@ -1400,21 +1466,27 @@ export async function myWork(db: Db, viewer: Viewer) {
         db,
         `SELECT
            (SELECT count(*)::text FROM cases
-             WHERE assignee_id = $1 AND status NOT IN ('RESOLVED','CLOSED')) AS assigned_open,
+             WHERE assignee_id = $1 AND status NOT IN ('RESOLVED','CLOSED')
+               AND subject_user_id IS DISTINCT FROM $1) AS assigned_open,
            (SELECT count(*)::text FROM cases
              WHERE assignee_id = $1 AND status NOT IN ('RESOLVED','CLOSED')
+               AND subject_user_id IS DISTINCT FROM $1
                AND due_at IS NOT NULL AND due_at < now()) AS assigned_overdue,
            (SELECT count(*)::text FROM cases
-             WHERE opened_by = $1 AND status NOT IN ('RESOLVED','CLOSED')) AS opened_open,
+             WHERE opened_by = $1 AND status NOT IN ('RESOLVED','CLOSED')
+               AND subject_user_id IS DISTINCT FROM $1) AS opened_open,
            (SELECT count(*)::text FROM cases c
              WHERE c.assignee_id IS NULL
                AND c.status NOT IN ('RESOLVED','CLOSED')
+               AND c.subject_user_id IS DISTINCT FROM $1
                AND (c.department = $2
                     OR (c.department_id IS NOT NULL
                         AND c.department_id = (SELECT department_id FROM users WHERE id = $1))))
              AS department_unassigned,
            (SELECT count(DISTINCT e.case_id)::text FROM case_events e
-             WHERE $1 = ANY(e.mentions) AND e.actor_id <> $1) AS mentions`,
+              JOIN cases c ON c.id = e.case_id
+             WHERE $1 = ANY(e.mentions) AND e.actor_id <> $1
+               AND c.subject_user_id IS DISTINCT FROM $1) AS mentions`,
         [viewer.userId, viewer.role],
       ),
       canApprove
