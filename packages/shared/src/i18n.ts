@@ -2798,6 +2798,8 @@ export interface TranslationDictionary {
   colPeriodClosedReissue: string;
   colPeriodClosedTitle: string;
   colPeriodClosedBody: string;
+  colUnderReviewTitle: string;
+  colUnderReviewBody: string;
   colIssueAgain: string;
   colIssuingAgain: string;
   colLapsedTitle: string;
@@ -3595,6 +3597,7 @@ export interface TranslationDictionary {
   verifyInvoiceReplaced: string;
   verifyInvoiceWithdrawn: string;
   verifyInvoiceLapsed: string;
+  verifyInvoiceReissueNeeded: string;
   pubVerifyRevenueType: string;
   pubVerifyAmount: string;
   pubVerifyIssued: string;
@@ -6626,6 +6629,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     colPeriodClosedReissue: "Raised in a month that has been closed — it has to be issued again before it can be paid.",
     colPeriodClosedTitle: "This bill’s month has been closed",
     colPeriodClosedBody: "No money has been taken. The month it was raised in has been closed, so it cannot be paid as it stands — issue it again, for the same amount and the same deadline, to take the payment.",
+    colUnderReviewTitle: "Payment held for review",
+    colUnderReviewBody: "The payment system reported a different amount from this bill, so the payment is held for review and no receipt has been issued. Do not collect payment again. Check its status later: it is completed, or ended, when the payment system answers again.",
     colIssueAgain: "Issue this bill again",
     colIssuingAgain: "Issuing…",
     colLapsedTitle: "This bill has lapsed",
@@ -7325,6 +7330,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     verifyInvoiceReplaced: 'This invoice was replaced by a new one for the same amount and can no longer be paid. Pay against the new invoice, not this one.',
     verifyInvoiceWithdrawn: 'This invoice was withdrawn and nothing is owed on it. Do not pay against it.',
     verifyInvoiceLapsed: 'This is a genuine PSIRS invoice, but its payment deadline has passed and it cannot be paid as it stands. A revenue agent or PSIRS office can issue it again for the same amount.',
+    verifyInvoiceReissueNeeded: 'This is a genuine PSIRS invoice, still in date, but it cannot be paid as it stands. A revenue agent or PSIRS office can issue it again for the same amount.',
     pubVerifyRevenueType: 'Revenue type',
     pubVerifyAmount: 'Amount',
     pubVerifyIssued: 'Issued',
@@ -10257,6 +10263,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     colPeriodClosedReissue: "An fitar da ita a watan da aka rufe — sai an sake fitar da ita kafin a iya biyanta.",
     colPeriodClosedTitle: "An rufe watan wannan takardar biya",
     colPeriodClosedBody: "Ba a karbi kudi ba. An rufe watan da aka fitar da ita, don haka ba za a iya biyanta yadda take ba — a sake fitar da ita, a kan adadin kudi daya da wa’adi daya, don a karbi biyan.",
+    colUnderReviewTitle: "An rike biyan don dubawa",
+    colUnderReviewBody: "Na’urar biyan kudi ta ba da adadin da ya bambanta da na wannan takardar biya, don haka an rike biyan don dubawa kuma ba a fitar da rasit ba. Kada a sake karbar kudi. A duba matsayinsa daga baya: za a kammala shi, ko a kare shi, idan na’urar biyan kudi ta sake amsawa.",
     colIssueAgain: "Sake fitar da wannan takardar biya",
     colIssuingAgain: "Ana fitarwa…",
     colLapsedTitle: "Wannan takardar biya ta kare",
@@ -10956,6 +10964,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     verifyInvoiceReplaced: 'An maye gurbin wannan takardar biya da sabuwa a kan adadin kudi daya, kuma ba za a iya biyanta ba. A biya a kan sabuwar takardar, ba wannan ba.',
     verifyInvoiceWithdrawn: 'An janye wannan takardar biya kuma babu bashin komai a kanta. Kada a biya a kanta.',
     verifyInvoiceLapsed: 'Wannan takardar biya ta PSIRS ce ta gaskiya, amma lokacin biyanta ya wuce kuma ba za a iya biyanta yadda take ba. Wakilin karbar haraji ko ofishin PSIRS na iya sake fitar da ita a kan adadin kudi daya.',
+    verifyInvoiceReissueNeeded: 'Wannan takardar biya ta PSIRS ce ta gaskiya, kuma wa’adinta bai kare ba, amma ba za a iya biyanta yadda take ba. Wakilin karbar haraji ko ofishin PSIRS na iya sake fitar da ita a kan adadin kudi daya.',
     pubVerifyRevenueType: 'Nau’in haraji',
     pubVerifyAmount: 'Adadi',
     pubVerifyIssued: 'Ranar bayarwa',
@@ -11412,6 +11421,7 @@ export const VERIFICATION_TEXT: Record<VerificationReason, keyof TranslationDict
   INVOICE_REPLACED: 'verifyInvoiceReplaced',
   INVOICE_WITHDRAWN: 'verifyInvoiceWithdrawn',
   INVOICE_LAPSED: 'verifyInvoiceLapsed',
+  INVOICE_REISSUE_NEEDED: 'verifyInvoiceReissueNeeded',
 };
 
 /**

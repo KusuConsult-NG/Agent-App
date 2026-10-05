@@ -44,6 +44,7 @@ const SAFETY_KEYS: (keyof TranslationDictionary)[] = [
   'paymentEndedBody',
   'colLapsedBody',
   'colPeriodClosedBody',
+  'colUnderReviewBody',
   'colReplacedBody',
   'errInvoicePaymentInProgress',
   'colReversedOwedBody',
@@ -167,6 +168,7 @@ const SAFETY_KEYS: (keyof TranslationDictionary)[] = [
   'verifyInvoiceReplaced',
   'verifyInvoiceWithdrawn',
   'verifyInvoiceLapsed',
+  'verifyInvoiceReissueNeeded',
 ];
 
 describe('the safety tier is really in Hausa', () => {

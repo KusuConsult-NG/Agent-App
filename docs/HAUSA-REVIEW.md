@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > nineteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,533 strings; that one is two pages and links back
+> because it carries all 3,536 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,533 dictionary strings and 34 message
+It listed 78 strings. It now lists **3,536 dictionary strings and 34 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migrations that insert the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,533 strings is worse than no sheet, because it looks complete; this one cannot
+3,536 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,533 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,536 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,533 strings: where the
+- The glossary below is applied consistently across all 3,536 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -409,6 +409,7 @@ quietly leave it.
 | `paymentEndedBody` | No money has been taken from the taxpayer. This bill can no longer be paid. | Ba a karbi kudi daga mai biyan haraji ba. Ba za a iya biyan wannan takardar biya yanzu ba. | ☐ | |
 | `colLapsedBody` | No money has been taken. It can no longer be paid as it stands — issue it again, for the same amount, to take the payment. | Ba a karbi kudi ba. Ba za a iya biyanta yadda take ba — a sake fitar da ita, a kan adadin kudi daya, don a karbi biyan. | ☐ | |
 | `colPeriodClosedBody` | No money has been taken. The month it was raised in has been closed, so it cannot be paid as it stands — issue it again, for the same amount and the same deadline, to take the payment. | Ba a karbi kudi ba. An rufe watan da aka fitar da ita, don haka ba za a iya biyanta yadda take ba — a sake fitar da ita, a kan adadin kudi daya da wa’adi daya, don a karbi biyan. | ☐ | |
+| `colUnderReviewBody` | The payment system reported a different amount from this bill, so the payment is held for review and no receipt has been issued. Do not collect payment again. Check its status later: it is completed, or ended, when the payment system answers again. | Na’urar biyan kudi ta ba da adadin da ya bambanta da na wannan takardar biya, don haka an rike biyan don dubawa kuma ba a fitar da rasit ba. Kada a sake karbar kudi. A duba matsayinsa daga baya: za a kammala shi, ko a kare shi, idan na’urar biyan kudi ta sake amsawa. | ☐ | |
 | `colReplacedBody` | No money was taken against this one. Take the payment against the new bill. | Ba a karbi kudi a kan wannan ba. A karbi biyan a kan sabuwar takardar. | ☐ | |
 | `errInvoicePaymentInProgress` | A payment against this bill is still being processed. Check its status first, and do not collect again. | Ana kan sarrafa wani biya da aka yi kan wannan takardar biya. A duba matsayinsa tukuna, kuma kada a sake karbar kudi. | ☐ | |
 | `colReversedOwedBody` | The money went back to the payer, so the receipt no longer stands and the bill is owed again. Issue it again to collect it. | Kudin ya koma ga mai biya, don haka rasit din bai tsaya ba kuma ana bin takardar biyan kuma. A sake fitar da ita don a karba. | ☐ | |
@@ -493,10 +494,11 @@ quietly leave it.
 | `verifyInvoiceReplaced` | This invoice was replaced by a new one for the same amount and can no longer be paid. Pay against the new invoice, not this one. | An maye gurbin wannan takardar biya da sabuwa a kan adadin kudi daya, kuma ba za a iya biyanta ba. A biya a kan sabuwar takardar, ba wannan ba. | ☐ | |
 | `verifyInvoiceWithdrawn` | This invoice was withdrawn and nothing is owed on it. Do not pay against it. | An janye wannan takardar biya kuma babu bashin komai a kanta. Kada a biya a kanta. | ☐ | |
 | `verifyInvoiceLapsed` | This is a genuine PSIRS invoice, but its payment deadline has passed and it cannot be paid as it stands. A revenue agent or PSIRS office can issue it again for the same amount. | Wannan takardar biya ta PSIRS ce ta gaskiya, amma lokacin biyanta ya wuce kuma ba za a iya biyanta yadda take ba. Wakilin karbar haraji ko ofishin PSIRS na iya sake fitar da ita a kan adadin kudi daya. | ☐ | |
+| `verifyInvoiceReissueNeeded` | This is a genuine PSIRS invoice, still in date, but it cannot be paid as it stands. A revenue agent or PSIRS office can issue it again for the same amount. | Wannan takardar biya ta PSIRS ce ta gaskiya, kuma wa’adinta bai kare ba, amma ba za a iya biyanta yadda take ba. Wakilin karbar haraji ko ofishin PSIRS na iya sake fitar da ita a kan adadin kudi daya. | ☐ | |
 
 ### B · The rest of the dictionary, by screen
 
-3439 strings, grouped by where an agent meets them. Lower stakes
+3440 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2711,6 +2713,7 @@ instructions — but they are what an agent reads all day.
 | `colNeedsReissue` | Lapsed — it has to be issued again before it can be paid. | Ta kare — sai an sake fitar da ita kafin a iya biyanta. | ☐ | |
 | `colPeriodClosedReissue` | Raised in a month that has been closed — it has to be issued again before it can be paid. | An fitar da ita a watan da aka rufe — sai an sake fitar da ita kafin a iya biyanta. | ☐ | |
 | `colPeriodClosedTitle` | This bill’s month has been closed | An rufe watan wannan takardar biya | ☐ | |
+| `colUnderReviewTitle` | Payment held for review | An rike biyan don dubawa | ☐ | |
 | `colIssueAgain` | Issue this bill again | Sake fitar da wannan takardar biya | ☐ | |
 | `colIssuingAgain` | Issuing… | Ana fitarwa… | ☐ | |
 | `colLapsedTitle` | This bill has lapsed | Wannan takardar biya ta kare | ☐ | |

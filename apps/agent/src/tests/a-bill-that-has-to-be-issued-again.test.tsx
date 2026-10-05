@@ -232,6 +232,25 @@ describe('the transaction screen behind an old bill', () => {
     await waitFor(() => expect(navigated).toEqual(['/transactions/TXN-2026-000999']));
   });
 
+  it('says a payment held for review is held, and only offers to check it', async () => {
+    // It said "payment not yet confirmed" over a button giving the trader the
+    // invoice again — an invitation to pay twice while the first payment is
+    // still held.
+    show({
+      status: 'UNDER_REVIEW',
+      invoice_status: 'UNPAID',
+      expires_at: new Date(Date.now() + 5 * 86_400_000).toISOString(),
+      payment_id: 'pay-1' as never,
+      payment_status: 'PENDING' as never,
+      gateway_reference: 'GW-REF-1' as never,
+    });
+    await screen.findByText(/Payment held for review/i);
+    expect(screen.getByText(/Do not collect payment again/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Give the taxpayer an invoice/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Check payment status/i }));
+    await waitFor(() => expect(posted).toEqual(['/payments/pay-1/confirm']));
+  });
+
   it('leaves a bill still in date to be paid', async () => {
     show({
       status: 'INVOICE_GENERATED',

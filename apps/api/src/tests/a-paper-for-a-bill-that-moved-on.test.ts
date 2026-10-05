@@ -274,6 +274,42 @@ describe('an invoice checked on the public page', () => {
     assert.equal(replacement.body.reason, 'INVOICE_PAYABLE');
   });
 
+  it('says a bill owed again after a reversal has to be issued again first', async () => {
+    // In date and owed, so it read INVOICE_PAYABLE — "it can still be paid" —
+    // but its only charge was ended by the reversal and takes nothing.
+    const first = await bill();
+    await pay(first.transactionId);
+    await reverse(first.transactionId, 'TAXPAYER');
+    const answer = await verify(await codeOf(first.invoiceId));
+    assert.equal(answer.body.reason, 'INVOICE_REISSUE_NEEDED', JSON.stringify(answer.body));
+    assert.equal(answer.body.status, 'INVALID');
+    assert.match(answer.body.message, /still in date, but it cannot be paid as it stands/);
+  });
+
+  it('says a bill from a month since closed has to be issued again first', async () => {
+    const first = await bill();
+    const now = new Date();
+    await pool.query('ALTER TABLE transactions DISABLE TRIGGER transactions_immutable');
+    try {
+      await pool.query('UPDATE transactions SET created_at = $2 WHERE id = $1', [
+        first.transactionId,
+        new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 15, 10)),
+      ]);
+    } finally {
+      await pool.query('ALTER TABLE transactions ENABLE TRIGGER transactions_immutable');
+    }
+    await pool.query(
+      `INSERT INTO financial_periods (label, period_start, period_end, status, closed_at, closed_by, closing_note)
+       VALUES ('Last month', $1, $2, 'CLOSED', now(), (SELECT id FROM users LIMIT 1), 'Reconciled.')`,
+      [
+        new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)),
+        new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0)),
+      ],
+    );
+    const answer = await verify(await codeOf(first.invoiceId));
+    assert.equal(answer.body.reason, 'INVOICE_REISSUE_NEEDED', JSON.stringify(answer.body));
+  });
+
   it('says a withdrawn bill is not owed', async () => {
     const first = await bill();
     await pool.query(`UPDATE invoices SET status = 'CANCELLED' WHERE id = $1`, [first.invoiceId]);

@@ -105,9 +105,9 @@ describe('the verification answer', () => {
    * Every answer, not just the four above. A code with no string would render
    * `undefined` to somebody asking whether their money arrived.
    */
-  it('has a Hausa sentence for all eighteen answers', () => {
-    // Thirteen, and five for an invoice answered by its bill.
-    expect(VERIFICATION_REASONS.length).toBe(18);
+  it('has a Hausa sentence for all nineteen answers', () => {
+    // Thirteen, and six for an invoice answered by its bill.
+    expect(VERIFICATION_REASONS.length).toBe(19);
     for (const reason of VERIFICATION_REASONS) {
       const key = VERIFICATION_TEXT[reason];
       expect(key, `${reason} has no dictionary key`).toBeTruthy();

@@ -25,6 +25,7 @@ import { queryOne, query } from '../db/pool';
 import { generateVerificationCode, hashIdentityNumber, normaliseVerificationCode } from '../lib/crypto';
 import { nextReceiptNumber } from '../lib/references';
 import { notFound } from '../lib/errors';
+import { CHARGE_PERIOD_SHUT_SQL } from '../lib/payable-invoice';
 import {
   registerDocument,
   renderAcknowledgementPdf,
@@ -369,6 +370,8 @@ interface InvoiceForVerification {
   revenue_item: string;
   revenue_item_ha: string | null;
   lga_name: string | null;
+  /** In date, but its charge cannot take a payment as it stands. */
+  needs_reissue: boolean;
 }
 
 /** One invoice, by its id, or by the number or code a citizen typed. */
@@ -381,7 +384,15 @@ function invoiceByHandle(
     db,
     `SELECT i.invoice_number, i.status, i.expires_at, i.issued_at, i.reissued_as,
             i.total_amount_kobo::text, ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
-            l.name AS lga_name
+            l.name AS lga_name,
+            -- Ended by a reversal, or raised in a month since closed: either
+            -- way an agent has to issue it again before it can be paid.
+            EXISTS (
+              SELECT 1 FROM transactions t
+               WHERE t.invoice_id = i.id
+                 AND (t.status IN ('REVERSED', 'REFUNDED')
+                      OR (t.status IN ('INVOICE_GENERATED', 'FAILED') AND ${CHARGE_PERIOD_SHUT_SQL} IS NOT NULL))
+            ) AS needs_reissue
        FROM invoices i
        JOIN assessments a ON a.id = i.assessment_id
        JOIN revenue_items ri ON ri.id = a.revenue_item_id
@@ -416,7 +427,9 @@ function answerForInvoice(
           : 'INVOICE_WITHDRAWN'
         : invoice.status === 'EXPIRED' || pastDeadline
           ? 'INVOICE_LAPSED'
-          : 'INVOICE_PAYABLE';
+          : invoice.needs_reissue
+            ? 'INVOICE_REISSUE_NEEDED'
+            : 'INVOICE_PAYABLE';
   return {
     status: reason === 'INVOICE_PAID' || reason === 'INVOICE_PAYABLE' ? 'VALID' : 'INVALID',
     documentNumber: invoice.invoice_number,

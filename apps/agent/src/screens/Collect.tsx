@@ -1082,6 +1082,14 @@ export function TransactionScreen({
    * is raised in an open month, for the same amount and the same deadline.
    */
   const monthClosed = Boolean(transaction.period_closed) && !replaced && !lapsedBill;
+  /*
+   * Held because the gateway named a different amount from the bill. The
+   * screen said only "payment not yet confirmed", over a button to give the
+   * trader the invoice again — which reads as an invitation to pay a second
+   * time while the first payment is still in somebody's hands. What it is
+   * waiting for is the gateway's next answer, and checking is how to get it.
+   */
+  const underReview = transaction.status === 'UNDER_REVIEW';
   const name =
     transaction.business_name ??
     `${transaction.first_name ?? ''} ${transaction.last_name ?? ''}`.trim();
@@ -1157,6 +1165,14 @@ export function TransactionScreen({
           <button type="button" className="secondary" disabled={issuing} onClick={issueAgain}>
             {issuing ? <Spinner /> : null}
             {t.colOpenReplacement}
+          </button>
+        </Alert>
+      ) : underReview ? (
+        <Alert kind="warning" title={t.colUnderReviewTitle}>
+          <p style={{ margin: '0 0 0.5rem' }}>{t.colUnderReviewBody}</p>
+          <button type="button" disabled={confirming} onClick={confirmPayment}>
+            {confirming ? <Spinner /> : null}
+            {confirming ? t.colCheckingPayment : t.colCheckPaymentStatus}
           </button>
         </Alert>
       ) : monthClosed ? (
@@ -1347,7 +1363,7 @@ export function TransactionScreen({
         </div>
       )}
 
-      {!paid && !reversed && !replaced && !lapsedBill && !monthClosed && (!failed || canTryAgain) && (
+      {!paid && !reversed && !replaced && !lapsedBill && !monthClosed && !underReview && (!failed || canTryAgain) && (
         <>
           {/*
             The artefact a taxpayer pays against later.

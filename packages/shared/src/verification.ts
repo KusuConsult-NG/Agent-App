@@ -63,6 +63,13 @@ export const VERIFICATION_REASONS = [
   'INVOICE_WITHDRAWN',
   /** Genuine, past its deadline; an agent can issue it again. */
   'INVOICE_LAPSED',
+  /**
+   * Genuine and in date, but not payable as it stands: its charge was ended
+   * by a reversal, or it was raised in a month since closed. An agent issues
+   * it again. It was answered INVOICE_PAYABLE, and a citizen told their bill
+   * could be paid was turned away when they tried.
+   */
+  'INVOICE_REISSUE_NEEDED',
 ] as const;
 
 export type VerificationReason = (typeof VERIFICATION_REASONS)[number];
@@ -114,7 +121,9 @@ export const VERIFICATION_SENTENCES: Record<VerificationReason, string> = {
   INVOICE_WITHDRAWN: 'This invoice was withdrawn and nothing is owed on it. Do not pay against it.',
   INVOICE_LAPSED:
     'This is a genuine PSIRS invoice, but its payment deadline has passed and it cannot be paid ' +
-    'as it stands. A revenue agent or PSIRS office can issue it again for the same amount.',
+    'as it stands. A revenue agent or PSIRS office can issue it again for the same amount.',  INVOICE_REISSUE_NEEDED:
+    'This is a genuine PSIRS invoice, still in date, but it cannot be paid as it stands. ' +
+    'A revenue agent or PSIRS office can issue it again for the same amount.',
 };
 
 /** The English for a verification answer, for the log rather than the screen. */
