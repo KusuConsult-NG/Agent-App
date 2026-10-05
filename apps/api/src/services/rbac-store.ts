@@ -281,6 +281,22 @@ export async function setExportLimit(
     }
 
     /*
+     * Nor does anybody raise their own role's limit, for the reason `grant`
+     * refuses a grant to the caller's own role. The limit is how much of the
+     * taxpayer register one export can carry out of the building; measured
+     * through the route, an administrator raised the admin role's from 50,000
+     * to 1,000,000 and the next export would have carried that. Lowering it
+     * is not widening anything, and stays open.
+     */
+    if (roleName === actor.role && limit > previous!.export_row_limit) {
+      throw forbidden(
+        'You cannot raise the export limit of your own role. A role that can widen itself ' +
+          'can become anything, so this has to be done by somebody in a different role.',
+        'Ask an officer whose role also manages users, but is not yours, to raise it.',
+      );
+    }
+
+    /*
      * The bounds are the database's, checked here so the administrator gets a
      * sentence rather than a constraint violation. The ceiling is not a policy
      * -- it is what the XLSX writer can actually produce, and a limit above it
