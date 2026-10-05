@@ -1,13 +1,14 @@
 /**
  * Tax due-date reminder sweep (PRD §44).
  *
- * Three windows are declared before an invoice's `expires_at` date:
+ * Four windows are declared before an invoice's `expires_at` date:
  *
  *   6 weeks (42 days)  — TAX_REMINDER_6W
  *   4 weeks (28 days)  — TAX_REMINDER_4W
  *   2 weeks (14 days)  — TAX_REMINDER_2W
+ *   1 week  (7 days)   — TAX_REMINDER_1W
  *
- * TWO OF THEM FIRE. THE FIRST CANNOT.
+ * THREE OF THEM FIRE. THE FIRST CANNOT.
  *
  * `createAssessmentIn` gives every invoice thirty days to be paid.
  * `invoiceValidityDays` is a parameter on its own call that would change that
@@ -17,23 +18,30 @@
  * is forty-one days is a window no invoice can enter.
  *
  * So TAX_REMINDER_6W has never been sent to anybody. Its template is
- * approved, its Hausa translation is written, its flag column exists on every
- * invoice and is false on all of them. Two suites appeared to cover it by
- * moving an invoice's expiry out to forty-two days first, which is a state the
- * platform cannot produce; both now use a window an invoice really passes
- * through.
+ * approved, its flag column exists on every invoice and is false on all of
+ * them. (This said its Hausa translation was written. None of the reminders
+ * has one: a Hausa reader is sent the English, which notifications.ts prefers
+ * to sending nothing.) Two suites appeared to cover it by moving an invoice's
+ * expiry out to forty-two days first, which is a state the platform cannot
+ * produce; both now use a window an invoice really passes through.
  *
  * TAX_REMINDER_4W fires, and fires early: a thirty-day invoice enters the
  * 27–29 day window one day after it is raised. A taxpayer assessed on the
  * Monday is told on the Tuesday that they have four weeks to pay, which is
  * true and is not what a ladder of three reminders was drawn for.
  *
+ * TAX_REMINDER_1W is why a thirty-day invoice still gets three. Until
+ * migration 098 the last word a taxpayer heard was at two weeks, with
+ * fourteen days still to run and nothing after it. The final-week reminder
+ * also says what happens when the date passes: the debt stays, but the bill
+ * has to be issued again before it can be paid.
+ *
  * The 6W entry stays rather than being deleted, for the reason the dead
  * predicate list gives in its own words: inert and correct beats absent and
  * wrong. If a revenue item is ever given a longer window to pay — and the
  * annual obligations are the obvious candidates — a sixty-day invoice should
- * get all three reminders rather than silently get two. What is removed is the
- * claim that it works today, which is what `a-reminder-nothing-can-reach`
+ * get every reminder rather than silently miss the first. What is removed is
+ * the claim that it works today, which is what `a-reminder-nothing-can-reach`
  * measures so that this comment cannot go quietly out of date.
  *
  * Safeguards:
@@ -104,7 +112,7 @@ interface ReminderWindow {
   event: NotificationEvent;
   minDays: number;
   maxDays: number;
-  flagColumn: 'reminder_sent_6w' | 'reminder_sent_4w' | 'reminder_sent_2w';
+  flagColumn: 'reminder_sent_6w' | 'reminder_sent_4w' | 'reminder_sent_2w' | 'reminder_sent_1w';
 }
 
 /**
@@ -116,6 +124,7 @@ export const REMINDER_WINDOWS: ReminderWindow[] = [
   { event: 'TAX_REMINDER_6W', minDays: 41, maxDays: 43, flagColumn: 'reminder_sent_6w' },
   { event: 'TAX_REMINDER_4W', minDays: 27, maxDays: 29, flagColumn: 'reminder_sent_4w' },
   { event: 'TAX_REMINDER_2W', minDays: 13, maxDays: 15, flagColumn: 'reminder_sent_2w' },
+  { event: 'TAX_REMINDER_1W', minDays: 6, maxDays: 8, flagColumn: 'reminder_sent_1w' },
 ];
 
 interface DueInvoice {

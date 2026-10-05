@@ -304,27 +304,6 @@ describe('The reminder sweep only counts what it actually queued', () => {
 });
 
 // ===========================================================================
-/**
- * A reminder nothing can reach.
- *
- * The sweep declares three windows — six, four and two weeks before an
- * invoice's expiry — and the file that declares them read as a description of
- * what PSIRS sends. `createAssessmentIn` gives every invoice thirty days to be
- * paid, and `invoiceValidityDays`, the parameter that would change that, is
- * passed by nothing anywhere: not a route, not a service, not a test. So the
- * gap between now and an invoice's expiry starts at thirty days and only
- * shrinks, and a window whose floor is forty-one days cannot be entered.
- *
- * TAX_REMINDER_6W has therefore never been sent to anybody. The template is
- * approved and the Hausa translation written; the flag column exists on every
- * invoice and is false on all of them. The two suites that appeared to cover
- * it first moved an invoice's expiry out to forty-two days, which is a state
- * the platform cannot produce — so what they proved was that the fixture ran.
- *
- * These measure it instead of asserting it, against an invoice with the expiry
- * the platform gave it, so the day a revenue item is given a longer window to
- * pay this fails rather than the comment quietly going out of date.
- */
 describe('a bill that has to be issued again before it can be paid', () => {
   /*
    * Every reminder ends "pay now" with a link. For a bill whose charge a
@@ -368,6 +347,29 @@ describe('a bill that has to be issued again before it can be paid', () => {
   });
 });
 
+/**
+ * A reminder nothing can reach.
+ *
+ * The sweep declared three windows — six, four and two weeks before an
+ * invoice's expiry — and the file that declares them read as a description of
+ * what PSIRS sends. (A fourth, in the final week, came with migration 098.) `createAssessmentIn` gives every invoice thirty days to be
+ * paid, and `invoiceValidityDays`, the parameter that would change that, is
+ * passed by nothing anywhere: not a route, not a service, not a test. So the
+ * gap between now and an invoice's expiry starts at thirty days and only
+ * shrinks, and a window whose floor is forty-one days cannot be entered.
+ *
+ * TAX_REMINDER_6W has therefore never been sent to anybody. The template is
+ * approved and the flag column exists on every invoice and is false on all of
+ * them. (This said the Hausa translation was written too. No reminder has
+ * one; a Hausa reader is sent the English.) The two suites that appeared to
+ * cover it first moved an invoice's expiry out to forty-two days, which is a
+ * state the platform cannot produce — so what they proved was that the
+ * fixture ran.
+ *
+ * These measure it instead of asserting it, against an invoice with the expiry
+ * the platform gave it, so the day a revenue item is given a longer window to
+ * pay this fails rather than the comment quietly going out of date.
+ */
 describe('the reminder ladder, against the invoices the platform issues', () => {
   const window = (event: string) => {
     const found = REMINDER_WINDOWS.find((entry) => entry.event === event);
@@ -406,10 +408,10 @@ describe('the reminder ladder, against the invoices the platform issues', () => 
     );
   });
 
-  it('reaches the other two, and reaches the four-week one the next day', async () => {
+  it('reaches the other three, and reaches the four-week one the next day', async () => {
     const validity = await validityOf(await freshInvoice('12'));
 
-    for (const event of ['TAX_REMINDER_4W', 'TAX_REMINDER_2W']) {
+    for (const event of ['TAX_REMINDER_4W', 'TAX_REMINDER_2W', 'TAX_REMINDER_1W']) {
       assert.ok(
         window(event).maxDays <= validity,
         `${event} opens at ${window(event).maxDays} days, within the ${validity} an invoice has`,
@@ -447,14 +449,17 @@ describe('the reminder ladder, against the invoices the platform issues', () => 
       reminder_sent_6w: boolean;
       reminder_sent_4w: boolean;
       reminder_sent_2w: boolean;
+      reminder_sent_1w: boolean;
     }>(
       pool,
-      `SELECT reminder_sent_6w, reminder_sent_4w, reminder_sent_2w FROM invoices WHERE id = $1`,
+      `SELECT reminder_sent_6w, reminder_sent_4w, reminder_sent_2w, reminder_sent_1w
+         FROM invoices WHERE id = $1`,
       [invoiceId],
     );
 
     assert.equal(flags!.reminder_sent_4w, true, 'the four-week reminder went out');
     assert.equal(flags!.reminder_sent_2w, true, 'and the two-week one');
+    assert.equal(flags!.reminder_sent_1w, true, 'and the one in its last week');
     assert.equal(
       flags!.reminder_sent_6w,
       false,
@@ -470,8 +475,35 @@ describe('the reminder ladder, against the invoices the platform issues', () => 
     const events = sent.map((row) => row.event).sort();
     assert.deepEqual(
       events,
-      ['TAX_REMINDER_2W', 'TAX_REMINDER_4W'],
-      'two of the three reminders exist for this taxpayer, and the suite says which two',
+      ['TAX_REMINDER_1W', 'TAX_REMINDER_2W', 'TAX_REMINDER_4W'],
+      'three of the four reminders reach this taxpayer, and the suite says which three',
     );
+  });
+
+  /*
+   * The last word before the date passes, and what it says about the date.
+   *
+   * Until the final-week reminder the last thing a taxpayer was sent was at
+   * two weeks. What changes after the date is not the debt but the bill: it
+   * has to be issued again before it can be paid, and that is worth knowing a
+   * week ahead rather than finding out at the stall.
+   */
+  it('reminds a bill in its last week, and says what happens when the date passes', async () => {
+    const lastWeek = new Date(Date.now() + 7 * 86_400_000);
+    lastWeek.setUTCHours(12, 0, 0, 0);
+    const invoiceId = await invoiceDueAt('14', lastWeek);
+
+    await sendDueReminders(pool);
+
+    const sms = (await messagesFor(invoiceId)).find((message) => message.channel === 'SMS');
+    assert.ok(sms, 'a text went out in the last week');
+    assert.match(sms!.message, /due in one week/);
+    assert.match(sms!.message, /issued again before it can be paid/);
+    assert.ok(!sms!.message.includes('{{'), `a placeholder reached the taxpayer: ${sms!.message}`);
+
+    // And once: the next sweep finds the window already flagged.
+    await sendDueReminders(pool);
+    const texts = (await messagesFor(invoiceId)).filter((message) => message.channel === 'SMS');
+    assert.equal(texts.length, 1, 'the last-week reminder was sent twice');
   });
 });

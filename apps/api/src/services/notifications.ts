@@ -69,6 +69,7 @@ export type NotificationEvent =
   | 'TAX_REMINDER_6W'
   | 'TAX_REMINDER_4W'
   | 'TAX_REMINDER_2W'
+  | 'TAX_REMINDER_1W'
   | 'TAX_OBLIGATION_ASSIGNED'
   /*
    * What became of an objection.
