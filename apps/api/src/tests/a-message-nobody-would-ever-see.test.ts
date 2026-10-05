@@ -106,8 +106,9 @@ describe('a message nobody would ever see', () => {
 
     // And the other direction, which is small enough here to be worth holding:
     // every overlap constraint the schema has should have words, because the
-    // generic overlap sentence does not say to end-date the current row and
-    // that is the whole of what the officer needs to do next.
+    // generic overlap sentence names no record and no remedy, and the remedy
+    // differs for each — the shared one ("give it an end date") was wrong for
+    // all five.
     assert.deepEqual(
       [...names].filter((name) => !(name in OVERLAP_CONSTRAINT_MESSAGES)).sort(),
       [],

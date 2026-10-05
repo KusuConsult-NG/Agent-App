@@ -42,8 +42,10 @@
  * State is taxed, quietly, in a file nobody reads.
  */
 
+import type { PoolClient } from 'pg';
 import type { Db } from '../db/pool';
-import { query, queryOne, withTransaction } from '../db/pool';
+import { advisoryLock, LOCK_NAMESPACE, query, queryOne, withTransaction } from '../db/pool';
+import { PLATEAU_TODAY_SQL, todayInPlateau } from '../lib/calendar-day';
 import type { Observations, SizeBand } from '@psirs/shared';
 import { applyBasisPoints, bandFor } from '@psirs/shared';
 import { recordAudit } from './audit';
@@ -434,6 +436,133 @@ export async function computePresumptive(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Replacing what is in force                                                 */
+/* -------------------------------------------------------------------------- */
+
+type Series =
+  | { table: 'presumptive_schedules'; economicSector: string; sizeBand: SizeBand; lgaClass: LgaClass }
+  | { table: 'lga_classes'; lgaId: string }
+  | { table: 'nano_exemption_policies' };
+
+const SERIES_NOUN: Record<Series['table'], string> = {
+  presumptive_schedules: 'figure',
+  lga_classes: 'class',
+  nano_exemption_policies: 'reading of the exemption',
+};
+
+export interface Replaced {
+  id: string;
+  /** When the replaced record began. It now ends where the new one begins. */
+  effectiveFrom: string;
+}
+
+/**
+ * End the record in force on the day a new one begins, so that it can.
+ *
+ * Each of the three tables refuses two records covering one day, which is
+ * right: an ambiguous lookup is the one thing a published table may not be.
+ * But nothing on the platform could give a record an end date once it was
+ * published. The portal publishes a schedule figure and adopts a reading of the
+ * exemption with no end date at all, so the first of each was permanent: a
+ * revised figure for the next year was refused as an overlap, and the refusal
+ * told the officer to give the current figure an end date, which nothing could
+ * do. Measured through the routes: a 2026 figure for a cell published, and its
+ * 2027 replacement refused 409 — with a message about "this taxpayer's
+ * presumptive assessment", because the sentence for the schedule's own
+ * constraint had been written for a different table.
+ *
+ * A new record now replaces the one in force on its start date, from that
+ * date on, which is what "a new figure is a new row" always meant. Three
+ * refusals remain, each naming its reason:
+ *
+ *   - From the day the record in force began. Ending it there would leave it
+ *     covering no day at all, and a published record is never withdrawn.
+ *   - From a day already past. Assessments may have been raised under the
+ *     record in force on those days, and the published table would then
+ *     contradict them. A record that applied to a day stays the record for
+ *     that day; a replacement starts today or later.
+ *   - A class within three years of its start. `lga_class_fixed_for_three_years`
+ *     already refuses it; this says so with the date it is fixed until.
+ *
+ * A record published from a date later than the new one is not replaced: the
+ * new one would run into it, and the overlap constraint still refuses that.
+ * Nor does a replacement with an end date of its own revive the record it
+ * replaced afterwards — after it nothing is in force, and the computation
+ * refuses rather than guesses, as it does for any gap.
+ */
+async function endWhatThisReplaces(
+  client: PoolClient,
+  series: Series,
+  effectiveFrom: string,
+): Promise<Replaced | null> {
+  const [match, values, key]: [string, string[], string] =
+    series.table === 'presumptive_schedules'
+      ? [
+          'economic_sector = $2 AND size_band = $3 AND lga_class = $4',
+          [series.economicSector, series.sizeBand, series.lgaClass],
+          `${series.economicSector}:${series.sizeBand}:${series.lgaClass}`,
+        ]
+      : series.table === 'lga_classes'
+        ? ['lga_id = $2', [series.lgaId], series.lgaId]
+        : ['TRUE', [], 'statewide'];
+  await advisoryLock(client, LOCK_NAMESPACE.PRESUMPTIVE_SERIES, `${series.table}:${key}`);
+
+  const current = await queryOne<{
+    id: string;
+    effective_from: string;
+    backdated: boolean;
+    fixed_until: string | null;
+  }>(
+    client,
+    `SELECT id, effective_from::text AS effective_from,
+            $1::date < ${PLATEAU_TODAY_SQL} AS backdated,
+            ${series.table === 'lga_classes' ? "(effective_from + INTERVAL '3 years')::date::text" : 'NULL::text'} AS fixed_until
+       FROM ${series.table}
+      WHERE ${match}
+        AND effective_from <= $1::date
+        AND (effective_to IS NULL OR effective_to > $1::date)
+      FOR UPDATE`,
+    [effectiveFrom, ...values],
+  );
+  if (!current) return null;
+
+  const noun = SERIES_NOUN[series.table];
+  if (current.effective_from === effectiveFrom) {
+    throw conflict(
+      'NOT_REPLACEABLE_FROM_THAT_DATE',
+      `The ${noun} in force began on ${current.effective_from}. A replacement starting the ` +
+        'same day would replace it for every day it covers, and a published record is ' +
+        'never withdrawn.',
+      `Publish the new ${noun} from a later date.`,
+    );
+  }
+  if (current.backdated) {
+    throw conflict(
+      'NOT_REPLACEABLE_FROM_THAT_DATE',
+      `The ${noun} in force since ${current.effective_from} has already applied to the days ` +
+        `from ${effectiveFrom}, and assessments may have been raised under it. A record that ` +
+        'applied to a day stays the record for that day.',
+      `Publish the new ${noun} from today (${todayInPlateau()}) or a later date.`,
+    );
+  }
+  if (current.fixed_until !== null && effectiveFrom < current.fixed_until) {
+    throw conflict(
+      'NOT_REPLACEABLE_FROM_THAT_DATE',
+      `This local government's class from ${current.effective_from} is fixed until ` +
+        `${current.fixed_until}. A class is held for at least three years, so that a ` +
+        'local government cannot be reclassified whenever it suits somebody.',
+      `Publish the new class from ${current.fixed_until} or later.`,
+    );
+  }
+
+  await client.query(`UPDATE ${series.table} SET effective_to = $1 WHERE id = $2`, [
+    effectiveFrom,
+    current.id,
+  ]);
+  return { id: current.id, effectiveFrom: current.effective_from };
+}
+
+/* -------------------------------------------------------------------------- */
 /* Publishing                                                                 */
 /* -------------------------------------------------------------------------- */
 
@@ -449,7 +578,7 @@ export async function classifyLga(
     actorId: string;
     actorRole: string;
   },
-): Promise<{ id: string }> {
+): Promise<{ id: string; replaced: Replaced | null }> {
   if (!params.indexSource.trim()) {
     throw badRequest(
       'Name whose data this class came from. A classification nobody can trace is one ' +
@@ -463,6 +592,11 @@ export async function classifyLga(
   }
 
   return withTransaction(async (client) => {
+    const replaced = await endWhatThisReplaces(
+      client,
+      { table: 'lga_classes', lgaId: params.lgaId },
+      params.effectiveFrom,
+    );
     const inserted = await queryOne<{ id: string }>(
       client,
       `INSERT INTO lga_classes
@@ -486,11 +620,17 @@ export async function classifyLga(
       action: 'lga_class.published',
       entityType: 'lga_class',
       entityId: inserted!.id,
-      newValue: { classCode: params.classCode, source: params.indexSource },
-      reason: `Local government classified ${params.classCode} from ${params.indexSource}`,
+      newValue: {
+        classCode: params.classCode,
+        source: params.indexSource,
+        replaces: replaced?.id ?? null,
+      },
+      reason:
+        `Local government classified ${params.classCode} from ${params.indexSource}` +
+        (replaced ? `, replacing the class in force since ${replaced.effectiveFrom}` : ''),
     });
 
-    return { id: inserted!.id };
+    return { id: inserted!.id, replaced };
   });
 }
 
@@ -507,7 +647,7 @@ export async function publishScheduleEntry(
     actorId: string;
     actorRole: string;
   },
-): Promise<{ id: string; version: number }> {
+): Promise<{ id: string; version: number; replaced: Replaced | null }> {
   if (!params.instrumentReference.trim()) {
     throw badRequest(
       'Name the instrument that adopted this figure. A schedule nobody adopted is ' +
@@ -516,6 +656,17 @@ export async function publishScheduleEntry(
   }
 
   return withTransaction(async (client) => {
+    const replaced = await endWhatThisReplaces(
+      client,
+      {
+        table: 'presumptive_schedules',
+        economicSector: params.economicSector,
+        sizeBand: params.sizeBand,
+        lgaClass: params.lgaClass,
+      },
+      params.effectiveFrom,
+    );
+
     /*
      * The version continues the sequence for this cell rather than restarting.
      * An assessment carries the version it was computed against, so a reader
@@ -563,11 +714,14 @@ export async function publishScheduleEntry(
         class: params.lgaClass,
         assumedTurnoverKobo: params.assumedAnnualTurnoverKobo,
         instrument: params.instrumentReference,
+        replaces: replaced?.id ?? null,
       },
-      reason: `Schedule published under ${params.instrumentReference}`,
+      reason:
+        `Schedule published under ${params.instrumentReference}` +
+        (replaced ? `, replacing the figure in force since ${replaced.effectiveFrom}` : ''),
     });
 
-    return { id: inserted!.id, version };
+    return { id: inserted!.id, version, replaced };
   });
 }
 
@@ -581,7 +735,7 @@ export async function adoptNanoPolicy(
     actorId: string;
     actorRole: string;
   },
-): Promise<{ id: string }> {
+): Promise<{ id: string; replaced: Replaced | null }> {
   if (!params.legalBasis.trim()) {
     throw badRequest(
       'Cite the opinion or instrument this construction rests on. "We decided" is not ' +
@@ -590,6 +744,11 @@ export async function adoptNanoPolicy(
   }
 
   return withTransaction(async (client) => {
+    const replaced = await endWhatThisReplaces(
+      client,
+      { table: 'nano_exemption_policies' },
+      params.effectiveFrom,
+    );
     const inserted = await queryOne<{ id: string }>(
       client,
       `INSERT INTO nano_exemption_policies
@@ -611,11 +770,17 @@ export async function adoptNanoPolicy(
       action: 'nano_policy.adopted',
       entityType: 'nano_exemption_policy',
       entityId: inserted!.id,
-      newValue: { construction: params.construction, basis: params.legalBasis },
-      reason: `Nano exemption read as ${params.construction}`,
+      newValue: {
+        construction: params.construction,
+        basis: params.legalBasis,
+        replaces: replaced?.id ?? null,
+      },
+      reason:
+        `Nano exemption read as ${params.construction}` +
+        (replaced ? `, replacing the reading in force since ${replaced.effectiveFrom}` : ''),
     });
 
-    return { id: inserted!.id };
+    return { id: inserted!.id, replaced };
   });
 }
 
