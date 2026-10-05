@@ -72,6 +72,14 @@ export async function listItems(
     lgaId?: string;
     search?: string;
     includeWithdrawn?: boolean;
+    /*
+     * Only what can actually be charged in `lgaId`: an item with no rate in
+     * force there, and no statewide one, is refused by the quote and the
+     * charge alike, so a list built for one taxpayer leaves it out. The
+     * catalogue screen does not set this, because configuring an item that
+     * has no rate yet is the point of it.
+     */
+    chargeableOnly?: boolean;
   } = {},
 ) {
   return query(
@@ -88,12 +96,24 @@ export async function listItems(
        JOIN revenue_categories rc ON rc.id = ri.category_id
        JOIN revenue_authorities ra ON ra.id = rc.authority_id
        LEFT JOIN mdas m ON m.id = ri.mda_id
+       /*
+        * The rate that applies in the place asked about, as resolveRate picks
+        * it: that Council's own rate first, then the statewide one. This took
+        * the newest rate anywhere, and eleven items carry a rate per Council —
+        * SHOPS-KIOSKS has no statewide rate at all — so the list described
+        * some other Council's charge. With no place given, the statewide rate
+        * is preferred, then the newest.
+        */
        LEFT JOIN LATERAL (
          SELECT * FROM revenue_item_rates rr
           WHERE rr.revenue_item_id = ri.id
             AND rr.effective_from <= now()
             AND (rr.effective_to IS NULL OR rr.effective_to > now())
-          ORDER BY rr.effective_from DESC LIMIT 1
+            AND ($3::uuid IS NULL OR rr.lga_id IS NULL OR rr.lga_id = $3)
+          ORDER BY (rr.lga_id IS NOT DISTINCT FROM $3::uuid) DESC,
+                   (rr.lga_id IS NULL) DESC,
+                   rr.effective_from DESC
+          LIMIT 1
        ) r ON true
       WHERE ($5::boolean OR ri.status = 'ACTIVE')
         AND ($1::uuid IS NULL OR ri.category_id = $1)
@@ -102,6 +122,7 @@ export async function listItems(
              OR $3 = ANY(ri.applicable_lga_ids))
         AND ($4::text IS NULL OR ri.name ILIKE '%' || $4 || '%' OR ri.code ILIKE '%' || $4 || '%')
         AND ($6::uuid IS NULL OR rc.authority_id = $6)
+        AND ($7::boolean IS FALSE OR r.id IS NOT NULL)
       ORDER BY ra.tier, rc.name, ri.name`,
     [
       options.categoryId ?? null,
@@ -110,6 +131,7 @@ export async function listItems(
       options.search ? escapeLike(options.search) : null,
       options.includeWithdrawn ?? false,
       options.authorityId ?? null,
+      options.chargeableOnly ?? false,
     ],
   );
 }

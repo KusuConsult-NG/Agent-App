@@ -112,6 +112,18 @@ describe('a formula item at the counter', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  /*
+   * The list itself, asked for this taxpayer rather than for their type alone,
+   * so the server can leave out what cannot be charged where they are and show
+   * their Council's rate. `the-items-a-taxpayer-can-be-charged` holds the
+   * server half.
+   */
+  it('asks for the items this taxpayer can be charged', async () => {
+    mockApi();
+    await chooseTheShop();
+    expect(api.get).toHaveBeenCalledWith(expect.stringMatching(/^\/revenue\/items\?.*taxpayerId=tp-1/));
+  });
+
   it('reads an input name the way a person would', () => {
     expect(inputLabel('area')).toBe('Area');
     expect(inputLabel('floorAreaSqm')).toBe('Floor area sqm');

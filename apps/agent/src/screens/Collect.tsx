@@ -238,7 +238,9 @@ export function CollectScreen({
   useEffect(() => {
     if (!taxpayer) return;
     api
-      .get<RevenueItem[]>(`/revenue/items?taxpayerType=${taxpayer.taxpayer_type}`)
+      // The taxpayer as well as their type, so the server lists only what can
+      // be charged where they are, with their Council's rate beside it.
+      .get<RevenueItem[]>(`/revenue/items?taxpayerType=${taxpayer.taxpayer_type}&taxpayerId=${taxpayer.id}`)
       .then(setItems)
       .catch((caught) => {
         setError(asApiError(caught));

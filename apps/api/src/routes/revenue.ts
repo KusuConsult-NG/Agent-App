@@ -54,13 +54,34 @@ revenueRouter.get(
       lgaId: uuidSchema.optional(),
       search: z.string().optional(),
       includeWithdrawn: z.coerce.boolean().optional(),
+      /*
+       * The taxpayer the list is for, as the quote takes it.
+       *
+       * The collect screen asked by taxpayer type alone, so the list never
+       * knew where the taxpayer was: it offered items limited to other
+       * Councils, which the charge then refused, and showed whichever
+       * Council's rate was newest. Given a taxpayer, the place and the type
+       * come from their record rather than from the request, and only what
+       * can be charged there is listed.
+       */
+      taxpayerId: uuidSchema.optional(),
     }),
     async (req, res, data) => {
       // Seeing what has been withdrawn is part of configuring the catalogue,
       // not part of reading it: an agent asking for the withdrawn items gets
       // the catalogue they can actually sell from.
       const includeWithdrawn = data.includeWithdrawn === true && req.auth!.permissions.includes('catalogue:configure');
-      res.json(await revenue.listItems(pool, { ...data, includeWithdrawn }));
+      let place: { lgaId?: string; taxpayerType?: string; chargeableOnly?: boolean } = {};
+      if (data.taxpayerId) {
+        const taxpayer = await queryOne<{ lga_id: string; taxpayer_type: string }>(
+          pool,
+          'SELECT lga_id, taxpayer_type FROM taxpayers WHERE id = $1',
+          [data.taxpayerId],
+        );
+        if (!taxpayer) throw notFound('That taxpayer');
+        place = { lgaId: taxpayer.lga_id, taxpayerType: taxpayer.taxpayer_type, chargeableOnly: true };
+      }
+      res.json(await revenue.listItems(pool, { ...data, ...place, includeWithdrawn }));
     },
   ),
 );
