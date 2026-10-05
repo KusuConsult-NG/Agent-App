@@ -126,7 +126,13 @@ describe('the log of who has read a citizen’s record', () => {
     await openRecord();
 
     await screen.findByText(/Who has opened this record/i);
-    expect(screen.getByText(/Auditor/i)).toBeTruthy();
+    /*
+     * Waited for, not read straight after the heading. The heading renders at
+     * once with a loading placeholder under it, and the rows only once the log
+     * has been fetched — so under a loaded test run the row was not there yet
+     * and this failed with nothing wrong on the screen.
+     */
+    expect(await screen.findByText(/Auditor/i)).toBeTruthy();
   });
 
   it('is not offered to an officer without audit:read', async () => {
