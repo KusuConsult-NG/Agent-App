@@ -267,6 +267,17 @@ export const LOCK_NAMESPACE = {
    * store, so two callers who name the same day differently still queue.
    */
   REVENUE_TARGET: 14,
+  /**
+   * One capture of one identity document at a time, per applicant or referee.
+   *
+   * `storeKycDocument` supersedes the current capture and inserts the new one.
+   * Two captures at once both found the same current row; the second's UPDATE
+   * waited, then matched nothing once the first had superseded it, and its
+   * insert left two current captures for the reviewer to choose between. The
+   * same race `AGENT_KYC` closed for the identity check itself. Keyed on the
+   * owner and the document type, the columns the unique index is keyed on.
+   */
+  KYC_DOCUMENT: 15,
 } as const;
 
 /**

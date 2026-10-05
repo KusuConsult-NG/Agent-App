@@ -22,7 +22,7 @@
  */
 
 import type { PoolClient } from 'pg';
-import { pool, query, queryOne, withTransaction } from '../db/pool';
+import { advisoryLock, LOCK_NAMESPACE, pool, query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, forbidden, notFound, conflict } from '../lib/errors';
 import { storage, storageKey } from './storage';
 import { recordAudit } from './audit';
@@ -163,6 +163,15 @@ export async function storeKycDocument(params: {
   const stored = await storage.put(key, params.bytes, declared.contentType);
 
   return withTransaction(async (client) => {
+    // One capture of this document at a time. Without it two captures at once
+    // both superseded the same row and both inserted, leaving two current
+    // documents of one type for the reviewer (`two-captures-one-document`).
+    await advisoryLock(
+      client,
+      LOCK_NAMESPACE.KYC_DOCUMENT,
+      `${owner.column}:${owner.id}:${params.documentType}`,
+    );
+
     // A fresh capture of the same thing supersedes the last one rather than
     // replacing its bytes, so what a reviewer cleared stays readable.
     await client.query(

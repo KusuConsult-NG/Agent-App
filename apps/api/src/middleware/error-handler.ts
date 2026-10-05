@@ -209,6 +209,13 @@ export const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
     'rather than added to.',
   idx_agent_kyc_current:
     "This agent already has a current identity check. Supersede it before recording another.",
+  // Unreachable through `storeKycDocument`, which locks per owner and type and
+  // supersedes first. The sentence is for anything that writes the table
+  // without going through it, and says what the lock would have done.
+  idx_kyc_docs_one_current_per_agent:
+    'Another capture of this document arrived at the same moment. Capture it again; the newer one will replace it.',
+  idx_kyc_docs_one_current_per_referee:
+    'Another capture of this document arrived at the same moment. Capture it again; the newer one will replace it.',
   revenue_targets_one_live_per_scope:
     'A target is already running for that scope and period. Close it before setting another, ' +
     'or two figures will claim to be the target for the same work.',
