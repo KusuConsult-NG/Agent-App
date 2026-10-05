@@ -299,6 +299,14 @@ export const LOCK_NAMESPACE = {
    * have been told exactly why its date could not be used.
    */
   PRESUMPTIVE_SERIES: 17,
+  /**
+   * One phone number's codes for one purpose, while a new one is considered.
+   *
+   * `requestOtp` reads how recently and how often a number was sent a code
+   * and then sends one, so two requests at once would both find room and
+   * both send. Keyed on the destination and purpose the throttle counts by.
+   */
+  OTP_DESTINATION: 18,
 } as const;
 
 /**

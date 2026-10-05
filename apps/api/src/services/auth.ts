@@ -14,7 +14,7 @@
 import type { PoolClient } from 'pg';
 import type { Role } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { pool, query, queryOne, withTransaction } from '../db/pool';
+import { advisoryLock, LOCK_NAMESPACE, pool, query, queryOne, withTransaction } from '../db/pool';
 import { config } from '../config';
 import {
   generateOtp,
@@ -700,12 +700,37 @@ export type OtpPurpose =
   | 'REFEREE_VERIFY'
   | 'CITIZEN_STATEMENT';
 
+/**
+ * How often one number may be sent a code it did not ask for itself.
+ *
+ * `POST /citizen-status/statement/request` sends a code to the phone on a
+ * taxpayer's record when anybody names its TIN or number. That is the right
+ * destination — never a number from the request — but nothing limited how
+ * often: each request superseded the last code and queued another SMS.
+ * Measured: five requests for one TIN within a second, five codes and five
+ * text messages to one trader's phone, four of them useless the moment they
+ * arrived; the only stop was the route's limit of five a minute per address,
+ * which a second address resets. A stranger who knew a TIN could keep a
+ * trader's phone buzzing all day on the State's SMS account.
+ *
+ * So a number is sent at most one code a minute and five a day for each
+ * purpose. A request inside either limit sends nothing and leaves the code
+ * already sent standing, so the person who asked first can still use it.
+ * Step-up is exempt: its code can only go to the caller's own registered
+ * number, from a session that already exists and is rate-limited as a
+ * caller.
+ */
+const OTP_RESEND_AFTER_SECONDS = 60;
+const OTP_DAILY_LIMIT = 5;
+
 export async function requestOtp(params: {
   destination: string;
   purpose: OtpPurpose;
   userId?: string | null;
 }): Promise<{
   sent: boolean;
+  /** Present when nothing was sent because this number was sent one recently. */
+  retryAfterSeconds?: number;
   expiresInSeconds: number;
   /**
    * How many digits the code has.
@@ -725,7 +750,22 @@ export async function requestOtp(params: {
   const code = generateOtp();
   const expiresAt = new Date(Date.now() + config.auth.otpTtlSeconds * 1000);
 
-  await withTransaction(async (client) => {
+  const throttled = await withTransaction(async (client) => {
+    if (params.purpose !== 'STEP_UP') {
+      await advisoryLock(client, LOCK_NAMESPACE.OTP_DESTINATION, `${params.purpose}:${params.destination}`);
+      const recent = await queryOne<{ last_minute: number; today: number; wait: number | null }>(
+        client,
+        `SELECT count(*) FILTER (WHERE created_at > now() - make_interval(secs => $3))::int AS last_minute,
+                count(*) FILTER (WHERE created_at > now() - interval '1 day')::int AS today,
+                CEIL(EXTRACT(EPOCH FROM (max(created_at) + make_interval(secs => $3) - now())))::int AS wait
+           FROM otp_codes
+          WHERE destination = $1 AND purpose = $2`,
+        [params.destination, params.purpose, OTP_RESEND_AFTER_SECONDS],
+      );
+      if (recent!.last_minute > 0) return Math.max(1, recent!.wait ?? OTP_RESEND_AFTER_SECONDS);
+      if (recent!.today >= OTP_DAILY_LIMIT) return 24 * 60 * 60;
+    }
+
     // Supersede outstanding codes so only the newest is usable.
     await client.query(
       `UPDATE otp_codes SET consumed_at = now()
@@ -749,7 +789,17 @@ export async function requestOtp(params: {
       // database — and nothing has ever deleted a notification.
       secretVariables: ['code'],
     });
+    return null;
   });
+
+  if (throttled !== null) {
+    return {
+      sent: false,
+      retryAfterSeconds: throttled,
+      expiresInSeconds: config.auth.otpTtlSeconds,
+      codeLength: config.auth.otpLength,
+    };
+  }
 
   return {
     sent: true,
