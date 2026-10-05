@@ -497,7 +497,11 @@ interface GeoRow {
   /** The same length of window immediately before this one. */
   previous_amount_kobo: string;
   average_kobo: string;
-  registered_taxpayers: string;
+  /**
+   * Null in a territory view: the register is kept by place, not by
+   * territory, so a territory's share of it cannot be counted.
+   */
+  registered_taxpayers: string | null;
   /** Basis points, or null where the place has no history to compare against. */
   growth_bp: number | null;
   /**
@@ -583,6 +587,14 @@ export function IntelligenceScreen() {
             <Loading rows={5} />
           </div>
         ) : (
+          <>
+          {/*
+            A column of dashes reads as "nothing to show". In a territory view
+            it means the share cannot be counted, and says why.
+          */}
+          {rows.some((row) => row.registered_taxpayers === null) && (
+            <p className="card__hint card__pad--sides">{t.ofcRvComplianceTerritory}</p>
+          )}
           <Table
             columns={[
               {
@@ -654,6 +666,7 @@ export function IntelligenceScreen() {
             rows={rows}
             empty="ofcNoneCollectionsRecordedArea"
           />
+          </>
         )}
       </div>
     </>
