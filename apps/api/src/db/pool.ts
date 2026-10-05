@@ -114,7 +114,31 @@ export async function withTransaction<T>(
     try {
       await client.query(`BEGIN ISOLATION LEVEL ${options.isolationLevel ?? 'READ COMMITTED'}`);
       const result = await fn(client);
-      await client.query('COMMIT');
+      const committed = await client.query('COMMIT');
+      /*
+       * A COMMIT is not always a commit.
+       *
+       * PostgreSQL abandons a transaction at its first failed statement, and
+       * catching that statement's error in TypeScript does not un-fail it. The
+       * COMMIT that follows succeeds as a command and quietly does a ROLLBACK,
+       * with nothing raised. So a callback that caught an error and carried on
+       * returned normally from here, its caller reported success, and
+       * everything the transaction wrote was gone. Measured on the support desk:
+       * a reply answered 201 and was never saved, because the notice about it
+       * had failed inside the same transaction and been caught as best-effort.
+       *
+       * The command tag says what really happened. Anything but COMMIT is a
+       * transaction that saved nothing, and that is an error however the
+       * callback ended. Work that is allowed to fail inside a transaction goes
+       * through `withSavepoint` below, which is what makes catching it safe.
+       */
+      if (committed.command !== 'COMMIT') {
+        throw new Error(
+          'A statement inside this transaction failed and its error was caught, so PostgreSQL ' +
+            'rolled the whole transaction back and nothing in it was saved. ' +
+            'Work that may fail inside a transaction belongs in withSavepoint.',
+        );
+      }
       return result;
     } catch (error) {
       try {
@@ -140,6 +164,33 @@ export async function withTransaction<T>(
     } finally {
       client.release();
     }
+  }
+}
+
+let savepoints = 0;
+
+/**
+ * Run work inside a transaction that is allowed to fail without failing it.
+ *
+ * A failed statement abandons the whole transaction, so a try/catch around
+ * best-effort work inside one is not best-effort at all: it takes everything
+ * else in the transaction down with it, and since `withTransaction` now checks
+ * the COMMIT, it does so loudly. A savepoint is how PostgreSQL scopes a
+ * failure. On error this rolls back to it, so the transaction is usable again
+ * and only this work is undone, and then rethrows for the caller to decide
+ * what the failure means.
+ */
+export async function withSavepoint<T>(client: PoolClient, work: () => Promise<T>): Promise<T> {
+  savepoints += 1;
+  const name = `best_effort_${savepoints}`;
+  await client.query(`SAVEPOINT ${name}`);
+  try {
+    const result = await work();
+    await client.query(`RELEASE SAVEPOINT ${name}`);
+    return result;
+  } catch (error) {
+    await client.query(`ROLLBACK TO SAVEPOINT ${name}`);
+    throw error;
   }
 }
 

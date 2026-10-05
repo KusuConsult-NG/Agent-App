@@ -29,7 +29,7 @@
 import type { PoolClient } from 'pg';
 import { CONDUCT_CATEGORIES } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { query, queryOne, withTransaction } from '../db/pool';
+import { query, queryOne, withSavepoint, withTransaction } from '../db/pool';
 import { badRequest, forbidden, notFound } from '../lib/errors';
 import { nextTicketNumber } from '../lib/references';
 import { recordAudit } from './audit';
@@ -516,19 +516,26 @@ export async function updateTicket(params: {
  *
  * Best-effort: a notification that cannot be queued must not roll back the
  * reply it was announcing. The message is already in the thread either way.
+ *
+ * In a savepoint, because a try/catch alone did not keep that promise. This
+ * runs inside the reply's transaction, and a failed statement there abandons
+ * the transaction whatever TypeScript does with the error: the COMMIT became a
+ * ROLLBACK, the route still answered 201, and the reply was never saved.
  */
 async function notifyRaiser(
   client: PoolClient,
   params: { userId: string; ticketNumber: string; ticketId: string },
 ): Promise<void> {
   try {
-    await queueNotification(client, {
-      event: 'SUPPORT_TICKET_UPDATED',
-      userId: params.userId,
-      entityType: 'support_ticket',
-      entityId: params.ticketId,
-      variables: { ticketNumber: params.ticketNumber },
-    });
+    await withSavepoint(client, () =>
+      queueNotification(client, {
+        event: 'SUPPORT_TICKET_UPDATED',
+        userId: params.userId,
+        entityType: 'support_ticket',
+        entityId: params.ticketId,
+        variables: { ticketNumber: params.ticketNumber },
+      }),
+    );
   } catch (error) {
     log.error('could not queue a reply notification', { component: 'support', error });
   }

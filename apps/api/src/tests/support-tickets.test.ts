@@ -446,3 +446,74 @@ describe('A ticket can be put on somebody’s desk', () => {
     );
   });
 });
+
+/*
+ * The notice about a reply is best-effort. The reply is not.
+ *
+ * `notifyRaiser` caught a failure to queue the notice so that it "must not roll
+ * back the reply it was announcing". But it ran inside the reply's transaction,
+ * and PostgreSQL abandons a transaction at its first failed statement: catching
+ * the error in TypeScript does not un-fail it, and the COMMIT that followed was
+ * quietly turned into a ROLLBACK. The route answered 201, and the reply, the
+ * status change and the audit entry were all gone.
+ *
+ * Made to happen here by refusing the notice's insert, which stands for any
+ * failure inside it: a lock timeout, a constraint a later migration adds.
+ */
+describe('A reply survives a notice about it that cannot be queued', () => {
+  async function refuseTicketNotices(): Promise<void> {
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION refuse_ticket_notice() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.event = 'SUPPORT_TICKET_UPDATED' THEN
+          RAISE EXCEPTION 'notice refused for this test';
+        END IF;
+        RETURN NEW;
+      END $$ LANGUAGE plpgsql`);
+    await pool.query(`
+      CREATE TRIGGER refuse_ticket_notice BEFORE INSERT ON notifications
+        FOR EACH ROW EXECUTE FUNCTION refuse_ticket_notice()`);
+  }
+  async function allowTicketNotices(): Promise<void> {
+    await pool.query('DROP TRIGGER IF EXISTS refuse_ticket_notice ON notifications');
+    await pool.query('DROP FUNCTION IF EXISTS refuse_ticket_notice()');
+  }
+
+  it('keeps a reply from the desk, and moves the ticket into progress', async () => {
+    const created = await raise(agentToken);
+    await refuseTicketNotices();
+    try {
+      const reply = await post(
+        `/support/tickets/${created.body.id}/messages`,
+        { body: 'We can see the payment at the gateway. Issuing the receipt now.' },
+        { token: officer },
+      );
+      assert.equal(reply.status, 201, JSON.stringify(reply.body));
+    } finally {
+      await allowTicketNotices();
+    }
+
+    const detail = await get(`/support/tickets/${created.body.id}`, { token: agentToken });
+    assert.equal(detail.body.messages.length, 1, 'the route said the reply was saved; it was not');
+    assert.equal(detail.body.status, 'IN_PROGRESS');
+  });
+
+  it('keeps a resolution, with what was done about it', async () => {
+    const created = await raise(agentToken);
+    await refuseTicketNotices();
+    try {
+      const resolved = await post(
+        `/support/tickets/${created.body.id}/update`,
+        { status: 'RESOLVED', resolution: 'Receipt issued against the gateway record.' },
+        { token: officer },
+      );
+      assert.equal(resolved.status, 200, JSON.stringify(resolved.body));
+    } finally {
+      await allowTicketNotices();
+    }
+
+    const detail = await get(`/support/tickets/${created.body.id}`, { token: agentToken });
+    assert.equal(detail.body.status, 'RESOLVED', 'the route said the ticket was resolved; it was not');
+    assert.match(detail.body.resolution ?? '', /Receipt issued/);
+  });
+});
