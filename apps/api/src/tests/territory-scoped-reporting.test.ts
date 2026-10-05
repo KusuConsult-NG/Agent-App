@@ -41,11 +41,20 @@ import {
 import { query, queryOne } from '../db/pool';
 import * as rbacStore from '../services/rbac-store';
 import { seedReferenceData } from '../db/seed';
+import { resolvePeriod } from '../services/targets';
 
 interface Totals {
   collections: { total_kobo: string; today_kobo: string };
   counts: Record<string, string>;
   revenueByLga: { lga: string; amount_kobo: string }[];
+}
+
+/** Only the fields this file asserts on. */
+interface Forecast {
+  collected_kobo: string;
+  projected_kobo: string;
+  target_kobo: string | null;
+  projected_achievement_bp: number | null;
 }
 
 interface GeoRow {
@@ -253,6 +262,88 @@ describe('and sees their territory rather than the state', () => {
       names,
       [insideLga.name],
       'geographic intelligence returned areas outside the supervisor’s territories',
+    );
+  });
+});
+
+describe('a forecast measured against somebody else\'s target', () => {
+  /*
+   * `projected_achievement_bp` divides a projection by a target, and the two
+   * were not asking the same question. Every `collectedBetween` call in
+   * `forecast` is passed the caller's scope; all four `withTarget` calls were
+   * passed none, so it matched a target on the explicit lgaId, categoryId and
+   * revenueItemId alone.
+   *
+   * For a supervisor holding one territory and naming no LGA, that found the
+   * STATE target. Their own collections over the whole state's figure: a
+   * supervisor exactly on course for their share of Plateau reads a few per
+   * cent, and the shortfall is the rest of the state's.
+   *
+   * `is_forecast` does not cover this. The projection is labelled arithmetic;
+   * the target and the achievement were presented as facts about their area.
+   *
+   * WHY THE ANSWER IS NO TARGET RATHER THAN A SMALLER ONE
+   *
+   * `targetRollup` exists because targets do not aggregate: "the sum of the
+   * LGA targets is usually *not* the state target, because the state figure
+   * carries headroom", so it "reports both figures and the difference, which
+   * is the thing an officer wants to see anyway". Summing the targets under a
+   * territory here would invent the aggregation that module refuses to make.
+   * A target set for a wider area than the projection covers is not this
+   * caller's target, and the Forecast type already models having none.
+   */
+  let stateTargetKobo = '';
+
+  before(async () => {
+    const officer = await queryOne<{ id: string }>(pool, 'SELECT id FROM users LIMIT 1');
+    const period = resolvePeriod('MONTHLY');
+    stateTargetKobo = '80000000';
+    await query(
+      pool,
+      `INSERT INTO revenue_targets
+         (scope, period_kind, period_start, period_end, amount_kobo, set_by)
+       VALUES ('STATE','MONTHLY',$1,$2,$3,$4)`,
+      [
+        period.start.toISOString().slice(0, 10),
+        period.end.toISOString().slice(0, 10),
+        stateTargetKobo,
+        officer!.id,
+      ],
+    );
+  });
+
+  it('gives the state target to a caller who can see the whole state', async () => {
+    // The other half: the fix must not simply remove the figure.
+    const response = await get<Forecast>('/government/forecast?periodKind=MONTHLY', {
+      token: adminToken,
+    });
+    assert.equal(response.status, 200, JSON.stringify(response.body).slice(0, 200));
+    assert.equal(response.body.target_kobo, stateTargetKobo);
+    assert.notEqual(response.body.projected_achievement_bp, null);
+  });
+
+  it('gives a territory supervisor no target rather than the state\'s', async () => {
+    const response = await get<Forecast>('/government/forecast?periodKind=MONTHLY', {
+      token: scopedSupervisorToken,
+    });
+    assert.equal(response.status, 200, JSON.stringify(response.body).slice(0, 200));
+
+    // The numerator really is narrower, so the comparison below is not vacuous.
+    assert.equal(
+      response.body.collected_kobo,
+      INSIDE_KOBO.toString(),
+      'the projection is not scoped, so this test cannot show the mismatch',
+    );
+
+    assert.equal(
+      response.body.target_kobo,
+      null,
+      "a target set for the whole state was attached to one territory's projection",
+    );
+    assert.equal(
+      response.body.projected_achievement_bp,
+      null,
+      'and an achievement percentage was computed from it',
     );
   });
 });

@@ -120,6 +120,48 @@ describe('an agent about to charge somebody', () => {
     expect(navigated).toEqual(['/transactions/TXN-2026-000182']);
   });
 
+  /*
+   * A debt the trader has formally objected to.
+   *
+   * The row used to be identical before and after the objection — the amount,
+   * an UNPAID badge, and "Take this payment" — so an agent paid commission on
+   * what they collect was one tap from pressing for money the State had
+   * promised not to pursue while the objection is decided.
+   */
+  it('is told a debt is under objection, and is not offered to take it', async () => {
+    owes = () => [{ ...OWED[0], under_objection: true }];
+    await chooseTheTrader();
+    await screen.findByText(/What they already owe/i);
+
+    expect(screen.getByText(/Under objection/)).toBeTruthy();
+    expect(screen.getByText(/PSIRS is not pursuing it while the objection is decided/)).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: /Take this payment/i }),
+      'a disputed debt must not be one tap from collection',
+    ).toBeNull();
+  });
+
+  it('still sees the disputed debt, so it is not charged a second time', async () => {
+    // Shown, not hidden: an empty panel is what tells an agent to raise a new
+    // charge, and the trader would then owe the same levy twice.
+    owes = () => [{ ...OWED[0], under_objection: true }];
+    await chooseTheTrader();
+
+    await screen.findByText(/What they already owe/i);
+    expect(screen.getByText(/INV-2026-000412/)).toBeTruthy();
+    expect(screen.getByText(/₦5,000.00/)).toBeTruthy();
+  });
+
+  it('offers the payment as before when the debt is not disputed', async () => {
+    // The bound, stated with the field present and false rather than absent.
+    owes = () => [{ ...OWED[0], under_objection: false }];
+    await chooseTheTrader();
+    await screen.findByText(/What they already owe/i);
+
+    expect(screen.getByRole('button', { name: /Take this payment/i })).toBeTruthy();
+    expect(screen.queryByText(/Under objection/)).toBeNull();
+  });
+
   it('says nothing at all when the taxpayer genuinely owes nothing', async () => {
     /*
      * An empty panel headed "What they already owe" on every clean taxpayer

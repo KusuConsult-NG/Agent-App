@@ -102,6 +102,24 @@ export function formatLongDateIn(
 }
 
 /**
+ * `15 October 2026`, or `15 Oktoba 2026`, for a calendar day already known.
+ *
+ * For a date the server words for somebody else: a reminder names the day an
+ * invoice lapses in Plateau, which the server works out in Africa/Lagos
+ * whatever zone it runs in, and the words have to follow the reader's
+ * language. The reminder sweep formatted it once with en-NG, so a Hausa
+ * reminder read "… a 20 October 2026". Taking the day as parts keeps the zone
+ * the caller's business, and the month comes from the dictionary like every
+ * other word.
+ */
+export function formatCalendarDayIn(
+  day: { year: number; month: number; day: number },
+  t: TranslationDictionary,
+): string {
+  return `${day.day} ${t[LONG_MONTH_KEYS[day.month - 1]!]} ${day.year}`;
+}
+
+/**
  * Today as `YYYY-MM-DD`, on the clock of whoever is looking at the screen.
  *
  * `new Date().toISOString().slice(0, 10)` is the UTC day, and Nigeria is UTC+1

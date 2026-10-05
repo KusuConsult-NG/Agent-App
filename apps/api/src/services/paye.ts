@@ -53,10 +53,12 @@ import type { PoolClient } from 'pg';
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { computeAmount, type RateVersion } from './rate-engine';
-import { createAssessmentIn, resolveRate } from './revenue';
+import { createAssessmentIn, resolveRate, withdrawUnpaidBill } from './revenue';
+import { askForRefundsOfWithdrawnBill, type RefundRequested } from './approval-requests';
 import { recordAudit } from './audit';
 import { scopeParams, type ReportScope } from './report-scope';
 import { badRequest, conflict, notFound } from '../lib/errors';
+import { todayInPlateau } from '../lib/calendar-day';
 import { REVENUE_STATES_SQL } from '../lib/revenue-states';
 
 const MONTHS_IN_YEAR = 12n;
@@ -128,6 +130,42 @@ export function monthlyPayeFor(rate: RateVersion, monthlyGrossKobo: bigint): big
 }
 
 /**
+ * Whether the month a return covers has finished, in Plateau.
+ *
+ * Exported for the same reason `monthlyPayeFor` is: it is a rule an employer
+ * will be told at a counter, and a rule reachable only through a filing is a
+ * rule that cannot be tested against a worked example.
+ *
+ * This compared instants. `Date.UTC(year, month, 0)` is midnight UTC on the
+ * last day of the period, so a month became fileable at 01:00 Plateau on its
+ * own last day — the better part of a day before it ended, against a check
+ * whose refusal says in so many words that the month has not ended yet.
+ *
+ * The window is not theoretical. `filePayeSchedule` refuses a second filing
+ * for the same employer and month, so an employer who filed on the 30th
+ * locked a return that cannot carry anybody paid on the 30th or the 31st —
+ * and `employersNotFiling` counts them as having filed for the month while
+ * they did it. Correcting it means cancelling the return and replacing it,
+ * which is a worse position than not having filed.
+ *
+ * Compared as calendar days rather than instants, which is what the question
+ * is: midnight UTC is not the start of a Plateau day, and the comparison that
+ * reads "has this month ended where the employer is" has to be made where
+ * the employer is.
+ */
+export function payePeriodHasEnded(
+  periodYear: number,
+  periodMonth: number,
+  instant: Date = new Date(),
+): boolean {
+  // Day 0 of the following month is the last day of this one, leap years
+  // included; taken as a date string so nothing downstream can re-read it as
+  // an instant in another zone.
+  const lastDay = new Date(Date.UTC(periodYear, periodMonth, 0)).toISOString().slice(0, 10);
+  return todayInPlateau(instant) > lastDay;
+}
+
+/**
  * Accept a month's payroll, compute the tax on it, and raise the assessment.
  *
  * One transaction. The schedule, its lines and the assessment that makes the
@@ -146,12 +184,12 @@ export async function filePayeSchedule(params: FilePayeParams): Promise<PayeFili
   }
 
   const now = new Date();
-  const periodEnd = new Date(Date.UTC(params.periodYear, params.periodMonth, 0));
-  if (periodEnd.getTime() > now.getTime()) {
+  if (!payePeriodHasEnded(params.periodYear, params.periodMonth, now)) {
     /*
      * A month that has not finished cannot have been paid. Accepting one would
      * let an employer file an empty-looking future month and appear compliant
-     * on a date when nothing was owed yet.
+     * on a date when nothing was owed yet — and, for the month in progress,
+     * lock a return that is missing whoever is still to be paid in it.
      */
     throw badRequest('That month has not ended yet, so there is no payroll to return.');
   }
@@ -329,12 +367,13 @@ export async function filePayeSchedule(params: FilePayeParams): Promise<PayeFili
 export async function cancelPayeSchedule(
   db: Db,
   params: { scheduleId: string; reason: string; actorId: string; actorRole: string },
-): Promise<void> {
+): Promise<{ refundsRequested: RefundRequested[] }> {
   if (!params.reason.trim()) {
     throw badRequest('Say why this return is being withdrawn.');
   }
 
-  await withTransaction(async (client) => {
+  return withTransaction(async (client) => {
+    let refundsRequested: RefundRequested[] = [];
     const schedule = await queryOne<{ id: string; status: string; assessment_id: string | null }>(
       client,
       'SELECT id, status, assessment_id FROM paye_schedules WHERE id = $1 FOR UPDATE',
@@ -369,14 +408,22 @@ export async function cancelPayeSchedule(
      * upheld, including its guard. A bill that has been paid is not withdrawn
      * here: money that has reached a government account comes back through a
      * refund, with the accountability a refund carries, not by an UPDATE that
-     * makes the demand disappear.
+     * makes the demand disappear. And the refund is asked for, as it is for
+     * the objection — see `askForRefundsOfWithdrawnBill` for the employer it
+     * was not asked for, who paid the first figure and then owed the second.
      */
     if (schedule.assessment_id) {
-      await client.query(
-        `UPDATE invoices SET status = 'CANCELLED'
-          WHERE assessment_id = $1 AND status IN ('UNPAID', 'PARTIALLY_PAID')`,
-        [schedule.assessment_id],
-      );
+      await withdrawUnpaidBill(client, schedule.assessment_id, {
+        actorId: params.actorId,
+        reason: `PAYE return withdrawn (${params.reason.trim()})`,
+      });
+      refundsRequested = await askForRefundsOfWithdrawnBill(client, schedule.assessment_id, {
+        actorId: params.actorId,
+        actorRole: params.actorRole,
+        headline: 'PAYE return withdrawn',
+        because: 'The PAYE return this bill was raised for was withdrawn',
+        reason: params.reason.trim(),
+      });
     }
 
     await recordAudit(client, {
@@ -389,6 +436,8 @@ export async function cancelPayeSchedule(
       newValue: { status: 'CANCELLED' },
       reason: params.reason.trim(),
     });
+
+    return { refundsRequested };
   });
 }
 

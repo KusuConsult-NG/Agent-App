@@ -102,6 +102,7 @@ export interface TranslationDictionary {
   // What happened to the money
   paymentFailed: string;
   paymentFailedBody: string;
+  paymentEndedBody: string;
   paymentUnconfirmed: string;
   paymentUnconfirmedBody: string;
   paymentAcknowledged: string;
@@ -147,6 +148,59 @@ export interface TranslationDictionary {
   errPayoutInFlight: string;
   errAgentNotCleared: string;
   errDeviceNotRegistered: string;
+  /*
+   * THE COLLECT SCREEN'S OWN REFUSALS.
+   *
+   * Every one of these is raised by `createAssessmentIn` and reaches the agent
+   * from the screen they collect on. The map in the agent's `ui.tsx` held
+   * twenty-four codes and not one of them was on this path, so an agent
+   * standing in a market was told in English why the levy they had just chosen
+   * would not go through. Three of them had no code specific enough to key on
+   * and were raised as INVALID_REQUEST; they were named first.
+   */
+  errTaxpayerNotActive: string;
+  errRevenueItemInactive: string;
+  errRevenueItemNotForTaxpayerType: string;
+  errRevenueItemNotInLga: string;
+  errNoTaxPayable: string;
+  errAssessmentAmountZero: string;
+  errTransactionNotPayable: string;
+  errInvoicePeriodClosed: string;
+  errPaymentAlreadyVerified: string;
+  errNoEffectiveRate: string;
+  errInvoiceNotPayable: string;
+  errInvoiceExpired: string;
+  errInvoiceStillPayable: string;
+  errInvoiceUnderObjection: string;
+  errInvoicePaymentInProgress: string;
+  errInvoiceWithdrawn: string;
+  errInvoicePartPaid: string;
+  errVehicleRenewalClosed: string;
+  errInvoiceAlreadyPaid: string;
+  /*
+   * PUTTING SOMEBODY ON THE REGISTER, WHICH IS WHERE EVERYTHING ELSE STARTS.
+   *
+   * Registering a taxpayer is the first thing an agent does for anybody and
+   * the most common thing they do at all — nothing can be assessed, collected
+   * or receipted against a person who is not on the register. Every refusal
+   * on that screen was the server's English.
+   *
+   * Two of them already had their next step in Hausa, under a headline that
+   * was not: `nsTinServiceUnavailable` and `nsTinNotFound` were written when
+   * the advice on those two branches was corrected, and the sentence above
+   * them was left. An agent read the instruction in their own language and
+   * the thing it was an instruction about in English.
+   *
+   * Two carry a placeholder, because they name a record that already exists:
+   * who the person is already registered as, and which TIN was not found.
+   * Both arrive as `details` beside the refusal rather than being parsed back
+   * out of the server's prose.
+   */
+  errTaxpayerAlreadyExists: string;
+  errPossibleDuplicateTaxpayer: string;
+  errTinServiceUnavailable: string;
+  errTinNotFound: string;
+  errAttestationNotSent: string;
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
@@ -318,6 +372,7 @@ export interface TranslationDictionary {
   monNov: string;
   monDec: string;
   enumAssigned: string;
+  enumMismatch: string;
   enumTinAssigned: string;
   enumAttested: string;
   enumAuditor: string;
@@ -417,6 +472,7 @@ export interface TranslationDictionary {
   enumInvited: string;
   enumInvoice: string;
   enumInvoiceGenerated: string;
+  enumInvoiceWithdrawal: string;
   enumInvoiced: string;
   enumIssued: string;
   enumKilogram: string;
@@ -608,6 +664,22 @@ export interface TranslationDictionary {
   enumWhatsapp: string;
   enumWholesaleTrade: string;
 
+  /*
+   * Who read a taxpayer's record, and what they were shown.
+   *
+   * `taxpayer_record_access_logs.surface` (migration 083) and the `kind` the
+   * audit query puts beside it. Grouped rather than filed alphabetically
+   * above, because the five only make sense together: four things an officer
+   * can be shown about one person, and whether the row is a reading of the
+   * record or a change to it. `READ` was already here.
+   */
+  enumChange: string;
+  enumIncentiveStanding: string;
+  enumPaymentHistory: string;
+  enumTaxObligations: string;
+  enumTaxpayerRecord: string;
+  enumOutstandingBills: string;
+
   /**
    * The sentence a referee reads once, with a subject.
    *
@@ -762,6 +834,8 @@ export interface TranslationDictionary {
   ofcFnTransferFailed: string;
   ofcFnMakerChecker: string;
   ofcFnMakerCheckerBody: string;
+  ofcFnQueueStopsShort: string;
+  ofcFnQueueStopsShortBody: string;
   ofcFnApproved: string;
   ofcFnRejected: string;
   ofcFnExecuted: string;
@@ -893,6 +967,7 @@ export interface TranslationDictionary {
   ofcOvOneAgentCollected: string;
   ofcOvReceiptsOneItem: string;
   ofcOvWhoLookedAtRecord: string;
+  ofcOvWhoSearchedTheRegister: string;
   ofcOvJob: string;
   ofcOvRuns: string;
   ofcOvLastSucceeded: string;
@@ -1048,6 +1123,8 @@ export interface TranslationDictionary {
   supNoMessagesYet: string;
   ofcOsQueueUnreadable: string;
   ofcOsQueueUnreadableBody: string;
+  ofcOsListsArePartial: string;
+  ofcOsListsArePartialBody: string;
   ofcUaCoversNothing: string;
   ofcUaCoversTerritories: string;
   ofcFaMinimumNow: string;
@@ -1105,8 +1182,9 @@ export interface TranslationDictionary {
   ofcUsEvents: string;
   ofcUsScreen: string;
   ofcUsViews: string;
-  ofcGpConfirmationLinkFor: string;
+  ofcGpLinkSentFor: string;
   ofcSpOpenComplaints: string;
+  ofcSpComplaintsBeyondThisPage: string;
 
   /**
    * The support desk an agent's report lands in, and the groups and
@@ -1137,7 +1215,7 @@ export interface TranslationDictionary {
   ofcSpPriority: string;
   ofcSpReportedBy: string;
   ofcSpReplies: string;
-  ofcGpLeaderCodeOnce: string;
+  ofcGpLinkSentBody: string;
   ofcGpWaitingDecision: string;
   ofcGpWaitingIntro: string;
   ofcGpDistributions: string;
@@ -1153,6 +1231,7 @@ export interface TranslationDictionary {
   ofcPhForWhat: string;
   ofcPhLevy: string;
   ofcPhEachPayment: string;
+  ofcPhPartial: string;
   ofcPhWhen: string;
   ofcPhPeriod: string;
   ofcPhAmount: string;
@@ -1257,6 +1336,11 @@ export interface TranslationDictionary {
   ofcEnReject: string;
   ofcEnReasonFirst: string;
   ofcEnNoObjections: string;
+  ofcEnBill: string;
+  ofcEnBillOwed: string;
+  ofcEnBillPaid: string;
+  ofcEnBillPaying: string;
+  ofcRefundAsked: string;
   ofcPsPublish: string;
   ofcPsPublishClass: string;
   ofcPsPublishFigure: string;
@@ -1443,6 +1527,7 @@ export interface TranslationDictionary {
   ofcArLapsedExplained: string;
   ofcArWhoToCall: string;
   ofcArShowingLargest: string;
+  ofcArFiltersAreNarrower: string;
   ofcArOwedFor: string;
   ofcArDaysLeft: string;
   ofcArNoDeadline: string;
@@ -1667,6 +1752,8 @@ export interface TranslationDictionary {
   ofcPfFiguresCoverTopAgents: string;
   ofcLvRollIsCapped: string;
   ofcOvAgentListIsCapped: string;
+  ofcAnswerStoppedAtCap: string;
+  ofcListStoppedAtCap: string;
   ofcPfTaxpayersOnboarded: string;
   ofcPfAgentsWorked: string;
   ofcPfOpenFraudFlags: string;
@@ -2160,6 +2247,10 @@ export interface TranslationDictionary {
   ofcWbAltered: string;
   ofcWbAlteredTitle: string;
   ofcWbAlteredBody: string;
+  ofcWbChecksumReachTitle: string;
+  ofcWbChecksumReach: string;
+  ofcWbListsStopShort: string;
+  ofcWbListsStopShortBody: string;
   ofcWbNoReports: string;
   ofcWbGenerate: string;
   ofcWbGenerateHint: string;
@@ -2196,6 +2287,7 @@ export interface TranslationDictionary {
   ofcPeFiguresUnknownBody: string;
   ofcPeUnreconciled: string;
   ofcPePendingPayments: string;
+  ofcPeAwaitingSettlement: string;
   ofcPeFiguresNow: string;
   ofcPeFrozen: string;
   ofcPeReopenSeparate: string;
@@ -2406,6 +2498,8 @@ export interface TranslationDictionary {
   ofcCwDepartment: string;
   ofcCwAssignee: string;
   ofcCwNobody: string;
+  ofcCwTableStopsShort: string;
+  ofcCwTableStopsShortBody: string;
   ofcCwAnyDepartment: string;
   ofcCwDue: string;
   ofcCwOnlyOpen: string;
@@ -2455,6 +2549,17 @@ export interface TranslationDictionary {
   ofcT3After: string;
   ofcT3CasesAndFlags: string;
   ofcT3OpenCaseAbout: string;
+  ofcT3ReverseTitle: string;
+  ofcT3ReverseHint: string;
+  ofcT3ReverseAmount: string;
+  ofcT3ReverseWhose: string;
+  ofcT3ReverseGovernment: string;
+  ofcT3ReverseTaxpayer: string;
+  ofcT3ReverseGateway: string;
+  ofcT3ReverseReason: string;
+  ofcT3ReverseSend: string;
+  ofcT3ReverseSending: string;
+  ofcT3ReverseSent: string;
   ofcT3Withheld: string;
   ofcT3WithheldBody: string;
   ofcT3NoPayment: string;
@@ -2475,6 +2580,21 @@ export interface TranslationDictionary {
   ofcChLapsedTitle: string;
   ofcChLapsed: string;
   ofcChLapsedNoDate: string;
+  ofcChStrandedTitle: string;
+  ofcChStranded: string;
+  ofcChMonthClosedTitle: string;
+  ofcChMonthClosed: string;
+  ofcChReplacedTitle: string;
+  ofcChReplaced: string;
+  ofcChOpenReplacement: string;
+  ofcChReissue: string;
+  ofcChReissuing: string;
+  ofcChWithdrawTitle: string;
+  ofcChWithdrawHint: string;
+  ofcChWithdrawReason: string;
+  ofcChWithdrawSend: string;
+  ofcChWithdrawSending: string;
+  ofcChWithdrawSent: string;
   ofcChHowComputed: string;
   ofcChTraceFrozen: string;
   ofcChNoTrace: string;
@@ -2529,6 +2649,14 @@ export interface TranslationDictionary {
   ofcLoginSignInWorked: string;
   ofcLoginUseAgentApp: string;
   ofcLoginOpenAgentApp: string;
+  ofcNavFieldWork: string;
+  ofcFieldWorkTitle: string;
+  ofcFieldWorkBody: string;
+  ofcFieldWorkToolsHeading: string;
+  ofcFieldWorkToolsBody: string;
+  ofcFieldWorkNoLink: string;
+  ofcFieldWorkHereHeading: string;
+  ofcFieldWorkHereBody: string;
   shellSyncFailed: string;
   grpNameHint: string;
   grpCommunityHint: string;
@@ -2544,6 +2672,7 @@ export interface TranslationDictionary {
    */
   pubVerdictValid: string;
   pubVerdictAcknowledgement: string;
+  pubVerdictInvoice: string;
   pubVerdictReversed: string;
   pubVerdictNotFound: string;
   pubVerdictInvalid: string;
@@ -2636,6 +2765,23 @@ export interface TranslationDictionary {
   colNeedBaseAmount: string;
   colNoTin: string;
   colBasisAmountHint: string;
+  colMeasureHint: string;
+  colNeedMeasure: string;
+  colFiFloorAreaSqm: string;
+  colFiLandAreaSqm: string;
+  colFiSignAreaSqm: string;
+  colFiFrontageMetres: string;
+  colFiRooms: string;
+  colFiSeats: string;
+  colFiEmployees: string;
+  colFiVehicles: string;
+  colFiAnimals: string;
+  colFiStalls: string;
+  colFiMachines: string;
+  colFiMonths: string;
+  colFiDays: string;
+  colFiTonnes: string;
+  colFiRenewalPeriodMonths: string;
   colTaxpayerLabel: string;
   colRevenueLabel: string;
   colGovernmentRevenue: string;
@@ -2667,6 +2813,24 @@ export interface TranslationDictionary {
   colOwesUnknown: string;
   colOwesUnknownBody: string;
   colTakeThisPayment: string;
+  colNeedsReissue: string;
+  colPeriodClosedReissue: string;
+  colPeriodClosedTitle: string;
+  colPeriodClosedBody: string;
+  colUnderReviewTitle: string;
+  colUnderReviewBody: string;
+  colIssueAgain: string;
+  colIssuingAgain: string;
+  colLapsedTitle: string;
+  colLapsedBody: string;
+  colReplacedTitle: string;
+  colReplacedBody: string;
+  colOpenReplacement: string;
+  colReversedTitle: string;
+  colReversedOwedBody: string;
+  colReversedWithdrawnBody: string;
+  colUnderObjection: string;
+  colUnderObjectionBody: string;
   colChargeRaisedTitle: string;
   colChargeRaisedBody: string;
   colOpenCharge: string;
@@ -3100,6 +3264,8 @@ export interface TranslationDictionary {
   moreNoReceipts: string;
   moreSavedRecords: string;
   moreNothingWaiting: string;
+  moreSavedRecordsUnreadable: string;
+  moreSavedRecordsUnreadableBody: string;
   moreSavedOnPhone: string;
   moreVehicleRenewal: string;
   moreSearchVehicle: string;
@@ -3143,7 +3309,8 @@ export interface TranslationDictionary {
   grpRecorded: string;
   grpWaitingOfficer: string;
   grpAskLeaderConfirm: string;
-  grpSendToLeader: string;
+  grpSentToLeader: string;
+  grpSentToLeaderBody: string;
   grpNoAssessment: string;
   authSignInTitle: string;
   authSignIn: string;
@@ -3444,6 +3611,13 @@ export interface TranslationDictionary {
   pubVerifyAction: string;
   pubVerifyChecking: string;
   pubVerifyReceiptNumber: string;
+  pubVerifyDocumentNumber: string;
+  verifyInvoicePayable: string;
+  verifyInvoicePaid: string;
+  verifyInvoiceReplaced: string;
+  verifyInvoiceWithdrawn: string;
+  verifyInvoiceLapsed: string;
+  verifyInvoiceReissueNeeded: string;
   pubVerifyRevenueType: string;
   pubVerifyAmount: string;
   pubVerifyIssued: string;
@@ -3550,10 +3724,76 @@ export interface TranslationDictionary {
   nsUpdateRequiredToEnumerate: string;
   nsTinServiceUnavailable: string;
   nsTinNotFound: string;
+  /*
+   * The two the registration screen needed that did not exist yet.
+   *
+   * `nsPossibleDuplicateTaxpayer` is not a translation of the API's own next
+   * step, deliberately. The API says "resubmit with acknowledgeDuplicates set
+   * to true", which is the right instruction for a client and a thing no
+   * person can do — the screen the agent is looking at carries the override as
+   * a button. So this names the test to apply before pressing it.
+   *
+   * It does not point at the panel below, which was the first wording. That
+   * panel has two forms and one of them appears precisely when the matches
+   * could NOT be listed — so "the matching records are listed below" would be
+   * false exactly when the agent most needs to be careful. The decision holds
+   * either way.
+   */
+  nsTaxpayerAlreadyExists: string;
+  nsPossibleDuplicateTaxpayer: string;
   nsKycProviderUnavailable: string;
   nsPaymentUnconfirmed: string;
   nsPaymentFailed: string;
   nsAgentNotCleared: string;
+  nsNoTaxPayable: string;
+  nsNoEffectiveRate: string;
+  nsInvoiceAlreadyPaid: string;
+  /** The officer portal's heading over `nsStepUpRequired`. */
+  ofcStepUpNeeded: string;
+  /*
+   * CLOSING A FINANCIAL MONTH, WHICH AN OFFICER'S NAME GOES ON.
+   *
+   * `HAUSA-REVIEW-QUESTIONS.md` §7 counts the gap and names the tier: of the
+   * platform's refusals the officer portal says one in Hausa, and the row it
+   * calls the tier is the revenue period, because "already closed" read as
+   * "closed now" is an officer believing they have done something they have
+   * not. These are that row.
+   *
+   * All three name the month, and the third names its state as well, so both
+   * arrive as fields rather than being parsed back out of the server's
+   * English. The state is the value the schema holds — CLOSED, CLOSING — read
+   * through the shared enum table, which already has a name for each in both
+   * languages.
+   */
+  ofcErrPeriodClosed: string;
+  ofcErrPeriodOpen: string;
+  ofcErrPeriodNotOpen: string;
+  /*
+   * SIGNING AN AUDIT REPORT, the other half of the tier §7 names.
+   *
+   * Both name the report, so both carry it as a field. `SAMPLE_COMPLETED` is
+   * the third row of that tier and is NOT here: it is raised from two places
+   * with two different sentences, one of them carrying advice, and a single
+   * translation would have to be vaguer than the longer of the two. The
+   * service says so at the site.
+   */
+  ofcErrAlreadySigned: string;
+  ofcErrAlreadyWithdrawn: string;
+  /*
+   * The third row of that tier, which turned out to be two refusals.
+   *
+   * `SAMPLE_COMPLETED` was raised from two sites with two different sentences
+   * and recorded as a code whose sentences wanted consolidating. Reading both
+   * call sites says otherwise: one is an auditor trying to EXAMINE a
+   * transaction in a closed sample, where "draw a new sample" is what they
+   * need, and the other is an auditor trying to CLOSE a sample that is already
+   * closed, where that advice is wrong and there is nothing to do. Two
+   * refusals about one state. Splitting the codes is what let either be said
+   * in Hausa, because the map's test is that a code means one fixed thing.
+   */
+  ofcErrSampleCompleted: string;
+  ofcErrSampleAlreadyComplete: string;
+  ofcNsSampleCompleted: string;
   /*
    * What the job monitor says about a job, and how often it runs.
    *
@@ -3672,6 +3912,7 @@ export interface TranslationDictionary {
   pubStmtReturnedRow: string;
   pubStmtForWhat: string;
   pubStmtEach: string;
+  pubStmtPartial: string;
   pubStmtNothing: string;
   pubStmtFooter: string;
   pubCitizenFooter: string;
@@ -3918,6 +4159,7 @@ export const translations: Record<Language, TranslationDictionary> = {
 
     paymentFailed: 'Payment did not go through',
     paymentFailedBody: 'No money has been taken from the taxpayer. You can start the payment again.',
+    paymentEndedBody: 'No money has been taken from the taxpayer. This bill can no longer be paid.',
     paymentUnconfirmed: 'Payment not yet confirmed',
     paymentUnconfirmedBody:
       'This payment has NOT been marked as received. Do not ask the taxpayer to pay again \u2014 check again in a moment.',
@@ -3976,6 +4218,50 @@ export const translations: Record<Language, TranslationDictionary> = {
       'You are not yet cleared to collect revenue. Your application must be completed and approved first.',
     errDeviceNotRegistered:
       'This device is not registered to your account. Register it before you collect anything.',
+    errTaxpayerNotActive:
+      'This taxpayer record has been closed, so nothing new can be assessed against it. Any PSIRS office can put it back on the register.',
+    errRevenueItemInactive:
+      'This tax or levy is not being collected at the moment. Choose another, or ask a PSIRS officer.',
+    errRevenueItemNotForTaxpayerType:
+      'This tax or levy does not apply to this kind of taxpayer. Check whether the record is an individual or a business.',
+    errRevenueItemNotInLga:
+      'This tax or levy is not collected in this taxpayer’s Local Government Area.',
+    errNoTaxPayable:
+      'No tax is payable on the amount declared, so there is no invoice to raise. The figures are not wrong — this taxpayer is below the threshold.',
+    errAssessmentAmountZero:
+      'The amount works out to nothing from the figures entered. Check them, and tell a PSIRS officer if they are right — the rate may be wrong rather than the figures.',
+    errInvoiceAlreadyPaid:
+      'This bill has already been paid. Do not collect payment again.',
+    errTaxpayerAlreadyExists:
+      'This person is already registered as {{subject}}. A second record would be a duplicate.',
+    errPossibleDuplicateTaxpayer:
+      'A record was found that may be this same person. Check it before opening a new one.',
+    errTinServiceUnavailable:
+      'The PSIRS TIN service could not be reached, so this TIN cannot be confirmed. Nobody has been registered.',
+    errTinNotFound: 'TIN {{tin}} could not be found in the PSIRS TIN service.',
+    errAttestationNotSent: 'The confirmation link could not be sent to the group leader, so no request was made. Try again later.',
+    errInvoiceExpired:
+      "This bill has expired. Issue it again from the taxpayer's list of bills.",
+    errInvoicePeriodClosed:
+      "This bill was raised in a month that has been closed. No money has been taken. Issue it again from the taxpayer's list of bills, then take the payment.",
+    errInvoiceStillPayable: 'This bill can still be paid. Take the payment against it.',
+    errInvoiceUnderObjection:
+      'This bill is under objection, and collection is suspended until the objection is decided.',
+    errInvoicePaymentInProgress:
+      'A payment against this bill is still being processed. Check its status first, and do not collect again.',
+    errInvoiceWithdrawn: 'This bill was withdrawn. Nothing is owed on it.',
+    errInvoicePartPaid:
+      'Part of this bill has been paid, so it cannot be issued again. Ask a PSIRS officer.',
+    errVehicleRenewalClosed:
+      'This bill was for a vehicle renewal that has ended, so it cannot be issued again. Ask a PSIRS officer.',
+    errInvoiceNotPayable:
+      'This bill is {{state}} and can no longer be paid. If it lapsed, issue it again; if it was replaced, take the payment against the new bill.',
+    errNoEffectiveRate:
+      'No rate approved by government is in force for this tax or levy, so nothing can be assessed on it. Choose another, or tell a PSIRS officer.',
+    errPaymentAlreadyVerified:
+      'This charge has already been paid and the payment confirmed. Do not collect payment again.',
+    errTransactionNotPayable:
+      'This charge is {{state}} and cannot take a payment now.',
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
@@ -4190,6 +4476,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumInvited: "Invited",
     enumInvoice: "Invoice",
     enumInvoiceGenerated: "Invoice issued",
+    enumInvoiceWithdrawal: "Withdrawing an invoice raised in error",
     enumInvoiced: "Invoiced",
     enumIssued: "Issued",
     enumKilogram: "Kilogram",
@@ -4215,6 +4502,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumMatched: "Matched",
     enumMedium: "Medium",
     enumMerged: "Merged",
+    enumMismatch: "Does not match",
     enumMigration: "Migration",
     enumMining: "Mining",
     enumMissingPayment: "Payment missing",
@@ -4275,6 +4563,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumQuarterly: "Quarterly",
     enumQueued: "Queued",
     enumRead: "Read",
+    enumChange: "Changed",
+    enumIncentiveStanding: "Incentive standing",
+    enumPaymentHistory: "Payment history",
+    enumTaxObligations: "Tax obligations",
+    enumTaxpayerRecord: "Taxpayer record",
+    enumOutstandingBills: "Outstanding bills",
     enumReadyForReview: "Ready for review",
     enumRealProperty: "Land and buildings",
     enumReceipt: "Receipt",
@@ -4495,6 +4789,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFnTransferFailed: "Transfer failed",
     ofcFnMakerChecker: "Maker-checker approvals",
     ofcFnMakerCheckerBody: "The officer who raises a request can never review or authorise it. Reversals need a third officer to execute, with step-up authentication.",
+    ofcFnQueueStopsShort: "This list stops short",
+    ofcFnQueueStopsShortBody: "{{matched}} requests match this filter and the list shows the newest {{shown}}, so the oldest — the ones that have waited longest — are not on it. Filter by type to bring them into view.",
     ofcFnApproved: "Approved",
     ofcFnRejected: "Rejected",
     ofcFnExecuted: "Executed",
@@ -4609,6 +4905,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOvOneAgentCollected: "Everything one agent collected",
     ofcOvReceiptsOneItem: "Receipts issued under one revenue item",
     ofcOvWhoLookedAtRecord: "Who has looked at one taxpayer’s record",
+    ofcOvWhoSearchedTheRegister: "Who has been searching the register",
     ofcOvJob: "Job",
     ofcOvRuns: "Runs",
     ofcOvLastSucceeded: "Last succeeded",
@@ -4743,6 +5040,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     supNoMessagesYet: "No messages yet",
     ofcOsQueueUnreadable: "A queue could not be read",
     ofcOsQueueUnreadableBody: "{{n}} of the queues on this page could not be loaded, so what is shown is not the whole picture. An empty section below does not mean that queue is empty — it means nobody can see it. Reload, and raise it if it does not clear.",
+    ofcOsListsArePartial: "Some lists below stop short",
+    ofcOsListsArePartialBody: "The figures above cover everything outstanding. These lists do not: {{queues}}. Each one shows the hundred oldest, so the bottom of the list is where it was cut off rather than where the queue ends. Work it down and reload to see the next hundred.",
     ofcUaCoversNothing: "{{name}} now covers no territory and will see no revenue figures.",
     ofcUaCoversTerritories: "{{name}} now covers {{n}} territory(ies).",
     ofcFaMinimumNow: "Minimum version is now {{version}}.",
@@ -4800,8 +5099,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcUsEvents: "Events",
     ofcUsScreen: "Screen",
     ofcUsViews: "Views",
-    ofcGpConfirmationLinkFor: "Confirmation link for {{group}}",
+    ofcGpLinkSentFor: "Confirmation link sent for {{group}}",
     ofcSpOpenComplaints: "{{n}} open complaint(s) about conduct or charges",
+    ofcSpComplaintsBeyondThisPage: "{{n}} of them are not in the table below, which shows the most urgent and the most recent. Filter by category to work through the rest.",
     ofcSpAboutRevenue: "These are reports about how revenue was collected, not about the platform. They are listed first below.",
     ofcSpSupportQueue: "Support queue",
     ofcSpQueueIntro: "Ordered by priority. A ticket is answered in its thread — a status change on its own tells the person who reported it nothing.",
@@ -4827,7 +5127,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcSpPriority: "Priority",
     ofcSpReportedBy: "Reported by",
     ofcSpReplies: "Replies",
-    ofcGpLeaderCodeOnce: "Send this to the group leader. It is shown once — PSIRS stores only a hash of it, so it cannot be read back later. Request another if it is lost.",
+    ofcGpLinkSentBody: "It went by text message to {{phone}}, the leader’s number on the group’s record. It is not shown here: only the leader may confirm the list, and the agent who recorded the members must not be able to. Ask again if the leader did not receive it.",
     ofcGpWaitingDecision: "Waiting for a decision",
     ofcGpWaitingIntro: "An agent has recorded these groups in the field. Members cannot be added until a group is approved, so nothing else happens while they sit here.",
     ofcGpDistributions: "Distributions",
@@ -4843,6 +5143,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPhForWhat: "What it went to",
     ofcPhLevy: "Tax or levy",
     ofcPhEachPayment: "Each payment",
+    ofcPhPartial: "The totals above cover the whole period, but this list stopped at {{n}} payments: it holds only the most recent {{n}} and the earliest part of the period is not on it. Narrow the dates before telling the taxpayer what their lines add up to.",
     ofcPhWhen: "When",
     ofcPhPeriod: "Period",
     ofcPhAmount: "Amount",
@@ -4942,6 +5243,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcEnReject: "Reject the objection",
     ofcEnReasonFirst: "Write the reason first.",
     ofcEnNoObjections: "No estimate is under objection.",
+    ofcEnBill: "Bill",
+    ofcEnBillOwed: "Not paid",
+    ofcEnBillPaid: "Paid {{amount}}. Upholding this asks for a refund.",
+    ofcEnBillPaying: "A payment is in progress. Decide once it has settled.",
+    ofcRefundAsked: "A refund of {{amount}} on {{reference}} has been asked for. Another officer grants it from the approvals queue.",
     ofcPsPublish: "Publishing",
     ofcPsPublishClass: "Publish a local government class",
     ofcPsPublishFigure: "Publish a schedule figure",
@@ -5103,7 +5409,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcIgSince: "Since",
     ofcIgPayableNow: "Can be paid now",
     ofcIgPayableYes: "Yes",
-    ofcIgPayableNeedsReassessment: "No — needs a fresh assessment",
+    ofcIgPayableNeedsReassessment: "No — it has to be issued again",
     ofcIgOwesNothing: "They owe the State nothing.",
     enumAsserted: "Claimed",
     enumConfirmedByTaxpayer: "Confirmed by the taxpayer",
@@ -5120,14 +5426,15 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcArWithin30: "30 days",
     ofcArCollectableNow: "Collectable now",
     ofcArTaxpayers: "Taxpayers owing",
-    ofcArNeedsReassessment: "Needs re-assessment",
+    ofcArNeedsReassessment: "Needs issuing again",
     ofcArEndedElsewhere: "Owed by closed records",
     ofcArWhoIsMissing: "Who is not on this list",
     ofcArInFlightExplained: "Anyone part-way through paying is left off, so this list is safe to work as it stands: {{n}} invoice(s) are excluded because a payment is running against them right now. Nobody holding a receipt will be called.",
     ofcArLapsedTitle: "Debt that cannot be paid as it stands",
-    ofcArLapsedExplained: "{{n}} invoice(s) have passed their payment deadline. The platform will refuse money against them, so they are counted above but kept off the call list — collecting means raising a fresh assessment first.",
+    ofcArLapsedExplained: "{{n}} invoice(s) have passed their payment deadline. The platform will refuse money against them, so they are counted above but kept off the call list — collecting means issuing the bill again first, from the bill itself.",
     ofcArWhoToCall: "Who to call",
-    ofcArShowingLargest: "Showing the {{n}} largest debts. Narrow by LGA or amount to see further down.",
+    ofcArShowingLargest: "Showing the {{n}} largest of the {{m}} debts on this list. Narrow by LGA or amount to see further down.",
+    ofcArFiltersAreNarrower: "The four figures above cover everyone in this scope. The list below is narrower: {{n}} taxpayer(s), owing {{amount}} between them, meet the amount and the deadline you asked for.",
     ofcArOwedFor: "Owed for",
     ofcArDaysLeft: "Days left to pay",
     ofcArNoDeadline: "No deadline",
@@ -5343,6 +5650,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPfFiguresCoverTopAgents: "Showing the {{n}} highest-collecting agents, which is all this report returns. The figures above cover only those — an agent below that line is not counted, including one carrying an open fraud flag. The fraud queue lists every flag.",
     ofcLvRollIsCapped: "Showing the {{n}} most recently registered, which is all this search returns. Anyone registered earlier is not on this list — narrow it by LGA or by levy to see them.",
     ofcOvAgentListIsCapped: "This list holds the {{n}} most recently registered agents. An agent who joined before them cannot be chosen here, which is most of the long-serving ones.",
+    ofcAnswerStoppedAtCap:
+      'This answer stopped at {{n}} rows and holds only the most recent of them. It is not the whole answer to the question above.',
+    ofcListStoppedAtCap:
+      'This list stopped at {{n}} rows and holds only the most recent of them. The earliest part of what you asked for is not on it — narrow the dates or the filters to see the rest.',
     ofcPfTaxpayersOnboarded: "Taxpayers onboarded",
     ofcPfAgentsWorked: "Agents who worked",
     ofcPfOpenFraudFlags: "Open fraud flags",
@@ -5801,6 +6112,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcWbAltered: "Altered",
     ofcWbAlteredTitle: "A report on this page no longer matches its checksum",
     ofcWbAlteredBody: "{{n}} report(s) below hold figures that no longer hash to the checksum recorded when they were generated. A signature on such a report does not cover what it now shows. This is a change made in the database rather than through the platform — do not rely on those figures, and raise it.",
+    ofcWbChecksumReachTitle: "The checksum check covers this page only",
+    ofcWbChecksumReach: "{{n}} further report(s) were not examined. The check recomputes the checksum of the reports listed below, which are the most recent ones, so a report altered further back raises nothing here. Filter by type, or open an older report directly, to cover it.",
+    ofcWbListsStopShort: "The tables below stop short",
+    ofcWbListsStopShortBody: "The figures above cover everything. These tables do not: {{lists}}. Each shows the {{cap}} most recent, so the bottom of the table is where it was cut off rather than where the work ends. Filter to narrow it, or open what you need directly.",
     ofcWbNoReports: "No report has been generated yet.",
     ofcWbGenerate: "Generate a report",
     ofcWbGenerateHint: "Generating freezes the figures. Signing is a separate step, and often a different officer.",
@@ -5831,12 +6146,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPeClosingNote: "What is being certified",
     ofcPeReopenReason: "Why it is being reopened",
     ofcPeNotReady: "Not ready to close",
-    ofcPeNotReadyBody: "Closing over an unresolved exception or a pending payment freezes a figure already known to be wrong. It is sometimes the right call, and it is never a silent one.",
+    ofcPeNotReadyBody: "Closing over an unresolved exception, a pending payment or a collection the bank has not yet paid in freezes a figure that is wrong or not yet whole. It is sometimes the right call, and it is never a silent one.",
     ofcPeOverride: "Why you are closing over them",
     ofcPeFiguresUnknown: "What this month still holds could not be read",
     ofcPeFiguresUnknownBody: "The platform could not count this month's unresolved exceptions or pending payments, so it cannot tell you whether the figure is settled. It may be. Closing is still possible, and it needs a reason in writing, because a month closed without knowing is a month closed over whatever was there.",
     ofcPeUnreconciled: "Unresolved exceptions",
     ofcPePendingPayments: "Payments still pending",
+    ofcPeAwaitingSettlement: "Collections not yet paid into a government account",
     ofcPeFiguresNow: "What the month holds now",
     ofcPeFrozen: "Frozen at close",
     ofcPeReopenSeparate: "Reopening is the administrator's, not the closer's. The officer who closes the books also being able to unclose them removes most of what a period lock is for.",
@@ -6047,6 +6363,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCwDepartment: "Send to",
     ofcCwAssignee: "Assign to",
     ofcCwNobody: "Nobody yet",
+    ofcCwTableStopsShort: "The table below stops short",
+    ofcCwTableStopsShortBody: "The figures above cover every case this filter matched. The table shows {{shown}} of {{matched}} — the most urgent and the soonest due — so its last row is where it was cut off rather than where the work ends. Narrow the filter to bring the rest into view.",
     ofcCwAnyDepartment: "No department",
     ofcCwDue: "Due",
     ofcCwOnlyOpen: "Only open cases",
@@ -6096,6 +6414,17 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcT3After: "After",
     ofcT3CasesAndFlags: "Cases and risk flags",
     ofcT3OpenCaseAbout: "Open a case about this transaction",
+    ofcT3ReverseTitle: "Ask for this payment to be reversed",
+    ofcT3ReverseHint: "The whole payment goes back to the payer, its receipt is voided and the agent's commission is recovered. A second officer decides, and a third carries it out.",
+    ofcT3ReverseAmount: "Amount returned: {{amount}}",
+    ofcT3ReverseWhose: "Whose doing was it",
+    ofcT3ReverseGovernment: "The State's — a duplicate, or a charge on the wrong record. The bill is withdrawn.",
+    ofcT3ReverseTaxpayer: "The payer's — their bank recalled the payment, or they asked. The bill is owed again.",
+    ofcT3ReverseGateway: "The gateway's. The bill is owed again.",
+    ofcT3ReverseReason: "What happened",
+    ofcT3ReverseSend: "Send for a decision",
+    ofcT3ReverseSending: "Sending…",
+    ofcT3ReverseSent: "Sent. A second officer decides it, and a third carries it out.",
     ofcT3Withheld: "Not shown to your role",
     ofcT3WithheldBody: "These parts exist and your permissions do not reach them. They are named so an empty section is never mistaken for an empty record.",
     ofcT3NoPayment: "No payment has been attempted.",
@@ -6114,8 +6443,23 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcChIssued: "Issued",
     ofcChPayableUntil: "Payable until",
     ofcChLapsedTitle: "The deadline has passed",
-    ofcChLapsed: "This invoice lapsed on {{date}}. The platform will refuse money against it, so collecting means raising a fresh assessment first.",
-    ofcChLapsedNoDate: "This invoice has lapsed. The platform will refuse money against it, so collecting means raising a fresh assessment first.",
+    ofcChLapsed: "This invoice lapsed on {{date}}. The platform will refuse money against it, so it has to be issued again before anything can be collected.",
+    ofcChLapsedNoDate: "This invoice has lapsed. The platform will refuse money against it, so it has to be issued again before anything can be collected.",
+    ofcChStrandedTitle: "Owed again after a reversal",
+    ofcChStranded: "A payment against this invoice was reversed for a reason that was not the State's, so the money is owed again — but its old charge cannot take a payment. Issue it again to collect it.",
+    ofcChMonthClosedTitle: "Raised in a month that has been closed",
+    ofcChMonthClosed: "This bill is still in date, but {{period}} has been closed, so it cannot be paid as it stands. Issue it again — for the same amount and the same deadline — and take the payment against the new invoice.",
+    ofcChReplacedTitle: "Issued again",
+    ofcChReplaced: "This invoice was replaced by {{number}}, for the same amount. Money is taken against the new invoice, not this one.",
+    ofcChOpenReplacement: "Open {{number}}",
+    ofcChReissue: "Issue this invoice again",
+    ofcChReissuing: "Issuing…",
+    ofcChWithdrawTitle: "Raised in error?",
+    ofcChWithdrawHint: "If this invoice should never have been raised — a duplicate, or a charge against the wrong record — ask for it to be withdrawn. Another officer decides, and nothing changes until they do.",
+    ofcChWithdrawReason: "What was wrong with it",
+    ofcChWithdrawSend: "Ask for it to be withdrawn",
+    ofcChWithdrawSending: "Sending…",
+    ofcChWithdrawSent: "Sent. Another officer must approve it before the invoice is withdrawn.",
     ofcChHowComputed: "How the figure was arrived at",
     ofcChTraceFrozen: "Recorded when the assessment was raised, and frozen since. This is what the calculation did on the day, not what it would do today.",
     ofcChNoTrace: "No calculation was recorded against this assessment.",
@@ -6170,6 +6514,14 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLoginSignInWorked: "Your sign-in worked — you are simply in the wrong place.",
     ofcLoginUseAgentApp: "Field agents collect revenue in the PSIRS agent app, which works offline and holds your taxpayers, assessments and commission. This portal is for revenue, finance and oversight officers.",
     ofcLoginOpenAgentApp: "Open the agent app",
+    ofcNavFieldWork: "Your field work",
+    ofcFieldWorkTitle: "You are signed in as a field agent",
+    ofcFieldWorkBody: "This portal is where the State administers revenue. You are welcome in it, and the few things here that belong to your work are listed below.",
+    ofcFieldWorkToolsHeading: "Your collection tools are in the agent app",
+    ofcFieldWorkToolsBody: "Enumeration, assessment, collection, your groups and your commission all live in the PSIRS agent app, which works offline. Nothing on this portal replaces it.",
+    ofcFieldWorkNoLink: "Ask your supervisor for the address of the agent app on this deployment.",
+    ofcFieldWorkHereHeading: "What this portal holds for you",
+    ofcFieldWorkHereBody: "The rate catalogue and the presumptive schedules — the figures you quote at a stall. They are read-only here, and they are the same ones the agent app uses.",
     shellSyncFailed: "Your saved records could not be sent to PSIRS. They are still on this phone.",
     grpNameHint: "As the group itself gives it",
     grpCommunityHint: "Where the group meets. Optional.",
@@ -6180,6 +6532,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     stepUpAuthoriseFailed: "Could not authorise this.",
     pubVerdictValid: "VALID",
     pubVerdictAcknowledgement: "VALID — NOT A RECEIPT",
+    pubVerdictInvoice: "VALID — AN INVOICE, NOT A RECEIPT",
     pubVerdictReversed: "REVERSED",
     pubVerdictNotFound: "NOT FOUND",
     pubVerdictInvalid: "INVALID",
@@ -6263,6 +6616,23 @@ export const translations: Record<Language, TranslationDictionary> = {
     colNeedBaseAmount: "Enter the amount the assessment is based on, in naira.",
     colNoTin: "No TIN",
     colBasisAmountHint: "For example turnover, income or contract value. The charge itself is set by government.",
+    colMeasureHint: "What this charge is worked out from. Enter it as a number, for example 15.5.",
+    colNeedMeasure: "Enter {{name}} as a number, zero or more.",
+    colFiFloorAreaSqm: "Floor area (square metres)",
+    colFiLandAreaSqm: "Plot area (square metres)",
+    colFiSignAreaSqm: "Size of the sign (square metres)",
+    colFiFrontageMetres: "Frontage onto the road (metres)",
+    colFiRooms: "Number of rooms",
+    colFiSeats: "Number of seats",
+    colFiEmployees: "Number of employees",
+    colFiVehicles: "Number of vehicles",
+    colFiAnimals: "Number of animals",
+    colFiStalls: "Number of stalls",
+    colFiMachines: "Number of machines",
+    colFiMonths: "Number of months",
+    colFiDays: "Number of days",
+    colFiTonnes: "Weight (tonnes)",
+    colFiRenewalPeriodMonths: "Renewal period (months)",
     colTaxpayerLabel: "Taxpayer",
     colRevenueLabel: "Revenue",
     colGovernmentRevenue: "Government revenue",
@@ -6294,6 +6664,24 @@ export const translations: Record<Language, TranslationDictionary> = {
     colOwesUnknown: "Their open invoices could not be read",
     colOwesUnknownBody: "Nothing here says they owe nothing; it says the platform could not tell you. Raising a charge now risks charging twice for the same levy.",
     colTakeThisPayment: "Take this payment",
+    colNeedsReissue: "Lapsed — it has to be issued again before it can be paid.",
+    colPeriodClosedReissue: "Raised in a month that has been closed — it has to be issued again before it can be paid.",
+    colPeriodClosedTitle: "This bill’s month has been closed",
+    colPeriodClosedBody: "No money has been taken. The month it was raised in has been closed, so it cannot be paid as it stands — issue it again, for the same amount and the same deadline, to take the payment.",
+    colUnderReviewTitle: "Payment held for review",
+    colUnderReviewBody: "The payment system reported a different amount from this bill, so the payment is held for review and no receipt has been issued. Do not collect payment again. Check its status later: it is completed, or ended, when the payment system answers again.",
+    colIssueAgain: "Issue this bill again",
+    colIssuingAgain: "Issuing…",
+    colLapsedTitle: "This bill has lapsed",
+    colLapsedBody: "No money has been taken. It can no longer be paid as it stands — issue it again, for the same amount, to take the payment.",
+    colReplacedTitle: "This bill was issued again",
+    colReplacedBody: "No money was taken against this one. Take the payment against the new bill.",
+    colOpenReplacement: "Open the new bill",
+    colReversedTitle: "This payment was reversed",
+    colReversedOwedBody: "The money went back to the payer, so the receipt no longer stands and the bill is owed again. Issue it again to collect it.",
+    colReversedWithdrawnBody: "The money went back to the payer and the bill was withdrawn. Nothing is owed on it.",
+    colUnderObjection: "Under objection",
+    colUnderObjectionBody: "the trader has formally disputed this estimate. PSIRS is not pursuing it while the objection is decided, so do not ask for this payment.",
     colChargeRaisedTitle: "The charge was raised. The payment was not.",
     colChargeRaisedBody:
       "Transaction {{reference}} now exists and the taxpayer owes it. Do not work this out again — a second attempt raises a second charge for the same thing, and both would have to be paid. Open the transaction to give them the invoice or to start the payment again.",
@@ -6683,6 +7071,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     moreNoReceipts: "No receipts yet.",
     moreSavedRecords: "Saved records on this device",
     moreNothingWaiting: "Nothing is waiting to be sent.",
+    moreSavedRecordsUnreadable: "The saved records on this device could not be read",
+    moreSavedRecordsUnreadableBody: "This does not mean nothing is waiting. Captures made offline may still be on this device. Keep it, do not clear its data, and report this to PSIRS support.",
     moreSavedOnPhone: "Saved on this phone",
     moreVehicleRenewal: "Vehicle particulars renewal",
     moreSearchVehicle: "Search vehicle",
@@ -6717,7 +7107,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     grpRecorded: "Recorded",
     grpWaitingOfficer: "Waiting for an officer",
     grpAskLeaderConfirm: "Ask the leader to confirm",
-    grpSendToLeader: "Send this to the leader",
+    grpSentToLeader: "Sent to the leader’s phone",
+    grpSentToLeaderBody: "The confirmation link went by text message to {{phone}}, the leader’s number on the group’s record. It is not shown here, because the leader is the one who confirms the members you recorded.",
     grpNoAssessment: "This does not assess anybody",
     authSignInTitle: "Sign in to continue",
     authSignIn: "Sign in",
@@ -6973,6 +7364,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubVerifyAction: 'Verify',
     pubVerifyChecking: 'Checking…',
     pubVerifyReceiptNumber: 'Receipt number',
+    pubVerifyDocumentNumber: 'Document number',
+    verifyInvoicePayable: 'This is a genuine PSIRS invoice, and it can still be paid.',
+    verifyInvoicePaid: 'This is a genuine PSIRS invoice, and it has been paid. Nothing more is owed on it.',
+    verifyInvoiceReplaced: 'This invoice was replaced by a new one for the same amount and can no longer be paid. Pay against the new invoice, not this one.',
+    verifyInvoiceWithdrawn: 'This invoice was withdrawn and nothing is owed on it. Do not pay against it.',
+    verifyInvoiceLapsed: 'This is a genuine PSIRS invoice, but its payment deadline has passed and it cannot be paid as it stands. A revenue agent or PSIRS office can issue it again for the same amount.',
+    verifyInvoiceReissueNeeded: 'This is a genuine PSIRS invoice, still in date, but it cannot be paid as it stands. A revenue agent or PSIRS office can issue it again for the same amount.',
     pubVerifyRevenueType: 'Revenue type',
     pubVerifyAmount: 'Amount',
     pubVerifyIssued: 'Issued',
@@ -7059,10 +7457,28 @@ export const translations: Record<Language, TranslationDictionary> = {
       'Try again in a few minutes. Do NOT register this taxpayer as a new TIN applicant — that would create a second TIN for someone who already has one.',
     nsTinNotFound:
       'Check the number against the taxpayer’s own document first — a mistyped digit is the usual cause. Only if they have never had a TIN, go back and register them without one; the platform will apply for a new TIN for them.',
+    nsTaxpayerAlreadyExists: 'Open the existing record and continue from there.',
+    nsPossibleDuplicateTaxpayer:
+      'Register them as new only if none of the matches is the same person.',
     nsKycProviderUnavailable: 'Try again in a few minutes. Your application is unchanged.',
     nsPaymentUnconfirmed: 'Open the transaction from your history to see its current status.',
     nsPaymentFailed: 'Start the payment again, or choose a different payment method.',
     nsAgentNotCleared: 'Open "My Application" to see what is still outstanding.',
+    nsNoTaxPayable:
+      'Do not increase the amount to make the assessment go through. Tell the taxpayer there is nothing to pay on this.',
+    nsInvoiceAlreadyPaid:
+      'Open the receipt from the transaction history.',
+    nsNoEffectiveRate:
+      'Government has to approve a rate before this can be collected. A PSIRS officer can have it looked at.',
+    ofcStepUpNeeded: 'This action needs a one-time code before it can go through.',
+    ofcErrPeriodClosed: '{{period}} is already closed.',
+    ofcErrPeriodOpen: '{{period}} is already open.',
+    ofcErrPeriodNotOpen: '{{period}} is not open. Its status is: {{state}}.',
+    ofcErrAlreadySigned: '{{report}} has already been signed.',
+    ofcErrAlreadyWithdrawn: '{{report}} is already withdrawn.',
+    ofcErrSampleCompleted: 'This sample has been completed and its findings are final.',
+    ofcErrSampleAlreadyComplete: 'This sample is already complete.',
+    ofcNsSampleCompleted: 'Draw a new sample to examine these transactions again.',
     ofcOvJobHealthy: 'Running on schedule.',
     ofcOvJobRunning: 'Running now.',
     ofcOvJobOverdue: 'Has not started when it should have. The schedule itself may have stopped.',
@@ -7154,6 +7570,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubStmtReturnedRow: "returned to you",
     pubStmtForWhat: "What it went to",
     pubStmtEach: "Each payment",
+    pubStmtPartial: "The totals above cover the whole period, but only your {{n}} most recent payments are listed below. The earliest part of the period is not on the list, so these lines will not add up to the total. Ask for a shorter period to see the rest.",
     pubStmtNothing: "Nothing was paid in this period.",
     pubStmtFooter: "Keep your receipts. If this list and your receipts disagree, take them to a PSIRS office — the receipt is the proof, this is the record.",
     pubCitizenFooter: 'For questions about your account, visit any PSIRS office or contact an authorised revenue agent.',
@@ -7266,7 +7683,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFnRecordHowThisException: 'Record how this exception was resolved (at least 10 characters):',
     ofcFnWhatDidTheBank: 'What did the bank say? (at least 10 characters)',
     ofcFnWhatTheVarianceTurned: 'What the variance turned out to be',
-    ofcGpConfirmationLinkCreated: 'Confirmation link created.',
+    ofcGpConfirmationLinkCreated: 'Confirmation link sent to the group leader.',
     ofcKyOpenAndReview: 'Open and review',
     ofcKyReviewedOn: 'Reviewed on',
     ofcKyTheAccessLogCould: 'The access log could not be read.',
@@ -7407,6 +7824,7 @@ export const translations: Record<Language, TranslationDictionary> = {
 
     paymentFailed: 'Biyan kudin bai yi nasara ba',
     paymentFailedBody: 'Ba a karbi kudi daga mai biyan haraji ba. Kana iya sake fara biyan.',
+    paymentEndedBody: 'Ba a karbi kudi daga mai biyan haraji ba. Ba za a iya biyan wannan takardar biya yanzu ba.',
     paymentUnconfirmed: 'Ba a tabbatar da biyan kudin ba tukuna',
     paymentUnconfirmedBody:
       'BA A nuna an karbi wannan kudin ba. Kada ka ce wa mai biyan haraji ya sake biya \u2014 ka sake dubawa nan da dan lokaci.',
@@ -7454,6 +7872,50 @@ export const translations: Record<Language, TranslationDictionary> = {
       'Ba a ba ka izinin karbar haraji ba tukuna. Dole a kammala bukatarka a kuma amince da ita.',
     errDeviceNotRegistered:
       'Ba a yi rajistar wannan na’ura a asusunka ba. Ka yi rajistarta kafin ka karbi komai.',
+    errTaxpayerNotActive:
+      'An rufe rikodin wannan mai biyan haraji, don haka ba za a kimanta masa wani sabon abu ba. Kowane ofishin PSIRS zai iya mayar da shi cikin rajista.',
+    errRevenueItemInactive:
+      'Ba a karbar wannan haraji ko kudin shiga a yanzu. Ka zabi wani, ko ka tambayi jami’in PSIRS.',
+    errRevenueItemNotForTaxpayerType:
+      'Wannan haraji ko kudin shiga bai shafi irin wannan mai biyan haraji ba. Ka duba ko rikodin na mutum ne ko na kasuwanci.',
+    errRevenueItemNotInLga:
+      'Ba a karbar wannan haraji ko kudin shiga a karamar hukumar wannan mai biyan haraji ba.',
+    errNoTaxPayable:
+      'Babu harajin da ya kamata a biya kan adadin da aka bayyana, don haka babu takardar biya da za a yi. Lissafin ba kuskure ba ne — wannan mai biyan haraji yana kasa da iyakar.',
+    errAssessmentAmountZero:
+      'Adadin ya zo babu daga lissafin da aka shigar. Ka duba su, kuma ka gaya wa jami’in PSIRS idan sun dace — watakila kudin ne ba daidai ba, ba lissafin ba.',
+    errInvoiceAlreadyPaid:
+      'An riga an biya wannan takardar biya. Kada ka sake karbar kudi.',
+    errTaxpayerAlreadyExists:
+      'An riga an yi rajistar wannan mutumin a matsayin {{subject}}. Rikodi na biyu zai zama kwafi.',
+    errPossibleDuplicateTaxpayer:
+      'An sami rikodin da zai yiwu na wannan mutumin ne. Ka duba shi kafin ka bude sabuwar rajista.',
+    errTinServiceUnavailable:
+      'Ba a iya isa ga sabis din TIN na PSIRS ba, don haka ba a tabbatar da wannan TIN ba. Ba a yi rajistar kowa ba.',
+    errTinNotFound: 'Ba a sami TIN {{tin}} a sabis din TIN na PSIRS ba.',
+    errAttestationNotSent: 'Ba a iya tura hanyar tabbatarwa ga shugaban kungiyar ba, don haka ba a yi wata bukata ba. Ka sake gwadawa nan gaba.',
+    errInvoiceExpired:
+      'Wannan takardar biya ta kare. A sake fitar da ita daga jerin takardun biyan mai biyan haraji.',
+    errInvoicePeriodClosed:
+      'An fitar da wannan takardar biya a watan da aka rufe. Ba a karbi kudi ba. A sake fitar da ita daga jerin takardun biyan mai biyan haraji, sannan a karbi biyan.',
+    errInvoiceStillPayable: 'Har yanzu ana iya biyan wannan takardar biya. A karbi biya a kanta.',
+    errInvoiceUnderObjection:
+      'Ana kalubalantar wannan takardar biya, kuma an dakatar da karba har sai an yanke hukunci kan kalubalen.',
+    errInvoicePaymentInProgress:
+      'Ana kan sarrafa wani biya da aka yi kan wannan takardar biya. A duba matsayinsa tukuna, kuma kada a sake karbar kudi.',
+    errInvoiceWithdrawn: 'An janye wannan takardar biya. Babu bashin komai a kanta.',
+    errInvoicePartPaid:
+      'An biya wani bangare na wannan takardar biya, don haka ba za a iya sake fitar da ita ba. A tambayi jami’in PSIRS.',
+    errVehicleRenewalClosed:
+      'Wannan takardar biya ta sabunta abin hawa ce da ta kare, don haka ba za a iya sake fitar da ita ba. A tambayi jami’in PSIRS.',
+    errInvoiceNotPayable:
+      'Wannan takardar biya tana {{state}} kuma ba za a iya biyanta ba. Idan ta kare, a sake fitar da ita; idan an maye gurbinta, a karbi biya a kan sabuwar takardar.',
+    errNoEffectiveRate:
+      'Babu kudin da Gwamnati ta amince da shi a aiki kan wannan haraji ko kudin shiga, don haka ba za a iya kimanta komai kan sa ba. Ka zabi wani, ko ka gaya wa jami’in PSIRS.',
+    errPaymentAlreadyVerified:
+      'An riga an biya wannan kudin kuma an tabbatar da biyan. Kada ka sake karbar kudi.',
+    errTransactionNotPayable:
+      'Wannan ma’amala tana {{state}} kuma ba za ta karbi biya a yanzu ba.',
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
@@ -7668,6 +8130,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumInvited: "An gayyata",
     enumInvoice: "Takardar biya",
     enumInvoiceGenerated: "An fitar da takardar biya",
+    enumInvoiceWithdrawal: "Janye takardar biya da aka fitar bisa kuskure",
     enumInvoiced: "An fitar da takardar biya",
     enumIssued: "An bayar",
     enumKilogram: "Kilogiram",
@@ -7693,6 +8156,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumMatched: "Ya dace",
     enumMedium: "Matsakaici",
     enumMerged: "An hade",
+    enumMismatch: "Bai dace ba",
     enumMigration: "Canja bayanai",
     enumMining: "Hakar ma’adinai",
     enumMissingPayment: "Babu biyan kudi",
@@ -7753,6 +8217,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumQuarterly: "Kowane wata uku",
     enumQueued: "Yana layi",
     enumRead: "An karanta",
+    enumChange: "An canza",
+    enumIncentiveStanding: "Matsayin tallafi",
+    enumPaymentHistory: "Tarihin biyayya",
+    enumTaxObligations: "Wajiban haraji",
+    enumTaxpayerRecord: "Rikodin mai biyan haraji",
+    enumOutstandingBills: "Bashin da ba a biya ba",
     enumReadyForReview: "A shirye don dubawa",
     enumRealProperty: "Filaye da gine-gine",
     enumReceipt: "Rasit",
@@ -7973,6 +8443,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFnTransferFailed: "Turawa ta gaza",
     ofcFnMakerChecker: "Amincewar mai yi da mai duba",
     ofcFnMakerCheckerBody: "Jami’in da ya daga bukata ba zai taba duba ta ko ba ta izini ba. Juyarwa tana bukatar jami’i na uku ya aiwatar, tare da karin tantancewa.",
+    ofcFnQueueStopsShort: "Wannan jerin ya tsaya kafin karshe",
+    ofcFnQueueStopsShortBody: "Bukatu {{matched}} sun dace da wannan tacewa, kuma jerin yana nuna sababbi {{shown}} kawai, don haka mafi dadewa — wadanda suka fi jira — ba sa cikinsa. A tace bisa nau’i domin a gan su.",
     ofcFnApproved: "An amince",
     ofcFnRejected: "An ki",
     ofcFnExecuted: "An aiwatar",
@@ -8087,6 +8559,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOvOneAgentCollected: "Duk abin da wakili daya ya karba",
     ofcOvReceiptsOneItem: "Rasit din da aka bayar a karkashin nau’in haraji daya",
     ofcOvWhoLookedAtRecord: "Wa ya duba rikodin mai biyan haraji daya",
+    ofcOvWhoSearchedTheRegister: "Wa ya ke bincike a cikin rajista",
     ofcOvJob: "Aiki",
     ofcOvRuns: "Gudanarwa",
     ofcOvLastSucceeded: "Nasara ta karshe",
@@ -8221,6 +8694,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     supNoMessagesYet: "Babu sako tukuna",
     ofcOsQueueUnreadable: "Ba a iya karanta wani jeri ba",
     ofcOsQueueUnreadableBody: "Ba a iya lodin jeri {{n}} a wannan shafi ba, don haka abin da ake nunawa ba shi ne cikakken hoto ba. Sashe mara komai a kasa ba yana nufin jerin babu komai ba — yana nufin babu wanda ke iya ganin sa. Ka sake lodi, kuma ka daga kara idan bai warware ba.",
+    ofcOsListsArePartial: "Wasu jerin a kasa sun tsaya kafin karshe",
+    ofcOsListsArePartialBody: "Lambobin da ke sama sun rufe duk abin da ya rage. Wadannan jerin ba su rufe ba: {{queues}}. Kowanne yana nuna dari da suka fi tsufa, don haka karshen jerin shi ne wurin da aka yanke shi ba wurin da jerin ya kare ba. Ka yi aiki da shi sannan ka sake lodi domin ka ga dari na gaba.",
     ofcUaCoversNothing: "{{name}} yanzu ba shi da wani yanki kuma ba zai ga lambobin kudaden shiga ba.",
     ofcUaCoversTerritories: "{{name}} yanzu yana rufe yankuna {{n}}.",
     ofcFaMinimumNow: "Mafi karancin sigar yanzu {{version}} ce.",
@@ -8278,8 +8753,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcUsEvents: "Abubuwan da suka faru",
     ofcUsScreen: "Shafi",
     ofcUsViews: "Kallo",
-    ofcGpConfirmationLinkFor: "Hanyar tabbatarwa ta {{group}}",
+    ofcGpLinkSentFor: "An tura hanyar tabbatarwa ta {{group}}",
     ofcSpOpenComplaints: "Korafe-korafe {{n}} a bude kan hali ko kudi",
+    ofcSpComplaintsBeyondThisPage: "Daga cikinsu, {{n}} ba sa cikin teburin da ke kasa, wanda ke nuna wadanda suka fi gaggawa da na baya-bayan nan. A tace da nau’i domin a bi sauran.",
     ofcSpAboutRevenue: "Wadannan rahotanni ne kan yadda aka karbi haraji, ba kan dandalin ba. An jera su a farko a kasa.",
     ofcSpSupportQueue: "Jerin gwanon taimako",
     ofcSpQueueIntro: "An jera bisa muhimmanci. Ana amsa rahoto a cikin zaren sa — canza matsayi kadai ba ya gaya wa wanda ya kai rahoton komai.",
@@ -8305,7 +8781,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcSpPriority: "Muhimmanci",
     ofcSpReportedBy: "Wanda ya kai rahoto",
     ofcSpReplies: "Amsoshi",
-    ofcGpLeaderCodeOnce: "Ka tura wannan ga shugaban kungiyar. Ana nuna shi sau daya — PSIRS na adana sa hannunsa kawai, don haka ba za a iya sake karanta shi ba. Ka nemi wani idan ya bata.",
+    ofcGpLinkSentBody: "An tura ta ta sakon tes zuwa {{phone}}, lambar shugaba a bayanan kungiyar. Ba a nuna ta a nan ba: shugaba kadai ke iya tabbatar da jerin, kuma wakilin da ya rubuta mambobin bai kamata ya iya ba. Ka sake nema idan shugaba bai karba ba.",
     ofcGpWaitingDecision: "Ana jiran shawara",
     ofcGpWaitingIntro: "Wakili ya rubuta wadannan kungiyoyi a filin aiki. Ba za a iya kara mambobi ba sai an amince da kungiya, don haka babu abin da ke faruwa yayin da suke nan.",
     ofcGpDistributions: "Rabo",
@@ -8321,6 +8797,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPhForWhat: "Abin da aka biya",
     ofcPhLevy: "Haraji ko kudin shiga",
     ofcPhEachPayment: "Kowane biya",
+    ofcPhPartial: "Jimillar da ke sama ta kunshi dukan lokacin, amma wannan jerin ya tsaya a biyayya {{n}}: na baya-bayan nan {{n}} kadai ke ciki kuma farkon lokacin ba ya ciki. Ka rage kwanakin kafin ka gaya wa mai biyan haraji jimlar layukansa.",
     ofcPhWhen: "Yaushe",
     ofcPhPeriod: "Lokaci",
     ofcPhAmount: "Adadi",
@@ -8420,6 +8897,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcEnReject: "Ki kalubalen",
     ofcEnReasonFirst: "Ka fara rubuta dalili.",
     ofcEnNoObjections: "Babu kiyasin da ake kalubalanta.",
+    ofcEnBill: "Takardar biya",
+    ofcEnBillOwed: "Ba a biya ba",
+    ofcEnBillPaid: "An biya {{amount}}. Amincewa da kalubalen zai nemi a mayar da kudin.",
+    ofcEnBillPaying: "Ana kan biya. A yanke hukunci bayan biyan ya kammala.",
+    ofcRefundAsked: "An nemi a mayar da {{amount}} na {{reference}}. Wani jami’i ne zai amince da shi daga jerin abubuwan da ke jiran amincewa.",
     ofcPsPublish: "Wallafawa",
     ofcPsPublishClass: "Wallafa matakin karamar hukuma",
     ofcPsPublishFigure: "Wallafa adadin jadawali",
@@ -8581,7 +9063,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcIgSince: "Tun",
     ofcIgPayableNow: "Ana iya biya yanzu",
     ofcIgPayableYes: "Eh",
-    ofcIgPayableNeedsReassessment: "A’a — yana bukatar sabon kimantawa",
+    ofcIgPayableNeedsReassessment: "A’a — sai an sake fitar da ita",
     ofcIgOwesNothing: "Ba sa bin jiha komai.",
     enumAsserted: "An yi ikirari",
     enumConfirmedByTaxpayer: "Mai biyan haraji ya tabbatar",
@@ -8598,14 +9080,15 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcArWithin30: "Kwana 30",
     ofcArCollectableNow: "Ana iya karba yanzu",
     ofcArTaxpayers: "Masu biyan haraji da ke bin bashi",
-    ofcArNeedsReassessment: "Yana bukatar sake kimantawa",
+    ofcArNeedsReassessment: "Sai an sake fitar da su",
     ofcArEndedElsewhere: "Bashin rikodin da aka rufe",
     ofcArWhoIsMissing: "Wanda ba ya cikin wannan jerin",
     ofcArInFlightExplained: "An bar duk wanda ke tsakiyar biya, don haka ana iya aiki da wannan jerin kamar yadda yake: an cire daftari {{n}} saboda ana biya a kansu yanzu. Ba za a kira wanda ke rike da rasit ba.",
     ofcArLapsedTitle: "Bashin da ba a iya biya kamar yadda yake",
-    ofcArLapsedExplained: "Daftari {{n}} sun wuce ranar karshen biya. Tsarin zai ki karbar kudi a kansu, don haka an kidaya su a sama amma ba a sa su cikin jerin kira ba — karba yana nufin fara sabon kimantawa.",
+    ofcArLapsedExplained: "Daftari {{n}} sun wuce ranar karshen biya. Tsarin zai ki karbar kudi a kansu, don haka an kidaya su a sama amma ba a sa su cikin jerin kira ba — karba yana nufin a fara sake fitar da takardar biyan, daga takardar kanta.",
     ofcArWhoToCall: "Wanda za a kira",
-    ofcArShowingLargest: "Ana nuna manyan bashi {{n}}. Ka rage ta LGA ko adadi domin ganin kasa.",
+    ofcArShowingLargest: "Ana nuna manyan bashi {{n}} daga cikin bashi {{m}} da ke wannan jerin. Ka rage ta LGA ko adadi domin ganin kasa.",
+    ofcArFiltersAreNarrower: "Jimillar hudu da ke sama sun kunshi kowa a wannan iyaka. Jerin da ke kasa ya fi kankanta: masu biyan haraji {{n}}, da ke bin {{amount}} tsakaninsu, sun dace da adadin da ranar karshe da ka nema.",
     ofcArOwedFor: "Bashin",
     ofcArDaysLeft: "Kwanakin da suka rage a biya",
     ofcArNoDeadline: "Babu ranar karshe",
@@ -8821,6 +9304,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPfFiguresCoverTopAgents: "Ana nuna wakilai {{n}} da suka fi karbar kudi, wanda shi ne duk abin da wannan rahoto ke bayarwa. Jimillar da ke sama ta kunshi su kadai — ba a lissafa wakilin da ke kasa da wannan layin ba, har da wanda ke da alamar zamba a bude. Jerin zamba yana nuna kowace alama.",
     ofcLvRollIsCapped: "Ana nuna {{n}} da aka fi sabon yin rajista da su, wanda shi ne duk abin da wannan bincike ke bayarwa. Duk wanda ya yi rajista tun da farko ba ya cikin wannan jerin — ka rage shi da karamar hukuma ko da harajin don ka gan su.",
     ofcOvAgentListIsCapped: "Wannan jerin yana dauke da wakilai {{n}} da aka fi sabon yin rajista da su. Wakilin da ya shigo kafin su ba za a iya zabar shi a nan ba, wanda hakan ya shafi yawancin tsofaffin wakilai.",
+    ofcAnswerStoppedAtCap:
+      'Wannan amsa ta tsaya a layuka {{n}} kuma na baya-bayan nan kadai ke ciki. Ba ita ce cikakkiyar amsar tambayar da ke sama ba.',
+    ofcListStoppedAtCap:
+      'Wannan jerin ya tsaya a layuka {{n}} kuma na baya-bayan nan kadai ke ciki. Farkon abin da ka nema ba ya cikin jerin — ka rage kwanakin ko tacewar don ka ga sauran.',
     ofcPfTaxpayersOnboarded: "Masu biyan haraji da aka shigar",
     ofcPfAgentsWorked: "Wakilan da suka yi aiki",
     ofcPfOpenFraudFlags: "Alamun zamba a bude",
@@ -9279,6 +9766,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcWbAltered: "An sauya",
     ofcWbAlteredTitle: "Wani rahoto a wannan shafi bai sake dacewa da lambar tantancewarsa ba",
     ofcWbAlteredBody: "Rahotanni {{n}} da ke kasa suna dauke da lambobin da ba su sake dacewa da lambar tantancewar da aka rubuta lokacin da aka kirkire su ba. Sa hannu a kan irin wannan rahoto bai shafi abin da yake nunawa yanzu ba. Wannan sauyi ne da aka yi a cikin bayanan kai tsaye, ba ta hanyar dandalin ba — kada ka dogara da wadannan lambobin, kuma ka daga kara.",
+    ofcWbChecksumReachTitle: "Binciken lambar tantancewa ya rufe wannan shafi kadai",
+    ofcWbChecksumReach: "Akwai wasu rahotanni {{n}} da ba a bincika ba. Binciken yana sake lissafin lambar tantancewar rahotannin da ke kasa, wadanda su ne na baya-bayan nan, don haka rahoton da aka sauya tun da can ba ya tada wani abu a nan. A tace da nau’i, ko a bude tsohon rahoto kai tsaye, domin a rufe shi.",
+    ofcWbListsStopShort: "Teburan da ke kasa sun tsaya kafin karshe",
+    ofcWbListsStopShortBody: "Lambobin da ke sama sun rufe komai. Wadannan teburan ba su rufe ba: {{lists}}. Kowanne yana nuna {{cap}} na baya-bayan nan, don haka karshen teburin shi ne wurin da aka yanke shi ba wurin da aikin ya kare ba. A tace domin a rage shi, ko a bude abin da ake bukata kai tsaye.",
     ofcWbNoReports: "Ba a samar da rahoto ba tukuna.",
     ofcWbGenerate: "Samar da rahoto",
     ofcWbGenerateHint: "Samar da rahoto yana daskarar da lambobin. Sa hannu mataki ne daban, kuma sau da yawa jami’i ne daban.",
@@ -9309,12 +9800,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPeClosingNote: "Abin da ake tabbatarwa",
     ofcPeReopenReason: "Dalilin sake budewa",
     ofcPeNotReady: "Bai shirya rufewa ba",
-    ofcPeNotReadyBody: "Rufewa a kan bambancin da ba a warware ba ko biyan da ke jira yana daskarar da adadin da aka riga aka san ba daidai ba ne. Wani lokaci shi ne daidai, kuma ba a taba yin sa a boye ba.",
+    ofcPeNotReadyBody: "Rufewa a kan bambancin da ba a warware ba, biyan da ke jira, ko karbar kudin da banki bai tura ba tukuna yana daskarar da adadin da ba daidai ba ne ko bai cika ba. Wani lokaci shi ne daidai, kuma ba a taba yin sa a boye ba.",
     ofcPeOverride: "Dalilin rufewa duk da haka",
     ofcPeFiguresUnknown: "Ba a iya karanta abin da wannan wata ke rike da shi ba",
     ofcPeFiguresUnknownBody: "Dandalin bai iya kirga sauran matsalolin da ba a warware ba ko biyan da ke jira na wannan wata ba, don haka ba zai iya gaya maka ko lambar ta tabbata ba. Watakila ta tabbata. Har yanzu ana iya rufewa, kuma yana bukatar dalili a rubuce, domin wata da aka rufe ba tare da sani ba, an rufe shi ne a kan duk abin da ke ciki.",
     ofcPeUnreconciled: "Bambancin da ba a warware ba",
     ofcPePendingPayments: "Biyan da ke jira",
+    ofcPeAwaitingSettlement: "Karbar kudin da bai isa asusun gwamnati ba tukuna",
     ofcPeFiguresNow: "Abin da watan ke da shi yanzu",
     ofcPeFrozen: "An daskare a rufewa",
     ofcPeReopenSeparate: "Sake budewa na mai gudanarwa ne, ba na wanda ya rufe ba. Idan jami’in da ya rufe littattafan zai iya sake budewa, hakan na kawar da yawancin dalilin kulle lokacin.",
@@ -9525,6 +10017,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCwDepartment: "Aika wa",
     ofcCwAssignee: "Ba wa",
     ofcCwNobody: "Babu kowa tukuna",
+    ofcCwTableStopsShort: "Teburin da ke kasa ya tsaya kafin karshe",
+    ofcCwTableStopsShortBody: "Lambobin da ke sama sun rufe duk shari’ar da wannan tacewa ta samu. Teburin yana nuna {{shown}} daga {{matched}} — wadanda suka fi gaggawa da wadanda lokacinsu ya fi kusa — don haka layin karshe shi ne wurin da aka yanke shi ba wurin da aikin ya kare ba. A rage tacewa domin a ga sauran.",
     ofcCwAnyDepartment: "Babu sashe",
     ofcCwDue: "Ranar karshe",
     ofcCwOnlyOpen: "Kararrakin da ba a rufe ba kadai",
@@ -9574,6 +10068,17 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcT3After: "Bayan",
     ofcT3CasesAndFlags: "Kararraki da alamun hadari",
     ofcT3OpenCaseAbout: "Bude kara game da wannan ma’amala",
+    ofcT3ReverseTitle: "A nemi a mayar da wannan biyan",
+    ofcT3ReverseHint: "Za a mayar wa mai biya da dukan kudin, a soke rasit dinsa kuma a dawo da kwamishan din wakili. Jami’i na biyu ne zai yanke hukunci, kuma na uku ne zai aiwatar.",
+    ofcT3ReverseAmount: "Adadin da za a mayar: {{amount}}",
+    ofcT3ReverseWhose: "Laifin wane ne",
+    ofcT3ReverseGovernment: "Na Gwamnati — kwafi, ko caji a kan bayanan da ba daidai ba. Za a janye takardar biyan.",
+    ofcT3ReverseTaxpayer: "Na mai biya — bankinsu ya janye biyan, ko sun nema. Za a ci gaba da bin takardar biyan.",
+    ofcT3ReverseGateway: "Na hanyar biya. Za a ci gaba da bin takardar biyan.",
+    ofcT3ReverseReason: "Abin da ya faru",
+    ofcT3ReverseSend: "Aika don a yanke hukunci",
+    ofcT3ReverseSending: "Ana aikawa…",
+    ofcT3ReverseSent: "An aika. Jami’i na biyu ne zai yanke hukunci, kuma na uku ne zai aiwatar.",
     ofcT3Withheld: "Ba a nuna wa matsayinka ba",
     ofcT3WithheldBody: "Wadannan sassan suna nan amma izininka bai kai gare su ba. An ambace su domin kada a dauki sashe mara komai a matsayin rijista mara komai.",
     ofcT3NoPayment: "Ba a yi yunkurin biyan kudi ba.",
@@ -9592,8 +10097,23 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcChIssued: "An fitar",
     ofcChPayableUntil: "Ana iya biya har zuwa",
     ofcChLapsedTitle: "Lokacin ya wuce",
-    ofcChLapsed: "Wannan takardar biya ta kare a {{date}}. Dandalin zai ki karbar kudi a kanta, don haka sai an sabunta tantancewa kafin a iya karba.",
-    ofcChLapsedNoDate: "Wannan takardar biya ta kare. Dandalin zai ki karbar kudi a kanta, don haka sai an sabunta tantancewa kafin a iya karba.",
+    ofcChLapsed: "Wannan takardar biya ta kare a {{date}}. Dandalin zai ki karbar kudi a kanta, don haka sai an sake fitar da ita kafin a iya karbar komai.",
+    ofcChLapsedNoDate: "Wannan takardar biya ta kare. Dandalin zai ki karbar kudi a kanta, don haka sai an sake fitar da ita kafin a iya karbar komai.",
+    ofcChStrandedTitle: "Ana bin kudin kuma bayan mayarwa",
+    ofcChStranded: "An mayar da wani biya da aka yi kan wannan takardar biya saboda dalilin da ba na Gwamnati ba, don haka ana bin kudin kuma — amma tsohon cajinta ba zai iya karbar biya ba. A sake fitar da ita don a karba.",
+    ofcChMonthClosedTitle: "An fitar da ita a watan da aka rufe",
+    ofcChMonthClosed: "Wa’adin wannan takardar biya bai kare ba, amma an rufe {{period}}, don haka ba za a iya biyanta yadda take ba. A sake fitar da ita — a kan adadin kudi daya da wa’adi daya — sannan a karbi biyan a kan sabuwar takardar biya.",
+    ofcChReplacedTitle: "An sake fitar da ita",
+    ofcChReplaced: "An maye gurbin wannan takardar biya da {{number}}, a kan adadin kudi daya. Ana karbar kudi a kan sabuwar takardar, ba a kan wannan ba.",
+    ofcChOpenReplacement: "Bude {{number}}",
+    ofcChReissue: "Sake fitar da wannan takardar biya",
+    ofcChReissuing: "Ana fitarwa…",
+    ofcChWithdrawTitle: "An fitar da ita bisa kuskure?",
+    ofcChWithdrawHint: "Idan bai kamata a fitar da wannan takardar biya ba — kwafi ce, ko caji a kan bayanan da ba daidai ba — a nemi a janye ta. Wani jami’i ne zai yanke hukunci, kuma babu abin da zai canza kafin a yanke shi.",
+    ofcChWithdrawReason: "Abin da ba daidai ba a kanta",
+    ofcChWithdrawSend: "A nemi a janye ta",
+    ofcChWithdrawSending: "Ana aikawa…",
+    ofcChWithdrawSent: "An aika. Sai an samu amincewar wani jami’i kafin a janye takardar biyan.",
     ofcChHowComputed: "Yadda aka kai ga wannan adadi",
     ofcChTraceFrozen: "An rubuta shi lokacin da aka yi tantancewar, kuma ba a canza shi ba tun daga nan. Wannan shi ne abin da lissafin ya yi a ranar, ba abin da zai yi a yau ba.",
     ofcChNoTrace: "Ba a rubuta wani lissafi a kan wannan tantancewa ba.",
@@ -9648,6 +10168,14 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLoginSignInWorked: "Shigarka ta yi aiki — kawai ba wurin da ya dace ba ne.",
     ofcLoginUseAgentApp: "Wakilan filin aiki suna karbar haraji a manhajar wakilai ta PSIRS, wadda ke aiki ba tare da layi ba kuma tana rike da masu biyan harajinka, kimarka da kwamishan dinka. Wannan shafin na jami’an haraji, kudi da sa ido ne.",
     ofcLoginOpenAgentApp: "Bude manhajar wakilai",
+    ofcNavFieldWork: "Aikinka na fili",
+    ofcFieldWorkTitle: "Ka shiga a matsayin wakilin fili",
+    ofcFieldWorkBody: "Wannan shafin shi ne inda Jiha ke tafiyar da harkar haraji. Kana da izinin shiga, kuma abubuwa kadan da suka shafi aikinka suna kasa.",
+    ofcFieldWorkToolsHeading: "Kayan aikin karbar harajinka suna a manhajar wakilai",
+    ofcFieldWorkToolsBody: "Rajista, kimantawa, karbar kudi, kungiyoyinka da kwamishan dinka duk suna a manhajar wakilai ta PSIRS, wadda ke aiki ba tare da layi ba. Babu abin da ke wannan shafin da zai maye gurbinta.",
+    ofcFieldWorkNoLink: "Ka tambayi shugabanka adireshin manhajar wakilai a wannan na’urar.",
+    ofcFieldWorkHereHeading: "Abin da wannan shafin ke da shi a gare ka",
+    ofcFieldWorkHereBody: "Jadawalin kudade da jadawalin kiyasi — adadin da kake fada a wurin kasuwanci. Anan karatu kawai ake yi, kuma su ne daidai wadanda manhajar wakilai ke amfani da su.",
     shellSyncFailed: "Ba a iya tura rikodin da ka adana zuwa PSIRS ba. Suna nan a wannan wayar.",
     grpNameHint: "Kamar yadda kungiyar da kanta ta bayar",
     grpCommunityHint: "Inda kungiyar ke haduwa. Ba dole ba.",
@@ -9658,6 +10186,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     stepUpAuthoriseFailed: "Ba a iya bada izinin wannan ba.",
     pubVerdictValid: "INGANTACCE",
     pubVerdictAcknowledgement: "INGANTACCE — BA RASIT BA NE",
+    pubVerdictInvoice: "INGANTACCE — TAKARDAR BIYA CE, BA RASIT BA",
     pubVerdictReversed: "AN JUYAR DA SHI",
     pubVerdictNotFound: "BA A SAMU BA",
     pubVerdictInvalid: "BA INGANTACCE BA",
@@ -9741,6 +10270,23 @@ export const translations: Record<Language, TranslationDictionary> = {
     colNeedBaseAmount: "Ka shigar da kudin da aka gina kimar a kansa, da naira.",
     colNoTin: "Babu TIN",
     colBasisAmountHint: "Misali kudin shiga, riba ko darajar kwangila. Gwamnati ce ke saita kudin da kansa.",
+    colMeasureHint: "Abin da ake lissafa wannan kudin da shi. Ka shigar da shi a matsayin lamba, misali 15.5.",
+    colNeedMeasure: "Ka shigar da {{name}} a matsayin lamba, sifili ko fiye.",
+    colFiFloorAreaSqm: "Girman dakin kasuwanci (murabba’in mita)",
+    colFiLandAreaSqm: "Girman fili (murabba’in mita)",
+    colFiSignAreaSqm: "Girman allon talla (murabba’in mita)",
+    colFiFrontageMetres: "Tsawon gaba a bakin hanya (mita)",
+    colFiRooms: "Yawan dakuna",
+    colFiSeats: "Yawan kujeru",
+    colFiEmployees: "Yawan ma’aikata",
+    colFiVehicles: "Yawan motoci",
+    colFiAnimals: "Yawan dabbobi",
+    colFiStalls: "Yawan rumfuna",
+    colFiMachines: "Yawan na’urori",
+    colFiMonths: "Yawan watanni",
+    colFiDays: "Yawan kwanaki",
+    colFiTonnes: "Nauyi (tan)",
+    colFiRenewalPeriodMonths: "Tsawon lokacin sabuntawa (watanni)",
     colTaxpayerLabel: "Mai biyan haraji",
     colRevenueLabel: "Haraji",
     colGovernmentRevenue: "Harajin gwamnati",
@@ -9772,6 +10318,24 @@ export const translations: Record<Language, TranslationDictionary> = {
     colOwesUnknown: "Ba a iya karanta takardun biyansu ba",
     colOwesUnknownBody: "Wannan ba ya nufin ba su da bashi; yana nufin dandalin bai iya gaya maka ba. Yin sabon caji yanzu na iya haifar da cajin abu daya sau biyu.",
     colTakeThisPayment: "Karbi wannan biyan",
+    colNeedsReissue: "Ta kare — sai an sake fitar da ita kafin a iya biyanta.",
+    colPeriodClosedReissue: "An fitar da ita a watan da aka rufe — sai an sake fitar da ita kafin a iya biyanta.",
+    colPeriodClosedTitle: "An rufe watan wannan takardar biya",
+    colPeriodClosedBody: "Ba a karbi kudi ba. An rufe watan da aka fitar da ita, don haka ba za a iya biyanta yadda take ba — a sake fitar da ita, a kan adadin kudi daya da wa’adi daya, don a karbi biyan.",
+    colUnderReviewTitle: "An rike biyan don dubawa",
+    colUnderReviewBody: "Na’urar biyan kudi ta ba da adadin da ya bambanta da na wannan takardar biya, don haka an rike biyan don dubawa kuma ba a fitar da rasit ba. Kada a sake karbar kudi. A duba matsayinsa daga baya: za a kammala shi, ko a kare shi, idan na’urar biyan kudi ta sake amsawa.",
+    colIssueAgain: "Sake fitar da wannan takardar biya",
+    colIssuingAgain: "Ana fitarwa…",
+    colLapsedTitle: "Wannan takardar biya ta kare",
+    colLapsedBody: "Ba a karbi kudi ba. Ba za a iya biyanta yadda take ba — a sake fitar da ita, a kan adadin kudi daya, don a karbi biyan.",
+    colReplacedTitle: "An sake fitar da wannan takardar biya",
+    colReplacedBody: "Ba a karbi kudi a kan wannan ba. A karbi biyan a kan sabuwar takardar.",
+    colOpenReplacement: "Bude sabuwar takardar",
+    colReversedTitle: "An mayar da wannan biyan",
+    colReversedOwedBody: "Kudin ya koma ga mai biya, don haka rasit din bai tsaya ba kuma ana bin takardar biyan kuma. A sake fitar da ita don a karba.",
+    colReversedWithdrawnBody: "Kudin ya koma ga mai biya kuma an janye takardar biyan. Babu bashin komai a kanta.",
+    colUnderObjection: "Ana kalubalanta",
+    colUnderObjectionBody: "mai sana’ar ya kalubalanci wannan kiyasi a hukumance. PSIRS ba ta neman wannan kudi har sai an yanke hukunci kan kalubalen, don haka kada a nemi wannan biyan.",
     colChargeRaisedTitle: "An yi kimantawa, amma ba a fara biyan kudi ba.",
     colChargeRaisedBody:
       "Ma’amala {{reference}} ta wanzu yanzu kuma mai biyan haraji na bin ta. Kada ka sake lissafa wannan — sake gwadawa zai haifar da kimantawa ta biyu a kan abu daya, kuma za a bukaci a biya dukansu. Ka bude ma’amalar domin ba shi takardar biya ko ka sake fara biyan kudin.",
@@ -10161,6 +10725,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     moreNoReceipts: "Babu rasit tukuna.",
     moreSavedRecords: "Bayanan da aka ajiye a wannan na’ura",
     moreNothingWaiting: "Babu abin da ke jiran a aika.",
+    moreSavedRecordsUnreadable: "Ba a iya karanta bayanan da aka ajiye a wannan na’ura ba",
+    moreSavedRecordsUnreadableBody: "Wannan ba yana nufin babu abin da ke jira ba. Abubuwan da aka dauka ba tare da intanet ba suna iya kasancewa a wannan na’ura. A ajiye ta, kada a goge bayananta, kuma a sanar da tallafin PSIRS.",
     moreSavedOnPhone: "An ajiye a wannan wayar",
     moreVehicleRenewal: "Sabunta takardun mota",
     moreSearchVehicle: "Nemo mota",
@@ -10195,7 +10761,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     grpRecorded: "An rubuta",
     grpWaitingOfficer: "Ana jiran jami’i",
     grpAskLeaderConfirm: "Ka nemi shugaba ya tabbatar",
-    grpSendToLeader: "Tura wannan ga shugaba",
+    grpSentToLeader: "An tura zuwa wayar shugaba",
+    grpSentToLeaderBody: "An tura hanyar tabbatarwa ta sakon tes zuwa {{phone}}, lambar shugaba a bayanan kungiyar. Ba a nuna ta a nan ba, saboda shugaba ne ke tabbatar da mambobin da ka rubuta.",
     grpNoAssessment: "Wannan ba ya sanya wa kowa haraji",
     authSignInTitle: "Shiga domin ci gaba",
     authSignIn: "Shiga",
@@ -10451,6 +11018,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubVerifyAction: 'Tantance',
     pubVerifyChecking: 'Ana bincike…',
     pubVerifyReceiptNumber: 'Lambar rasit',
+    pubVerifyDocumentNumber: 'Lambar takarda',
+    verifyInvoicePayable: 'Wannan takardar biya ta PSIRS ce ta gaskiya, kuma har yanzu ana iya biyanta.',
+    verifyInvoicePaid: 'Wannan takardar biya ta PSIRS ce ta gaskiya, kuma an biya ta. Babu sauran bashi a kanta.',
+    verifyInvoiceReplaced: 'An maye gurbin wannan takardar biya da sabuwa a kan adadin kudi daya, kuma ba za a iya biyanta ba. A biya a kan sabuwar takardar, ba wannan ba.',
+    verifyInvoiceWithdrawn: 'An janye wannan takardar biya kuma babu bashin komai a kanta. Kada a biya a kanta.',
+    verifyInvoiceLapsed: 'Wannan takardar biya ta PSIRS ce ta gaskiya, amma lokacin biyanta ya wuce kuma ba za a iya biyanta yadda take ba. Wakilin karbar haraji ko ofishin PSIRS na iya sake fitar da ita a kan adadin kudi daya.',
+    verifyInvoiceReissueNeeded: 'Wannan takardar biya ta PSIRS ce ta gaskiya, kuma wa’adinta bai kare ba, amma ba za a iya biyanta yadda take ba. Wakilin karbar haraji ko ofishin PSIRS na iya sake fitar da ita a kan adadin kudi daya.',
     pubVerifyRevenueType: 'Nau’in haraji',
     pubVerifyAmount: 'Adadi',
     pubVerifyIssued: 'Ranar bayarwa',
@@ -10537,10 +11111,28 @@ export const translations: Record<Language, TranslationDictionary> = {
       'Ka sake gwadawa nan da mintuna kadan. KADA ka yi rajistar wannan mai biyan haraji a matsayin sabon mai neman TIN — hakan zai kirkiri TIN na biyu ga wanda ya riga ya mallaki daya.',
     nsTinNotFound:
       'Da farko ka duba lambar da takardar mai biyan harajin kansa — yawanci kuskuren buga lamba ne sanadi. Sai kawai idan bai taba mallakar TIN ba, ka koma ka yi rajistarsa ba tare da TIN ba; dandalin zai nema masa sabuwar TIN.',
+    nsTaxpayerAlreadyExists: 'Ka bude rikodin da ke akwai ka ci gaba daga nan.',
+    nsPossibleDuplicateTaxpayer:
+      'Ka yi rajistarsa a matsayin sabo sai idan babu daya daga cikinsu da shi ne mutumin.',
     nsKycProviderUnavailable: 'Ka sake gwadawa nan da mintuna kadan. Nemanka bai canza ba.',
     nsPaymentUnconfirmed: 'Ka bude cinikin daga tarihinka domin ka ga halin da yake ciki yanzu.',
     nsPaymentFailed: 'Ka sake fara biyan, ko ka zabi wata hanyar biya.',
     nsAgentNotCleared: 'Ka bude "Nemana" domin ka ga abin da ya rage.',
+    nsNoTaxPayable:
+      'Kada ka kara adadin don kimantawar ta wuce. Ka gaya wa mai biyan haraji babu abin da zai biya kan wannan.',
+    nsInvoiceAlreadyPaid:
+      'Ka bude rasit daga tarihin ma’amaloli.',
+    nsNoEffectiveRate:
+      'Dole Gwamnati ta amince da kudi kafin a iya karba kan wannan. Jami’in PSIRS zai iya sa a duba shi.',
+    ofcStepUpNeeded: 'Wannan aikin yana bukatar lamba ta lokaci daya kafin ya wuce.',
+    ofcErrPeriodClosed: 'An riga an rufe {{period}}.',
+    ofcErrPeriodOpen: 'An riga an bude {{period}}.',
+    ofcErrPeriodNotOpen: 'Ba a bude {{period}} ba. Matsayinsa shi ne: {{state}}.',
+    ofcErrAlreadySigned: 'An riga an sa hannu kan {{report}}.',
+    ofcErrAlreadyWithdrawn: 'An riga an janye {{report}}.',
+    ofcErrSampleCompleted: 'An kammala wannan samfurin, kuma binciken sa na karshe ne.',
+    ofcErrSampleAlreadyComplete: 'An riga an kammala wannan samfurin.',
+    ofcNsSampleCompleted: 'Ka zana sabon samfuri domin ka sake duba wadannan ma’amaloli.',
     ofcOvJobHealthy: 'Yana gudana bisa tsarin lokaci.',
     ofcOvJobRunning: 'Yana gudana yanzu.',
     ofcOvJobOverdue:
@@ -10633,6 +11225,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubStmtReturnedRow: "an mayar maka",
     pubStmtForWhat: "Abin da aka biya",
     pubStmtEach: "Kowane biya",
+    pubStmtPartial: "Jimillar da ke sama ta kunshi dukan lokacin, amma biyayyarka {{n}} na baya-bayan nan kadai ke cikin jerin a kasa. Farkon lokacin ba ya cikin jerin, don haka wadannan layukan ba za su hada su kai jimillar ba. Ka nemi gajeren lokaci don ka ga sauran.",
     pubStmtNothing: "Ba a biya komai a wannan lokacin ba.",
     pubStmtFooter: "Ka ajiye rasitunka. Idan wannan jerin da rasitunka ba su dace ba, ka kai su ofishin PSIRS — rasit shi ne hujja, wannan kuwa rikodi ne.",
     pubCitizenFooter: 'Don tambaya game da asusunka, ka ziyarci kowane ofishin PSIRS ko ka tuntubi wakilin karbar haraji da izini.',
@@ -10745,7 +11338,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFnRecordHowThisException: 'Ka rubuta yadda aka warware wannan matsala (akalla haruffa 10):',
     ofcFnWhatDidTheBank: 'Me banki ya ce? (akalla haruffa 10)',
     ofcFnWhatTheVarianceTurned: 'Abin da bambancin ya zamo',
-    ofcGpConfirmationLinkCreated: 'An kirkiri hanyar tabbatarwa.',
+    ofcGpConfirmationLinkCreated: 'An tura hanyar tabbatarwa ga shugaban kungiyar.',
     ofcKyOpenAndReview: 'Bude ka duba',
     ofcKyReviewedOn: 'An duba a ranar',
     ofcKyTheAccessLogCould: 'Ba a iya karanta rikodin shiga ba.',
@@ -10862,7 +11455,7 @@ export const DUPLICATE_REASON_TEXT: Record<DuplicateReason, keyof TranslationDic
 };
 
 /**
- * The eleven verification answers, as dictionary keys.
+ * The verification answers, as dictionary keys.
  *
  * The third such table, after `BLOCKER_TEXT` and `DUPLICATE_REASON_TEXT`, and
  * the one where being wrong costs the most: these sentences tell somebody
@@ -10883,6 +11476,12 @@ export const VERIFICATION_TEXT: Record<VerificationReason, keyof TranslationDict
   DOCUMENT_EXPIRED: 'verifyDocumentExpired',
   DOCUMENT_GENUINE: 'verifyDocumentGenuine',
   DOCUMENT_GENUINE_UNCHECKED: 'verifyDocumentGenuineUnchecked',
+  INVOICE_PAYABLE: 'verifyInvoicePayable',
+  INVOICE_PAID: 'verifyInvoicePaid',
+  INVOICE_REPLACED: 'verifyInvoiceReplaced',
+  INVOICE_WITHDRAWN: 'verifyInvoiceWithdrawn',
+  INVOICE_LAPSED: 'verifyInvoiceLapsed',
+  INVOICE_REISSUE_NEEDED: 'verifyInvoiceReissueNeeded',
 };
 
 /**

@@ -85,6 +85,48 @@ function isNeverCache(url) {
   return NEVER_CACHE.some((path) => url.pathname.startsWith(path));
 }
 
+/** A path the officer portal is served from. */
+function isPortalPath(pathname) {
+  return pathname === '/portal' || pathname.startsWith('/portal/');
+}
+
+/**
+ * A request this worker must leave entirely alone.
+ *
+ * The path places the portal's documents and its assets. It cannot place the
+ * portal's API reads: those go to `/api/v1/...` on this same origin, which is
+ * not under `/portal/`, so they used to fall straight through into the
+ * branches that answer on an application's behalf.
+ *
+ * The referrer is the document that issued the request, and it is the only
+ * signal available in time. Resolving the client through `self.clients` is
+ * asynchronous, and by the time it answers the chance to decline has gone —
+ * `respondWith` has to be called, or not called, synchronously.
+ *
+ * Measured against the nginx config these images actually serve, which sets
+ * `Referrer-Policy: strict-origin-when-cross-origin`: a worker at scope '/'
+ * is given the full document URL for a same-origin fetch, so a read issued by
+ * /portal/ is attributable and one issued by / is not mistaken for it.
+ *
+ * No referrer means not attributable, and an unattributable request is
+ * handled exactly as it was before this function existed. That is the
+ * deliberate direction to fail in: the cost is the portal keeping today's
+ * behaviour under a stricter policy, where the alternative would be an agent
+ * silently losing the offline reference data this worker exists to provide.
+ */
+function belongsToPortal(url, request) {
+  if (isPortalPath(url.pathname)) return true;
+
+  const referrer = request.referrer;
+  if (!referrer) return false;
+  try {
+    const from = new URL(referrer);
+    return from.origin === self.location.origin && isPortalPath(from.pathname);
+  } catch {
+    return false;
+  }
+}
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -92,7 +134,17 @@ self.addEventListener('fetch', (event) => {
   // Only GET is ever served from a cache. A POST is an instruction to change
   // state; replaying one from a cache could duplicate a government obligation.
   if (request.method !== 'GET') return;
-  if (url.origin !== self.location.origin && !url.href.startsWith('http://localhost:4000')) return;
+  /*
+   * Anything not on this origin is somebody else's to answer.
+   *
+   * This used to carry `&& !url.href.startsWith('http://localhost:4000')`, an
+   * exception for requests that are never made: both clients call a relative
+   * `API_BASE = '/api/v1'`, and in development each vite config proxies /api
+   * to that port so the browser still talks only to the vite origin. The same
+   * address was in both `index.html` policies as a `connect-src` entry, and
+   * had the same standing there.
+   */
+  if (url.origin !== self.location.origin) return;
 
   /*
    * The officer portal shares this origin, under /portal/, and this worker
@@ -113,8 +165,19 @@ self.addEventListener('fetch', (event) => {
    * respondWith leaves the request to the network, which is exactly right:
    * the portal has no offline story and does not want one, because nothing
    * it does is safe to serve stale.
+   *
+   * That claim was once enforced by a check on `/portal/` alone, which is the
+   * portal's documents and assets and not its API reads — those are
+   * `/api/v1/...` on this same origin. So the two branches below went on
+   * answering for the portal: a failed reference read came back out of a
+   * cache filled for a handset, and any other failed GET came back as a
+   * manufactured 503 reading "You are offline. … Nothing has been sent and
+   * nothing has been paid", with moneyStatus NOT_DEBITED. That is a
+   * statement about government money, written for an agent in a field with
+   * no signal, asserted about a request the portal made — and a failed fetch
+   * is no evidence of what reached the server. See `belongsToPortal`.
    */
-  if (url.pathname === '/portal' || url.pathname.startsWith('/portal/')) return;
+  if (belongsToPortal(url, request)) return;
 
   if (url.pathname.startsWith('/api/')) {
     if (isCacheableApi(url) && !isNeverCache(url)) {
@@ -255,17 +318,59 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const urlToOpen = event.notification.data?.url || '/';
+
+  /*
+   * Where tapping a notification takes an agent, and why it used to be
+   * wherever they happened to have been last.
+   *
+   * The match was `client.url.includes(urlToOpen)`, a substring test, and
+   * `urlToOpen` falls back to '/' because nothing sets one: the only sender
+   * is services/messaging/push.ts, which calls `sendPushNotification` with a
+   * title and a body and no `data`. So the fallback is not an edge case, it
+   * is every notification this platform sends — and every URL on this origin
+   * contains '/'. The test therefore matched the first window `matchAll`
+   * returned, which Chrome orders most-recently-focused first.
+   *
+   * On a shared origin that window can be the officer portal, so an agent
+   * tapping their own notification was handed a government sign-in screen.
+   * Before both applications shared a host there was no such window to
+   * focus: one URL for both is what made it reachable, and
+   * `includeUncontrolled: true` widens it to windows this worker has never
+   * controlled.
+   *
+   * A window already on the notification's own screen is preferred, then any
+   * window of the agent's, then a new one. Focusing an agent window that is
+   * on some other screen does not navigate it. That was true before and is
+   * left alone deliberately: calling `navigate()` on a window somebody is
+   * part-way through a collection on is a larger decision than this fix.
+   */
+  const origin = self.location.origin;
+
+  /** The candidate as one of the agent's own URLs, or null if it is not one. */
+  const withinTheAgent = (candidate) => {
+    try {
+      const url = new URL(candidate, origin);
+      return url.origin === origin && !isPortalPath(url.pathname) ? url : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // A notification raised by this worker is the agent's, so a `data.url`
+  // naming the portal is declined rather than followed.
+  const target = withinTheAgent(event.notification.data?.url || '/') ?? new URL('/', origin);
+
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      for (const client of windowClients) {
-        if (client.url.includes(urlToOpen) && 'focus' in client) {
-          return client.focus();
-        }
-      }
-      if (self.clients.openWindow) {
-        return self.clients.openWindow(urlToOpen);
-      }
+      const mine = windowClients.filter((client) => withinTheAgent(client.url));
+      const onTheSameScreen = mine.find((client) => {
+        const url = withinTheAgent(client.url);
+        return url !== null && url.pathname === target.pathname && url.hash === target.hash;
+      });
+      const chosen = onTheSameScreen ?? mine[0];
+      if (chosen && 'focus' in chosen) return chosen.focus();
+      if (self.clients.openWindow) return self.clients.openWindow(target.href);
+      return undefined;
     }),
   );
 });

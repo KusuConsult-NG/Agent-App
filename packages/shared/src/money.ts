@@ -125,3 +125,39 @@ export function clampAmount(amount: Kobo, min: Kobo | null, max: Kobo | null): K
 }
 
 export const ZERO: Kobo = 0n;
+
+/**
+ * A two-decimal quantity as a whole number of hundredths.
+ *
+ * Money on this platform is kobo and never leaves integers, which is why
+ * everything above takes `Kobo`. Allocation quantities are the one other
+ * decimal the platform stores — `NUMERIC(14,2)` on
+ * `incentive_allocation_rounds` and `incentive_awards`, a count of bags or
+ * litres handed to a beneficiary — and they are the only place a fraction
+ * reaches arithmetic.
+ *
+ * Read into a JavaScript number and subtracted, two exact decimals stop being
+ * exact. `1.00 - 0.90` is `0.09999999999999998`; `Math.floor(0.30 / 0.10)` is
+ * `2`. `allocations.ts` measured the second one over every two-decimal
+ * combination a round plausibly holds: 12,231 disagreements against the
+ * integer answer, every one of them reporting FEWER beneficiaries than the
+ * goods can serve. It never over-promises. It turns people away.
+ *
+ * That function fixed it for one round and kept the helper to itself, so the
+ * rounds list did the float subtraction in the browser and printed
+ * `3.0000000000000004` into a government screen, and the create form told an
+ * officer a round would serve twenty-eight people when it serves twenty-nine.
+ * One definition, in the module that already owns exact arithmetic, is what
+ * stops that being rediscovered a third time.
+ *
+ * Hundredths are exact here: `NUMERIC(14,2)` tops out well inside the range
+ * where an integer number of hundredths is safely representable.
+ *
+ * Where the figure can be computed in SQL instead, it should be —
+ * `NUMERIC` arithmetic in Postgres is exact without any of this. This is for
+ * the cases with no row to ask about yet, such as a form previewing a round
+ * nobody has created.
+ */
+export function quantityHundredths(value: string | number): number {
+  return Math.round(Number(value) * 100);
+}

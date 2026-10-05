@@ -243,11 +243,33 @@ describe('transaction state machine', () => {
     }
   });
 
+  it('lets the gateway settle a payment held for review, and not with a receipt', () => {
+    // A payment held because the gateway named the wrong amount is still in
+    // flight: the gateway's next answer ends the review either way.
+    assert.ok(canTransactionTransition('UNDER_REVIEW', 'PAYMENT_SUCCESSFUL'));
+    assert.ok(canTransactionTransition('UNDER_REVIEW', 'FAILED'));
+    // But it was a second door into a receipt, beside the one property 2 names.
+    assert.throws(
+      () => assertTransactionTransition('UNDER_REVIEW', 'RECEIPT_GENERATED'),
+      IllegalTransitionError,
+    );
+  });
+
   it('never allows a failed payment to become successful', () => {
     assert.throws(
       () => assertTransactionTransition('FAILED', 'PAYMENT_SUCCESSFUL'),
       IllegalTransitionError,
     );
+  });
+
+  it('lets a failed attempt be followed by another, through a payment in flight', () => {
+    // A declined card ends an attempt, not the bill. The next attempt starts
+    // where the first did, so success is still reachable only from a payment
+    // in flight — never straight out of FAILED, as the case above holds.
+    assert.ok(canTransactionTransition('FAILED', 'PAYMENT_INITIATED'));
+    for (const skip of ['PAYMENT_PENDING', 'PAYMENT_VERIFIED', 'RECONCILIATION_PENDING'] as const) {
+      assert.throws(() => assertTransactionTransition('FAILED', skip), IllegalTransitionError);
+    }
   });
 });
 

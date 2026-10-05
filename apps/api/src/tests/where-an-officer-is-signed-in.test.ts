@@ -43,7 +43,7 @@ import {
 } from './helpers';
 import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
-import { fingerprintOf, labelFor } from '../services/officer-devices';
+import { fingerprintOf, labelFor, legacyFingerprintOf } from '../services/officer-devices';
 
 const PHONES = {
   officer: '+2348082000001',
@@ -74,6 +74,34 @@ beforeEach(async () => {
 });
 
 const auth = (who: keyof typeof PHONES) => ({ token: tokens[who] });
+
+/**
+ * Sign in presenting a device identifier as well as a user agent.
+ *
+ * The portal sends `x-device-id` from `raw()`; this is the same request shape.
+ */
+async function signInFromDevice(
+  phone: string,
+  userAgent: string,
+  deviceId: string,
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  return api(
+    'POST',
+    '/auth/login',
+    { phone, password: 'Password123' },
+    { headers: { 'user-agent': userAgent, 'x-device-id': deviceId } },
+  ) as Promise<{ status: number; body: Record<string, unknown> }>;
+}
+
+/** The device rows this user has, newest first, with their status. */
+async function devicesOf(userId: string) {
+  return query<{ id: string; status: string; fingerprint: string; label: string }>(
+    pool,
+    `SELECT id, status, fingerprint, label FROM officer_devices
+      WHERE user_id = $1 ORDER BY first_seen_at`,
+    [userId],
+  );
+}
 
 /** Sign in again, with a user agent, so a distinct device row is created. */
 async function signInFrom(phone: string, userAgent: string): Promise<string> {
@@ -107,6 +135,59 @@ describe('an officer can see where they are signed in', () => {
    * officer whose role somebody narrowed could no longer see that their old
    * laptop is still signed in.
    */
+  it('marks a session that lapsed without being ended, wherever sessions are counted', async () => {
+    /*
+     * Signing in refuses a session that is revoked, idle past its expiry, or
+     * past its absolute lifetime. Only the first writes anything, and the
+     * readers asked about less than that: the list called all three active,
+     * the device count missed the absolute lifetime, and so did the
+     * administrator's view of where the officer is signed in.
+     */
+    await signInFromDevice(PHONES.officer, 'Mozilla/5.0 (Windows NT 10.0) Chrome/120', 'dev-idle');
+    await signInFromDevice(PHONES.officer, 'Mozilla/5.0 (Macintosh) Safari/17', 'dev-abs');
+    const rows = await query<{ id: string; officer_device_id: string | null }>(
+      pool,
+      'SELECT id, officer_device_id FROM sessions WHERE user_id = $1 ORDER BY issued_at',
+      [ids.officer],
+    );
+    assert.equal(rows.length, 3, 'one session from beforeEach and two from here');
+    const [current, idle, absolute] = rows as [typeof rows[0], typeof rows[0], typeof rows[0]];
+    assert.ok(idle.officer_device_id && absolute.officer_device_id, 'both recorded a machine');
+    await pool.query(`UPDATE sessions SET expires_at = now() - interval '1 hour' WHERE id = $1`, [idle.id]);
+    await pool.query(
+      `UPDATE sessions SET absolute_expires_at = now() - interval '1 hour' WHERE id = $1`,
+      [absolute.id],
+    );
+
+    const mine = await get('/government/sessions/mine', auth('officer'));
+    assert.equal(mine.status, 200, JSON.stringify(mine.body));
+    const live = Object.fromEntries(
+      (mine.body.sessions as { id: string; live: boolean }[]).map((row) => [row.id, row.live]),
+    );
+    assert.deepEqual(
+      live,
+      { [current.id]: true, [idle.id]: false, [absolute.id]: false },
+      'a session the platform would refuse is listed as one somebody could be using',
+    );
+
+    const liveOn = Object.fromEntries(
+      (mine.body.devices as { id: string; live_sessions: number }[]).map((device) => [
+        device.id,
+        device.live_sessions,
+      ]),
+    );
+    assert.equal(liveOn[absolute.officer_device_id!], 0, 'the absolute lifetime was not counted');
+    assert.equal(liveOn[idle.officer_device_id!], 0);
+
+    const activity = await get(`/government/users/${ids.officer}/activity`, auth('admin'));
+    assert.equal(activity.status, 200, JSON.stringify(activity.body));
+    assert.deepEqual(
+      (activity.body.sessions as { id: string }[]).map((row) => row.id),
+      [current.id],
+      'and the administrator is told the officer is signed in where they cannot be',
+    );
+  });
+
   it('shows an officer their own sessions whatever their role holds', async () => {
     await query(pool, `DELETE FROM role_permissions WHERE role = 'revenue_officer'`);
     const stripped = await loginAs(PHONES.officer);
@@ -473,5 +554,258 @@ describe('evidence that did not come from this platform', () => {
         ),
       /case_event_evidence_has_one_source/,
     );
+  });
+});
+
+// ===========================================================================
+
+/*
+ * What an officer's device is identified BY, which is the whole of whether
+ * blocking one means anything a week later.
+ *
+ * The handle used to be a function of the user agent alone: the portal sent no
+ * identifier, and agents -- the only client that did -- are given no officer
+ * device row at all. So a browser update changed the handle, the next sign-in
+ * matched no row, and a fresh ACTIVE one was inserted. `blockDevice` and
+ * migration 063's trigger were both correct about the row they named; the row
+ * just stopped being the one the laptop came back as.
+ *
+ * The existing block test above passes against that defect, because it proves
+ * the block by inserting a session against the blocked device's own id. It
+ * never signs in again under a different user agent, which is the one thing
+ * that defeated it.
+ */
+describe('what identifies an officer’s computer', () => {
+  const CHROME_131 = 'Mozilla/5.0 (Windows NT 10.0) Chrome/131.0';
+  const CHROME_132 = 'Mozilla/5.0 (Windows NT 10.0) Chrome/132.0';
+  const DESKTOP = 'portal-desktop-0000001';
+  const LAPTOP = 'portal-laptop-00000001';
+
+  it('survives the browser updating itself', async () => {
+    const first = await signInFromDevice(PHONES.officer, CHROME_131, DESKTOP);
+    assert.equal(first.status, 200, JSON.stringify(first.body));
+
+    const second = await signInFromDevice(PHONES.officer, CHROME_132, DESKTOP);
+    assert.equal(second.status, 200, JSON.stringify(second.body));
+
+    const rows = await devicesOf(ids.officer);
+    const fromPortal = rows.filter((row) => row.fingerprint === fingerprintOf(null, DESKTOP));
+    assert.equal(
+      fromPortal.length,
+      1,
+      'one computer across a browser update must be one device row, not two: ' +
+        JSON.stringify(rows),
+    );
+  });
+
+  it('keeps a block applying across the browser updating itself', async () => {
+    // The defect, stated as the thing an administrator was promised.
+    await signInFromDevice(PHONES.officer, CHROME_131, DESKTOP);
+    const device = await queryOne<{ id: string }>(
+      pool,
+      'SELECT id FROM officer_devices WHERE user_id = $1 AND fingerprint = $2',
+      [ids.officer, fingerprintOf(null, DESKTOP)],
+    );
+    assert.ok(device, 'the sign-in recorded no device row');
+
+    await grantStepUp(tokens.admin, PHONES.admin, 'device.block');
+    const blocked = await post(
+      `/government/devices/${device!.id}/block`,
+      { reason: 'The officer reported this laptop stolen from the office.' },
+      auth('admin'),
+    );
+    assert.equal(blocked.status, 200, JSON.stringify(blocked.body));
+
+    const after = await signInFromDevice(PHONES.officer, CHROME_132, DESKTOP);
+    assert.equal(
+      after.status,
+      403,
+      'a blocked computer signed in again after its browser updated: ' +
+        JSON.stringify(after.body),
+    );
+  });
+
+  it('tells two computers running the same browser apart', async () => {
+    await signInFromDevice(PHONES.officer, CHROME_131, DESKTOP);
+    await signInFromDevice(PHONES.officer, CHROME_131, LAPTOP);
+
+    const rows = await devicesOf(ids.officer);
+    const handles = new Set(rows.map((row) => row.fingerprint));
+    assert.ok(
+      handles.has(fingerprintOf(null, DESKTOP)) && handles.has(fingerprintOf(null, LAPTOP)),
+      'two machines on the same browser build collapsed into one device: ' +
+        JSON.stringify(rows),
+    );
+  });
+
+  it('blocking one computer leaves the other alone', async () => {
+    await signInFromDevice(PHONES.officer, CHROME_131, DESKTOP);
+    await signInFromDevice(PHONES.officer, CHROME_131, LAPTOP);
+    const desktop = await queryOne<{ id: string }>(
+      pool,
+      'SELECT id FROM officer_devices WHERE user_id = $1 AND fingerprint = $2',
+      [ids.officer, fingerprintOf(null, DESKTOP)],
+    );
+
+    await grantStepUp(tokens.admin, PHONES.admin, 'device.block');
+    await post(
+      `/government/devices/${desktop!.id}/block`,
+      { reason: 'The officer reported this laptop stolen from the office.' },
+      auth('admin'),
+    );
+
+    const laptop = await signInFromDevice(PHONES.officer, CHROME_131, LAPTOP);
+    assert.equal(laptop.status, 200, JSON.stringify(laptop.body));
+  });
+
+  /*
+   * The deploy itself, which is where this change could have done harm.
+   *
+   * Every officer device row in an existing deployment carries the user-agent
+   * handle. The first sign-in after the portal starts sending an identifier
+   * matches none of them, so without the legacy lookup each one would be left
+   * behind and a fresh ACTIVE row inserted -- unblocking every blocked device
+   * in the estate on the day this shipped.
+   */
+  it('carries a row created before the portal sent an identifier', async () => {
+    await signInFrom(PHONES.officer, CHROME_131);
+    const before = await devicesOf(ids.officer);
+    const legacy = before.find((row) => row.fingerprint === legacyFingerprintOf(CHROME_131));
+    assert.ok(legacy, 'the user-agent-only row was not created: ' + JSON.stringify(before));
+
+    await signInFromDevice(PHONES.officer, CHROME_131, DESKTOP);
+
+    const after = await devicesOf(ids.officer);
+    assert.equal(
+      after.length,
+      before.length,
+      'the legacy row was left behind and a new one inserted beside it: ' +
+        JSON.stringify(after),
+    );
+    const adopted = after.find((row) => row.id === legacy!.id);
+    assert.equal(
+      adopted?.fingerprint,
+      fingerprintOf(null, DESKTOP),
+      'the legacy row was not carried forward onto the new handle',
+    );
+  });
+
+  it('does not unblock a device blocked before the identifier existed', async () => {
+    await signInFrom(PHONES.officer, CHROME_131);
+    const legacy = await queryOne<{ id: string }>(
+      pool,
+      'SELECT id FROM officer_devices WHERE user_id = $1 AND fingerprint = $2',
+      [ids.officer, legacyFingerprintOf(CHROME_131)],
+    );
+    assert.ok(legacy);
+
+    await grantStepUp(tokens.admin, PHONES.admin, 'device.block');
+    const blocked = await post(
+      `/government/devices/${legacy!.id}/block`,
+      { reason: 'The officer reported this laptop stolen from the office.' },
+      auth('admin'),
+    );
+    assert.equal(blocked.status, 200, JSON.stringify(blocked.body));
+
+    const after = await signInFromDevice(PHONES.officer, CHROME_131, DESKTOP);
+    assert.equal(
+      after.status,
+      403,
+      'the machine came back as a new device and the block was lost: ' +
+        JSON.stringify(after.body),
+    );
+  });
+
+  it('refuses both machines that shared a blocked row, not just the first', async () => {
+    /*
+     * Why the adoption below leaves a BLOCKED row's handle alone.
+     *
+     * Two computers on the same browser build shared one user-agent row, and
+     * that row is what an administrator blocked. Rewriting its handle onto the
+     * first machine to come back would leave the second one matching nothing
+     * -- so it would be handed a fresh ACTIVE row and walk straight past the
+     * block. Both were blocked; both stay blocked until somebody says
+     * otherwise.
+     */
+    await signInFrom(PHONES.officer, CHROME_131);
+    const shared = await queryOne<{ id: string }>(
+      pool,
+      'SELECT id FROM officer_devices WHERE user_id = $1 AND fingerprint = $2',
+      [ids.officer, legacyFingerprintOf(CHROME_131)],
+    );
+    assert.ok(shared);
+
+    await grantStepUp(tokens.admin, PHONES.admin, 'device.block');
+    const blocked = await post(
+      `/government/devices/${shared!.id}/block`,
+      { reason: 'The officer reported this laptop stolen from the office.' },
+      auth('admin'),
+    );
+    assert.equal(blocked.status, 200, JSON.stringify(blocked.body));
+
+    const first = await signInFromDevice(PHONES.officer, CHROME_131, DESKTOP);
+    assert.equal(first.status, 403, JSON.stringify(first.body));
+
+    const second = await signInFromDevice(PHONES.officer, CHROME_131, LAPTOP);
+    assert.equal(
+      second.status,
+      403,
+      'the second machine on the blocked row was let through: ' + JSON.stringify(second.body),
+    );
+  });
+
+  it('leaves a refused sign-in having changed nothing about the row', async () => {
+    /*
+     * A blocked row's handle has to come out of a refused attempt unchanged,
+     * or a second machine that shared it stops matching it.
+     *
+     * Two things hold that: the status test in `deviceForSignIn`, and the
+     * transaction `auth.ts` wraps the call in, which rolls the UPDATE back
+     * when the refusal throws. They are redundant — measured by mutation,
+     * removing either one alone fails nothing here, and removing both fails
+     * this test and the one above it. So this pins the pair rather than
+     * either.
+     */
+    await signInFrom(PHONES.officer, CHROME_131);
+    const before = await queryOne<{ id: string; fingerprint: string; last_seen_at: string }>(
+      pool,
+      `SELECT id, fingerprint, last_seen_at::text FROM officer_devices
+        WHERE user_id = $1 AND fingerprint = $2`,
+      [ids.officer, legacyFingerprintOf(CHROME_131)],
+    );
+    assert.ok(before);
+
+    await grantStepUp(tokens.admin, PHONES.admin, 'device.block');
+    await post(
+      `/government/devices/${before!.id}/block`,
+      { reason: 'The officer reported this laptop stolen from the office.' },
+      auth('admin'),
+    );
+
+    const refused = await signInFromDevice(PHONES.officer, CHROME_131, DESKTOP);
+    assert.equal(refused.status, 403, JSON.stringify(refused.body));
+
+    const after = await queryOne<{ fingerprint: string }>(
+      pool,
+      'SELECT fingerprint FROM officer_devices WHERE id = $1',
+      [before!.id],
+    );
+    assert.equal(
+      after!.fingerprint,
+      before!.fingerprint,
+      'the refused attempt left the blocked row carrying a different handle, ' +
+        'so a second machine that shared it would no longer match it',
+    );
+  });
+
+  it('still identifies a client that sends nothing, as it always did', async () => {
+    // Private browsing, or storage blocked by policy. It has to degrade to the
+    // old handle rather than to a new row per sign-in.
+    await signInFrom(PHONES.officer, CHROME_131);
+    await signInFrom(PHONES.officer, CHROME_131);
+
+    const rows = await devicesOf(ids.officer);
+    const legacy = rows.filter((row) => row.fingerprint === legacyFingerprintOf(CHROME_131));
+    assert.equal(legacy.length, 1, JSON.stringify(rows));
   });
 });

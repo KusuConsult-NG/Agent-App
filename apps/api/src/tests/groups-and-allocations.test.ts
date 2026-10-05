@@ -32,6 +32,7 @@ import {
   resetDatabase,
   startTestServer,
   stopTestServer,
+  leaderAttestationToken,
 } from './helpers';
 import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -116,9 +117,7 @@ async function requestAttestation(): Promise<string> {
     { token: officerToken },
   );
   assert.equal(invited.status, 201, JSON.stringify(invited.body));
-  const token = String(invited.body.invitationUrl).split('/group-attestation/')[1];
-  assert.ok(token, `no token in ${invited.body.invitationUrl}`);
-  return token;
+  return leaderAttestationToken(groupId);
 }
 
 describe('registering an informal-sector group', () => {

@@ -47,12 +47,52 @@ interface VehicleLookup {
  * Falls back to the stored English when there is no code, which is how a
  * refusal recorded before this existed comes back, and how the one path that
  * replays a reason stored earlier answers.
+ *
+ * THE HOLES IN THE SENTENCE, AND WHOSE JOB IT WAS TO FILL THEM.
+ *
+ * Three of these translations carry a placeholder, and the API sends the value
+ * for exactly one of them. `reject()` in `routes/taxpayers.ts` says why, and
+ * says it as a division of labour: "The failing fields, sent apart from the
+ * sentence they were baked into. The phone knows its own draft type and
+ * reference and can fill those in itself; this is the one part of a refusal it
+ * cannot work out."
+ *
+ * The phone did not fill them in. `{{detail}}` was substituted here and the
+ * other two were not, so a capture refused as the wrong kind read `shigarwa
+ * irin "{{type}}"`, and one PSIRS could not process at all read `ka ba da
+ * lamba {{reference}} ga tallafi` — quote reference {{reference}} to support,
+ * which is the only instruction in that sentence and it named nothing. In
+ * English too: the dictionary's English carries the same placeholders, and the
+ * filled sentence the API composed is discarded the moment the code is in the
+ * map. Both are on the rendered list, which is where they were found.
+ *
+ * `draftType` and `clientReference` are fields of the draft in hand, so the
+ * server was right that this is the place. `enumLabel` for the type because it
+ * is an enum with a name in both languages, and the line above this one in the
+ * list already prints it that way.
+ *
+ * AND WHAT IS LEFT IF A HOLE SURVIVES.
+ *
+ * `errorText` leaves a placeholder the server did not send alone on purpose,
+ * and that is right where it is used: `ErrorAlert` lists `details` underneath,
+ * so the value is on the screen even when the sentence has a gap. This list
+ * has no second line. A sync response carries a code, a sentence and at most
+ * `detail`, and nothing else is coming — so a refusal whose translation names
+ * something only the server knows, such as the taxpayer an existing record
+ * already belongs to, cannot be completed here at any later date.
+ *
+ * The stored English is a complete sentence and says the same thing. It loses
+ * to a translation and beats one with a hole in it.
  */
 function refusalText(draft: Draft, t: TranslationDictionary): string {
   const recorded = draft.message ?? '';
   if (!draft.code) return recorded;
-  const said = errorText({ code: draft.code, message: recorded }, t);
-  return draft.detail ? said.replace('{{detail}}', draft.detail) : said;
+  let said = errorText({ code: draft.code, message: recorded }, t);
+  if (draft.detail) said = said.replace('{{detail}}', draft.detail);
+  said = said
+    .replace('{{type}}', enumLabel(draft.draftType, t))
+    .replace('{{reference}}', draft.clientReference);
+  return /\{\{\w+\}\}/.test(said) ? recorded || said : said;
 }
 
 /**
@@ -88,11 +128,28 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
   const [offlineCapture, setOfflineCapture] = useState(false);
   const [manual, setManual] = useState({ ownerName: '', vehicleType: 'PRIVATE', ownerPhone: '' });
 
-  useEffect(() => {
+  /*
+   * Whether the renewal services could be read at all.
+   *
+   * The catch used to be `setItems([])`, which left the required "Renewal
+   * service" menu holding only its placeholder and said nothing. An agent at a
+   * motor park on a patchy signal could not complete the renewal, and could
+   * not tell a menu that failed to load from a renewal the platform does not
+   * offer. `Collect.tsx` reads the same catalogue and says when it cannot —
+   * "a failed read must not be able to say it", in its own words — and this
+   * screen now does the same, with a way to try again.
+   */
+  const [itemsFailed, setItemsFailed] = useState(false);
+  const loadItems = () => {
+    setItemsFailed(false);
     api
       .get<{ id: string; name: string; name_ha: string | null; code: string }[]>('/revenue/items?search=Vehicle')
       .then(setItems)
-      .catch(() => setItems([]));
+      .catch(() => setItemsFailed(true));
+  };
+
+  useEffect(() => {
+    loadItems();
   }, []);
 
   async function find() {
@@ -328,7 +385,9 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
 
               <Field label={t.moreRenewalService} required>
                 <select value={revenueItemId} onChange={(event) => setRevenueItemId(event.target.value)}>
-                  <option value="">{t.moreSelectRenewalType}</option>
+                  <option value="">
+                    {itemsFailed ? t.tpListCouldNotLoad : t.moreSelectRenewalType}
+                  </option>
                   {items.map((item) => (
                     <option key={item.id} value={item.id}>
                       {localName(lang, item.name, item.name_ha)}
@@ -336,6 +395,11 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
                   ))}
                 </select>
               </Field>
+              {itemsFailed && (
+                <button type="button" className="secondary" onClick={loadItems}>
+                  {t.actionTryAgain}
+                </button>
+              )}
 
               <Field label={t.moreRenewalPeriod} required>
                 <select
@@ -749,7 +813,25 @@ export function CommissionScreen() {
 
 export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
   const { lang, t } = useI18n();
-  const [drafts, setDrafts] = useState<Draft[]>([]);
+  /*
+   * `null` until the device has been asked, and a failure kept apart from it.
+   *
+   * This started as `[]` and was read with `listDrafts().then(setDrafts)` —
+   * no catch at all — so a store that could not be read left the list empty
+   * and the card below said "Nothing is waiting to be sent." That is the one
+   * reading an agent must not be given about captures made offline: an
+   * unreadable store is exactly the case in which those captures may not be
+   * saving either, and someone told nothing is pending has no reason to hand
+   * the device back carefully or to report it.
+   *
+   * Signing out does not clear the queue — `logout` leaves IndexedDB alone,
+   * and `a-queue-that-outlived-its-agent` holds that — so the cost is the
+   * false assurance rather than lost work. It is still a false assurance
+   * about the one thing on this screen that is not recoverable from the
+   * server.
+   */
+  const [drafts, setDrafts] = useState<Draft[] | null>(null);
+  const [draftsFailed, setDraftsFailed] = useState(false);
   const [printerState, setPrinterState] = useState(bluetoothPrinter.getState());
   const [printerBusy, setPrinterBusy] = useState(false);
   const [printerMsg, setPrinterMsg] = useState<string | null>(null);
@@ -759,7 +841,9 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
   const device = describeDevice(APP_VERSION);
 
   useEffect(() => {
-    listDrafts().then(setDrafts);
+    listDrafts()
+      .then(setDrafts)
+      .catch(() => setDraftsFailed(true));
     const unsub = bluetoothPrinter.subscribe(setPrinterState);
     return unsub;
   }, []);
@@ -962,7 +1046,13 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
         <p className="card__hint">
           {t.moreSavedRecordsHint}
         </p>
-        {drafts.length === 0 ? (
+        {draftsFailed ? (
+          <Alert kind="warning" title={t.moreSavedRecordsUnreadable}>
+            {t.moreSavedRecordsUnreadableBody}
+          </Alert>
+        ) : drafts === null ? (
+          <Loading />
+        ) : drafts.length === 0 ? (
           <p className="empty">{t.moreNothingWaiting}</p>
         ) : (
           <ul className="list">

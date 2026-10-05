@@ -69,6 +69,27 @@ export async function enumColumns(db = pool): Promise<EnumColumn[]> {
 }
 
 /**
+ * The observer triggers the catalogue actually holds, as a sorted string.
+ *
+ * Half of the fingerprint, and the half that notices a table dropped and
+ * recreated — the columns are unchanged in that case and only the triggers
+ * have gone.
+ */
+async function installedObservers(): Promise<string> {
+  const { rows } = await pool.query<{ signature: string }>(
+    `SELECT c.relname || ':' || t.tgname AS signature
+       FROM pg_trigger t
+       JOIN pg_class c ON c.oid = t.tgrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public'
+        AND NOT t.tgisinternal
+        AND t.tgname IN ('observe_enum_ins', 'observe_enum_upd')
+      ORDER BY 1`,
+  );
+  return rows.map((row) => row.signature).join(',');
+}
+
+/**
  * Put the observers in place, once per database — and again when the schema
  * they observe has changed underneath them.
  *
@@ -89,14 +110,36 @@ export async function enumColumns(db = pool): Promise<EnumColumn[]> {
  *
  * So the recorded fingerprint is the full set of observed columns. Any change
  * to it — a new column, a new table, a column dropped — regenerates.
+ *
+ * AND WHY IT FINGERPRINTS THE TRIGGERS AS WELL AS THE COLUMNS.
+ *
+ * The columns alone had the same hole in a different shape, because they
+ * describe what OUGHT to be observed and never what IS. Drop a table and
+ * recreate it with the same columns and the fingerprint is unchanged: the
+ * installer returns early and the recreated table carries no observers at all.
+ *
+ * That is how a gate on this branch failed. A new migration was applied to the
+ * shard databases and then edited, so — `migrate.ts` refusing to boot on a
+ * changed checksum, which is correct — the table was dropped and the migration
+ * row deleted to make it re-apply. The fingerprint from the first run survived
+ * in a schema nothing truncates. The second run recreated the table, matched
+ * the fingerprint, installed nothing, and reported four states as written by
+ * nothing on a run where the suite had written all four and asserted them.
+ *
+ * Dropping and recreating a table is not exotic: it is what resetting a
+ * migration during development looks like, and the checksum rule pushes people
+ * toward doing exactly that. So the fingerprint now carries the observer
+ * triggers the catalogue actually holds, and a trigger that has gone missing
+ * changes it and forces a reinstall. `an-observer-that-was-not-there.test.ts`
+ * asks the one question no test was asking about a watcher: is it there.
  */
 export async function installEnumObservers(): Promise<void> {
   const columns = await enumColumns();
   const tables = [...new Set(columns.map((c) => c.table))];
-  const fingerprint = columns
-    .map((c) => `${c.table}.${c.column}`)
-    .sort()
-    .join(',');
+  const fingerprint = [
+    columns.map((c) => `${c.table}.${c.column}`).sort().join(','),
+    await installedObservers(),
+  ].join(' | ');
 
   const { rows: existing } = await pool.query<{ fingerprint: string }>(
     `SELECT obj_description(c.oid) AS fingerprint

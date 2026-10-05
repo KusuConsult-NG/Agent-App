@@ -47,8 +47,16 @@ const REFUND = {
 /** Which fetches fail for a given test. 'all' is the outage. */
 let failing: 'none' | 'all' | 'refunds' = 'none';
 
+/**
+ * What the refunds endpoint answers, for the tests about its figures.
+ *
+ * It carries `matched` and `owedKobo` over the whole queue rather than over
+ * the page, so a test can describe a backlog without building one.
+ */
+let answerWith: { refunds: unknown[]; matched?: number; owedKobo?: string } | null = null;
+
 function answer(path: string): unknown {
-  if (path.includes('refunds/outstanding')) return { refunds: [REFUND] };
+  if (path.includes('refunds/outstanding')) return answerWith ?? { refunds: [REFUND] };
   if (path.includes('tin-outstanding')) return { taxpayers: [] };
   if (path.includes('ended-with-arrears')) return { taxpayers: [] };
   return { renewals: [], vehiclesAwaitingAuthority: [] };
@@ -58,6 +66,7 @@ beforeEach(() => {
   cleanup();
   setPortalLanguage('en');
   failing = 'none';
+  answerWith = null;
   vi.spyOn(apiModule, 'can').mockReturnValue(true);
   vi.spyOn(apiModule.api, 'get').mockImplementation(async (path: string) => {
     if (failing === 'all') throw new Error('gateway timeout');
@@ -134,5 +143,61 @@ describe('a queue nobody can see', () => {
     expect(screen.queryByText(en.ofcOsQueueUnreadable)).toBeNull();
     // "could not be read" is a negative, and stays one.
     expect(ha.ofcOsQueueUnreadable).toMatch(/\b(ba|bai|babu)\b/i);
+  });
+
+  /*
+   * And the figure beside the queue, when the queue is bigger than the page.
+   *
+   * These lists are capped at a hundred rows. The screen summed the rows it
+   * received into "Owed to taxpayers" and counted their length for "Refunds
+   * not yet made", so past the cap every figure on it was a subtotal
+   * presented as a total — on the screen whose job is to say what the State
+   * owes citizens, in the direction that understates it. The endpoints now
+   * count and sum over everything that matched.
+   */
+  it('shows what the whole queue is owed, not what the page adds up to', async () => {
+    answerWith = {
+      refunds: [REFUND],
+      matched: 7,
+      owedKobo: '900000',
+    };
+    render(<OutstandingScreen />);
+
+    /*
+     * Read off the stat rather than off the page: the one refund row that did
+     * arrive renders its own ₦3,000, so the figure has to be found where it is
+     * labelled.
+     */
+    await waitFor(() => {
+      const owed = screen.getByText(en.ofcOsOwedToTaxpayers).closest('div');
+      expect(owed?.textContent).toContain('₦9,000.00');
+    });
+    const owed = screen.getByText(en.ofcOsOwedToTaxpayers).closest('div');
+    expect(owed?.textContent).not.toContain('₦3,000.00');
+
+    const notMade = screen.getByText(en.ofcOsRefundsNotMade).closest('div');
+    expect(notMade?.textContent).toContain('7');
+  });
+
+  it('says which lists stop short of the figures above them', async () => {
+    answerWith = { refunds: [REFUND], matched: 7, owedKobo: '900000' };
+    render(<OutstandingScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText(en.ofcOsListsArePartial)).toBeTruthy();
+    });
+    expect(screen.getByText(en.ofcOsListsArePartialBody.replace('{{queues}}', en.ofcOsRefundsNotMade))).toBeTruthy();
+  });
+
+  it('says nothing about partial lists when every list is whole', async () => {
+    // The bound: one row, one refund outstanding, and no caveat to read past.
+    answerWith = { refunds: [REFUND], matched: 1, owedKobo: '300000' };
+    render(<OutstandingScreen />);
+
+    await waitFor(() => {
+      const owed = screen.getByText(en.ofcOsOwedToTaxpayers).closest('div');
+      expect(owed?.textContent).toContain('₦3,000.00');
+    });
+    expect(screen.queryByText(en.ofcOsListsArePartial)).toBeNull();
   });
 });

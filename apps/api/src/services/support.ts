@@ -27,8 +27,9 @@
  */
 
 import type { PoolClient } from 'pg';
+import { CONDUCT_CATEGORIES } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { query, queryOne, withTransaction } from '../db/pool';
+import { query, queryOne, withSavepoint, withTransaction } from '../db/pool';
 import { badRequest, forbidden, notFound } from '../lib/errors';
 import { nextTicketNumber } from '../lib/references';
 import { recordAudit } from './audit';
@@ -48,6 +49,16 @@ export const TICKET_CATEGORIES = [
   'AGENT_MISCONDUCT',
   'UNAUTHORISED_CHARGE',
 ] as const;
+
+/**
+ * The conduct categories as a SQL list, derived and never written out.
+ *
+ * The same reasoning as `lib/revenue-states.ts`: these are a closed set of
+ * upper-case identifiers from the shared package, so there is nothing to
+ * escape, and what matters is that this cannot say anything the constant does
+ * not.
+ */
+const CONDUCT_CATEGORIES_SQL = `(${CONDUCT_CATEGORIES.map((c) => `'${c}'`).join(',')})`;
 
 /** Who is asking, and what they are allowed to see. */
 export interface Viewer {
@@ -174,15 +185,57 @@ export async function raiseTicket(params: {
   });
 }
 
+/**
+ * The tickets a viewer may see, and how many complaints are open among them.
+ *
+ * WHY THE CONDUCT COUNT COMES FROM HERE
+ *
+ * The support screen counts AGENT_MISCONDUCT and UNAUTHORISED_CHARGE tickets
+ * that are not closed, and shows the figure as a banner above the table —
+ * because, as the test that put it there says, "a citizen who reports being
+ * overcharged by a revenue agent has no other way into this building".
+ *
+ * It counted them in the browser, over the rows this function returned. This
+ * list is capped at fifty. Measured on sixty open tickets with every third one
+ * a conduct complaint: twenty exist and the banner said sixteen. Four
+ * complaints about an agent overcharging citizens, invisible to the supervisor
+ * whose job is to act on them.
+ *
+ * That is the same banner `a-complaint-nobody-saw` was written for. It fixed
+ * the banner disappearing when the read failed; this is the banner
+ * undercounting when the queue is busy. Both end with a complaint nobody saw.
+ *
+ * `count(*) FILTER (...) OVER ()` is evaluated before LIMIT, so one query
+ * answers both questions and the figure cannot drift from the page. `matched`
+ * and `cap` come back too, so the screen can say when the table stopped short
+ * rather than leaving its last row to be read as the end of the queue.
+ *
+ * The category set is `CONDUCT_CATEGORIES` from `@psirs/shared`, the same
+ * constant the screen reads. It was a `Set` literal in the portal while only
+ * the portal needed it; a second copy here is how the two would come to
+ * disagree about what counts as a complaint.
+ */
 export async function listTickets(
   db: Db,
   params: { viewer: Viewer; status?: string; category?: string; assignedToMe?: boolean; limit?: number },
-) {
+): Promise<{
+  tickets: Record<string, unknown>[];
+  matched: number;
+  conductOpen: number;
+  cap: number;
+}> {
   const scopeToSelf = canSeeEverything(params.viewer) ? null : params.viewer.userId;
+  const cap = params.limit ?? 50;
 
-  return query(
+  const rows = await query<{ matched: string; conduct_open: string }>(
     db,
-    `SELECT t.id, t.ticket_number, t.category, t.subject, t.status, t.priority,
+    `SELECT page.*,
+            count(*) OVER ()::text AS matched,
+            count(*) FILTER (
+              WHERE page.category IN ${CONDUCT_CATEGORIES_SQL} AND page.status <> 'CLOSED'
+            ) OVER ()::text AS conduct_open
+       FROM (
+     SELECT t.id, t.ticket_number, t.category, t.subject, t.status, t.priority,
             t.created_at, t.updated_at, t.resolved_at,
             u.full_name AS raised_by_name, t.raiser_role,
             assignee.full_name AS assigned_to_name,
@@ -201,9 +254,10 @@ export async function listTickets(
         AND ($2::text IS NULL OR t.status = $2)
         AND ($3::text IS NULL OR t.category = $3)
         AND ($4::boolean IS FALSE OR t.assigned_to = $5)
+       ) page
       ORDER BY
-        CASE t.priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'NORMAL' THEN 2 ELSE 3 END,
-        t.created_at DESC
+        CASE page.priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'NORMAL' THEN 2 ELSE 3 END,
+        page.created_at DESC
       LIMIT $6`,
     [
       scopeToSelf,
@@ -211,9 +265,17 @@ export async function listTickets(
       params.category ?? null,
       params.assignedToMe ?? false,
       params.viewer.userId,
-      params.limit ?? 50,
+      cap,
     ],
   );
+
+  const figure = (value: string | undefined) => Number.parseInt(value ?? '0', 10);
+  return {
+    tickets: rows.map(({ matched: _m, conduct_open: _c, ...ticket }) => ticket),
+    matched: figure(rows[0]?.matched),
+    conductOpen: figure(rows[0]?.conduct_open),
+    cap,
+  };
 }
 
 /**
@@ -454,19 +516,26 @@ export async function updateTicket(params: {
  *
  * Best-effort: a notification that cannot be queued must not roll back the
  * reply it was announcing. The message is already in the thread either way.
+ *
+ * In a savepoint, because a try/catch alone did not keep that promise. This
+ * runs inside the reply's transaction, and a failed statement there abandons
+ * the transaction whatever TypeScript does with the error: the COMMIT became a
+ * ROLLBACK, the route still answered 201, and the reply was never saved.
  */
 async function notifyRaiser(
   client: PoolClient,
   params: { userId: string; ticketNumber: string; ticketId: string },
 ): Promise<void> {
   try {
-    await queueNotification(client, {
-      event: 'SUPPORT_TICKET_UPDATED',
-      userId: params.userId,
-      entityType: 'support_ticket',
-      entityId: params.ticketId,
-      variables: { ticketNumber: params.ticketNumber },
-    });
+    await withSavepoint(client, () =>
+      queueNotification(client, {
+        event: 'SUPPORT_TICKET_UPDATED',
+        userId: params.userId,
+        entityType: 'support_ticket',
+        entityId: params.ticketId,
+        variables: { ticketNumber: params.ticketNumber },
+      }),
+    );
   } catch (error) {
     log.error('could not queue a reply notification', { component: 'support', error });
   }

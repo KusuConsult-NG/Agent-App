@@ -146,7 +146,10 @@ export function VerifyScreen({ code }: { code?: string }) {
                      */
                     result.documentType === 'PAYMENT_ACKNOWLEDGEMENT'
                     ? t.pubVerdictAcknowledgement
-                    : t.pubVerdictValid
+                    : // A genuine invoice is a demand, not proof of payment.
+                      result.documentType === 'INVOICE'
+                      ? t.pubVerdictInvoice
+                      : t.pubVerdictValid
                   : result.status === 'REVERSED'
                     ? t.pubVerdictReversed
                     : result.status === 'NOT_FOUND'
@@ -177,7 +180,12 @@ export function VerifyScreen({ code }: { code?: string }) {
             {(result.receiptNumber || result.documentNumber) && (
               <KeyValue
                 items={[
-                  [t.pubVerifyReceiptNumber, result.receiptNumber ?? result.documentNumber ?? '—'],
+                  // A receipt's number is a receipt number; an invoice's is not, and
+                  // "Receipt number" under a green tick made an unpaid bill read as paid.
+                  [
+                    result.receiptNumber ? t.pubVerifyReceiptNumber : t.pubVerifyDocumentNumber,
+                    result.receiptNumber ?? result.documentNumber ?? '—',
+                  ],
                   /*
                    * What the citizen paid for, in words a citizen uses.
                    *
@@ -590,6 +598,8 @@ export function RefereePortalScreen({ token }: { token: string }) {
 interface CitizenStatement {
   from: string;
   to: string;
+  /** True when the window holds more payments than `rows` carries. */
+  truncated: boolean;
   summary: {
     payments: number;
     totalKobo: string;
@@ -1095,6 +1105,24 @@ function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identif
           <p style={{ fontWeight: 600, fontSize: '0.82rem', margin: '14px 0 6px' }}>
             {t.pubStmtEach}
           </p>
+
+          {/*
+            * Above the lines, not below them.
+            *
+            * The totals are printed first and the footer invites the reader to
+            * check this list against their receipts, so somebody reading a
+            * capped list in order reaches the disagreement before they reach
+            * any explanation of it. A market trader paying a daily levy
+            * crosses the cap inside seven months and the default period is a
+            * year, so this is the ordinary case for the people who pay most
+            * often, not an edge of it.
+            */}
+          {statement.truncated && (
+            <Alert kind="info">
+              {t.pubStmtPartial.replace(/\{\{n\}\}/g, String(statement.rows.length))}
+            </Alert>
+          )}
+
           {statement.rows.length === 0 ? (
             <p style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>{t.pubStmtNothing}</p>
           ) : (

@@ -53,6 +53,7 @@ import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { nextCaseNumber } from '../lib/references';
 import { recordAudit } from './audit';
 import { outstandingExceptionSql } from './reconciliation';
+import { CURRENT_FINDINGS_SQL } from '../lib/reconciliation-findings';
 import * as inbox from './officer-inbox';
 import { ACCEPTED as ACCEPTED_FILES } from './kyc-documents';
 import { storage, storageKey } from './storage';
@@ -164,6 +165,46 @@ function assertOpen(row: CaseRow): void {
   );
 }
 
+/**
+ * The case again, with its row locked, for the writers that refuse on its state.
+ *
+ * `load` reads on the pool, before any transaction exists, so a refusal
+ * decided on it is decided on a value another request is about to change. Two
+ * officers resolving one case together both read OPEN, both passed "already
+ * resolved", and the case ended with two RESOLUTION entries and two audit
+ * rows, each claiming it moved the case out of OPEN. One of those claims was
+ * false, and the case file is evidence an auditor reads months later.
+ *
+ * The practice is `requestTin`'s, two files away: "The write below re-reads
+ * `FOR UPDATE` and refuses." The read on the pool stays — it answers the
+ * ordinary sequential case and does the permission work before a transaction
+ * is opened — and this is what makes the answer hold when two arrive at once.
+ *
+ * Only the writers whose refusal turns on the case's own state use it.
+ * Attaching evidence and adding a comment are additive: two landing together
+ * is two things happening, which is what the record should say.
+ */
+interface LockedCase {
+  status: string;
+  case_number: string;
+  assignee_id: string | null;
+  department: string | null;
+  department_id: string | null;
+  priority: string;
+  due_at: Date | null;
+}
+
+async function lockCase(client: PoolClient, id: string): Promise<LockedCase> {
+  const row = await queryOne<LockedCase>(
+    client,
+    `SELECT status, case_number, assignee_id, department, department_id, priority, due_at
+       FROM cases WHERE id = $1 FOR UPDATE`,
+    [id],
+  );
+  if (!row) throw notFound('That case');
+  return row;
+}
+
 async function load(db: Db, id: string): Promise<CaseRow> {
   const row = await queryOne<CaseRow>(
     db,
@@ -233,8 +274,16 @@ async function append(
  * whether an identifier belongs to a real officer: an unknown id is dropped
  * silently rather than reported.
  *
- * Only portal roles can be mentioned. Mentioning a field agent on an internal
- * case would put their name in a queue they cannot open.
+ * Only somebody who can open the case can be mentioned. Naming a field agent,
+ * or anybody else without `case:read:all`, would put their name in a queue
+ * they cannot open.
+ *
+ * This was written as a list of five role names — the portal roles the
+ * platform ships with — which stood in for that test and was not it. An
+ * administrator can create a role (`rbac-store.createRole`), so a colleague in
+ * one, able to open every case, was dropped from the comment without a word
+ * and never told they had been asked something. It now asks the question the
+ * list was standing in for, through the same role grants sign-in reads.
  */
 async function resolveMentions(
   db: Db,
@@ -245,7 +294,10 @@ async function resolveMentions(
     db,
     `SELECT id FROM users
       WHERE id = ANY($1::uuid[]) AND status = 'ACTIVE'
-        AND role IN ('supervisor','revenue_officer','finance_officer','auditor','admin')`,
+        AND EXISTS (SELECT 1 FROM role_permissions rp
+                      JOIN roles r ON r.name = rp.role
+                     WHERE rp.role = users.role AND r.status = 'ACTIVE'
+                       AND rp.permission = 'case:read:all')`,
     [[...new Set(ids)]],
   );
   return rows.map((row) => row.id);
@@ -656,15 +708,18 @@ export async function assign(
   assertMayWork(viewer, row);
   if (input.assigneeId) await assertAssignable(db, input.assigneeId);
 
-  const department = input.department === undefined ? row.department : input.department;
-  const departmentId =
-    input.departmentId === undefined ? row.department_id : input.departmentId;
 
-  if (departmentId && departmentId !== row.department_id) {
+  /*
+   * Whenever the caller names one, rather than when it differs from the row
+   * read above. That comparison skipped the check when the named department
+   * matched a value another request had already moved on from, and naming the
+   * department the case is already in costs one read to confirm it is open.
+   */
+  if (input.departmentId) {
     const target = await queryOne<{ status: string; name: string }>(
       db,
       'SELECT status, name FROM departments WHERE id = $1',
-      [departmentId],
+      [input.departmentId],
     );
     if (!target) throw notFound('That department');
     /*
@@ -678,11 +733,37 @@ export async function assign(
     }
   }
 
-  const routed =
-    (input.department !== undefined && input.department !== row.department) ||
-    (input.departmentId !== undefined && input.departmentId !== row.department_id);
-
   await withTransaction(async (client) => {
+    /*
+     * The fields the caller did not name come from the locked row, not from
+     * the one read before the transaction.
+     *
+     * They were derived from that earlier read, so an officer routing a case
+     * to Finance while another assigned it to a person lost the routing — to a
+     * write that never mentioned it. The audit entry recorded the department
+     * from before the routing too, which is a claim about a state this request
+     * never saw.
+     *
+     * Last-writer-wins stays, and is right: an assignment names its target, so
+     * a case moving under it does not invalidate the intent. What it must not
+     * do is carry a stale value for everything it was silent about.
+     */
+    const current = await lockCase(client, caseId);
+    if (TERMINAL.includes(current.status)) {
+      throw conflict(
+        'CASE_CLOSED',
+        `Case ${current.case_number} is ${current.status.toLowerCase()} and cannot be changed.`,
+        'Open a new case that links to this one.',
+      );
+    }
+
+    const department = input.department === undefined ? current.department : input.department;
+    const departmentId =
+      input.departmentId === undefined ? current.department_id : input.departmentId;
+    const routed =
+      (input.department !== undefined && input.department !== current.department) ||
+      (input.departmentId !== undefined && input.departmentId !== current.department_id);
+
     await client.query(
       `UPDATE cases
           SET assignee_id = $2, department = $3, department_id = $4, updated_at = now()
@@ -693,9 +774,9 @@ export async function assign(
       kind: routed ? 'ROUTED' : 'ASSIGNMENT',
       body: input.reason?.trim() ?? '',
       oldValue: {
-        assigneeId: row.assignee_id,
-        department: row.department,
-        departmentId: row.department_id,
+        assigneeId: current.assignee_id,
+        department: current.department,
+        departmentId: current.department_id,
       },
       newValue: { assigneeId: input.assigneeId, department, departmentId },
     });
@@ -706,9 +787,9 @@ export async function assign(
       entityType: 'case',
       entityId: caseId,
       oldValue: {
-        assigneeId: row.assignee_id,
-        department: row.department,
-        departmentId: row.department_id,
+        assigneeId: current.assignee_id,
+        department: current.department,
+        departmentId: current.department_id,
       },
       newValue: { assigneeId: input.assigneeId, department, departmentId },
       reason: input.reason?.trim() || null,
@@ -771,6 +852,32 @@ export async function escalate(
   }
 
   await withTransaction(async (client) => {
+    /*
+     * Asked again under the lock, and `assignee_id` as well as the status.
+     *
+     * The target above was computed from `row.assignee_id` — who held the case
+     * when this request started. If another escalation has landed since, the
+     * case is already with somebody else and this one would record a move from
+     * an officer who no longer held it, and notify the person above a second
+     * time for one escalation. The comment below says why that notification is
+     * not a formality.
+     */
+    const current = await lockCase(client, caseId);
+    if (TERMINAL.includes(current.status)) {
+      throw conflict(
+        'CASE_CLOSED',
+        `Case ${current.case_number} is ${current.status.toLowerCase()} and cannot be changed.`,
+        'Open a new case that links to this one.',
+      );
+    }
+    if (current.assignee_id !== row.assignee_id) {
+      throw conflict(
+        'CASE_MOVED',
+        `Case ${current.case_number} has been reassigned since this page was opened.`,
+        'Open the case again to see who holds it now, then escalate from there.',
+      );
+    }
+
     await client.query(
       `UPDATE cases
           SET status = 'ESCALATED', assignee_id = $2, updated_at = now()
@@ -840,6 +947,20 @@ export async function setStatus(
   }
 
   await withTransaction(async (client) => {
+    // Asked again under the lock. Everything decided above was decided on a
+    // read another request may already have overtaken.
+    const current = await lockCase(client, caseId);
+    if (TERMINAL.includes(current.status)) {
+      throw conflict(
+        'CASE_CLOSED',
+        `Case ${current.case_number} is ${current.status.toLowerCase()} and cannot be changed.`,
+        'Open a new case that links to this one.',
+      );
+    }
+    if (input.status === current.status) {
+      throw badRequest(`Case ${current.case_number} is already ${current.status.toLowerCase()}.`);
+    }
+
     await client.query(
       `UPDATE cases
           SET status      = $2,
@@ -891,27 +1012,48 @@ export async function setPriority(
   assertOpen(row);
   assertMayWork(viewer, row);
 
-  const priority = input.priority ?? row.priority;
-  const dueAt = input.dueAt === undefined ? row.due_at : input.dueAt;
-
   await withTransaction(async (client) => {
+    /*
+     * Both fields are written every time, so both must come from the locked
+     * row when the caller named only one of them.
+     *
+     * They came from the read above, which happens on the pool before this
+     * transaction exists. One officer raising the priority and another setting
+     * a due date therefore each wrote the other's field back as they had found
+     * it, and whichever committed second silently undid the first — a change
+     * lost to a request that never mentioned the field it overwrote. The
+     * timeline recorded the stale value as the old one too, which is a claim
+     * about a state the request never saw.
+     */
+    const current = await lockCase(client, caseId);
+    if (TERMINAL.includes(current.status)) {
+      throw conflict(
+        'CASE_CLOSED',
+        `Case ${current.case_number} is ${current.status.toLowerCase()} and cannot be changed.`,
+        'Open a new case that links to this one.',
+      );
+    }
+
+    const priority = input.priority ?? current.priority;
+    const dueAt = input.dueAt === undefined ? current.due_at : input.dueAt;
+
     await client.query(
       'UPDATE cases SET priority = $2, due_at = $3, updated_at = now() WHERE id = $1',
       [caseId, priority, dueAt],
     );
-    if (priority !== row.priority) {
+    if (priority !== current.priority) {
       await append(client, caseId, viewer, {
         kind: 'PRIORITY_CHANGE',
         body: input.reason?.trim() ?? '',
-        oldValue: { priority: row.priority },
+        oldValue: { priority: current.priority },
         newValue: { priority },
       });
     }
-    if (input.dueAt !== undefined && String(dueAt) !== String(row.due_at)) {
+    if (input.dueAt !== undefined && String(dueAt) !== String(current.due_at)) {
       await append(client, caseId, viewer, {
         kind: 'DUE_DATE_CHANGE',
         body: input.reason?.trim() ?? '',
-        oldValue: { dueAt: row.due_at },
+        oldValue: { dueAt: current.due_at },
         newValue: { dueAt },
       });
     }
@@ -937,10 +1079,66 @@ export interface CaseFilter {
   limit?: number;
 }
 
-export async function listCases(db: Db, filter: CaseFilter) {
-  return query(
+/**
+ * The cases a filter matches, and four counts over all of them.
+ *
+ * WHY THE COUNTS COME FROM HERE
+ *
+ * This returned a bare array capped at 100 and the workbench added up its own
+ * four figures — cases, overdue, urgent, nobody-yet — over whatever arrived.
+ * Measured on a 140-case open queue (5 urgent, 20 high, 100 normal, 15 low,
+ * every fourth overdue, every fifth unassigned):
+ *
+ *   the whole queue   140 cases, 35 overdue, 5 urgent, 28 unassigned
+ *   the first 100     100 cases, 31 overdue, 5 urgent, 20 unassigned
+ *
+ * Three of the four are wrong and all three understate, so a work queue reads
+ * as more under control than it is — and the tile carrying the alert variant,
+ * overdue, is one of them.
+ *
+ * `urgent` happened to be exact, because URGENT sorts first and five of them
+ * fit on the page. That is the ordering protecting a figure by luck rather
+ * than by design: it holds only while fewer than a hundred cases are urgent,
+ * and it would stop holding the moment this ORDER BY changed for an unrelated
+ * reason. So all four are computed over the matched set rather than the three
+ * that were visibly wrong.
+ *
+ * `myWork` below already had the right pairing — a capped list of assigned
+ * cases beside unbounded `count(*)` subqueries for its own tiles. The correct
+ * pattern was two hundred lines from the defect.
+ *
+ * `count(*) FILTER (...) OVER ()` is evaluated before LIMIT, so one query
+ * answers both questions and a page cannot drift from its own totals. The
+ * rows go through a derived table because `overdue` is a computed select-list
+ * column and a window cannot reference one by alias.
+ */
+export async function listCases(
+  db: Db,
+  filter: CaseFilter,
+): Promise<{
+  cases: Record<string, unknown>[];
+  matched: number;
+  overdue: number;
+  urgent: number;
+  unassigned: number;
+  cap: number;
+}> {
+  const cap = filter.limit ?? 100;
+  const rows = await query<{
+    matched: string;
+    overdue_total: string;
+    urgent_total: string;
+    unassigned_total: string;
+  }>(
     db,
-    `SELECT c.id, c.case_number, c.subject, c.category, c.status, c.priority,
+    `SELECT page.*,
+            count(*) OVER ()::text AS matched,
+            count(*) FILTER (WHERE page.overdue) OVER ()::text AS overdue_total,
+            count(*) FILTER (WHERE page.priority = 'URGENT') OVER ()::text AS urgent_total,
+            count(*) FILTER (WHERE page.assignee_name IS NULL) OVER ()::text
+              AS unassigned_total
+       FROM (
+     SELECT c.id, c.case_number, c.subject, c.category, c.status, c.priority,
             c.risk_level, c.department, c.due_at, c.created_at, c.updated_at,
             c.transaction_id, c.agent_id, c.taxpayer_id,
             t.transaction_reference,
@@ -973,10 +1171,11 @@ export async function listCases(db: Db, filter: CaseFilter) {
         AND ($11::boolean IS NOT TRUE
              OR (c.due_at IS NOT NULL AND c.due_at < now()
                  AND c.status NOT IN ('RESOLVED','CLOSED')))
+       ) page
       ORDER BY
-        CASE c.priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'NORMAL' THEN 2 ELSE 3 END,
-        c.due_at NULLS LAST,
-        c.created_at DESC
+        CASE page.priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'NORMAL' THEN 2 ELSE 3 END,
+        page.due_at NULLS LAST,
+        page.created_at DESC
       LIMIT $12`,
     [
       filter.status ?? null,
@@ -990,9 +1189,21 @@ export async function listCases(db: Db, filter: CaseFilter) {
       filter.agentId ?? null,
       filter.taxpayerId ?? null,
       filter.overdue ?? null,
-      filter.limit ?? 100,
+      cap,
     ],
   );
+
+  const figure = (value: string | undefined) => Number.parseInt(value ?? '0', 10);
+  return {
+    cases: rows.map(
+      ({ matched: _m, overdue_total: _o, urgent_total: _u, unassigned_total: _n, ...row }) => row,
+    ),
+    matched: figure(rows[0]?.matched),
+    overdue: figure(rows[0]?.overdue_total),
+    urgent: figure(rows[0]?.urgent_total),
+    unassigned: figure(rows[0]?.unassigned_total),
+    cap,
+  };
 }
 
 /** One case and its whole history, oldest first — the order it happened in. */
@@ -1118,7 +1329,9 @@ export async function myWork(db: Db, viewer: Viewer) {
 
   const [assigned, opened, mentions, unassigned, counts, approvals, exceptions, flags] =
     await Promise.all([
-      listCases(db, { assigneeId: viewer.userId, open: true, limit: 50 }),
+      // `.cases` — `listCases` carries its own counts now, and this panel has
+      // its own unbounded ones below. Only the rows are wanted here.
+      listCases(db, { assigneeId: viewer.userId, open: true, limit: 50 }).then((r) => r.cases),
       query(
         db,
         `SELECT c.id, c.case_number, c.subject, c.status, c.priority, c.due_at,
@@ -1220,7 +1433,7 @@ export async function myWork(db: Db, viewer: Viewer) {
             db,
             `SELECT rr.id, rr.status, rr.variance_kobo::text, rr.gateway_reference,
                     rr.created_at, t.transaction_reference
-               FROM reconciliation_records rr
+               FROM (${CURRENT_FINDINGS_SQL}) rr
                LEFT JOIN transactions t ON t.id = rr.transaction_id
               WHERE ${outstandingExceptionSql('rr')}
               ORDER BY abs(rr.variance_kobo) DESC LIMIT 25`,

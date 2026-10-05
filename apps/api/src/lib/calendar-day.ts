@@ -89,6 +89,55 @@ export function endOfDay(date: Date): Date {
 /** Nigeria keeps West Africa Time all year: UTC+1, no daylight saving. */
 export const PLATEAU_TIME_ZONE = 'Africa/Lagos';
 
+/*
+ * AND THE SAME QUESTION, ASKED IN SQL
+ *
+ * The database session runs in UTC, so `created_at::date` and CURRENT_DATE
+ * answer on UTC's calendar. Between midnight and 01:00 in Plateau that is
+ * still yesterday — and on the first of a month, last month. `targets.ts`
+ * found this by having its suite run at 23:36Z on 30 September: money taken
+ * in the first hour of a Plateau month was credited to the month that had
+ * ended. It named the zone in its own queries, and nowhere else.
+ *
+ * The month a period close froze, the executive dashboard's today, week,
+ * month and year, the agent's own "today" and their month against the last
+ * all went on asking UTC. Measured: a collection at 2026-03-31T23:30Z, which
+ * is 00:30 on 1 April in Jos, was in March's close and not April's. Migration
+ * 058 then refuses to let anybody correct a closed period's figure — and its
+ * lock decided a row's month on UTC too, until migration 089 put it on this
+ * calendar, so that the lock and the close name the same month.
+ *
+ * These are the SQL forms of the rule above, so a query names the zone by
+ * calling something rather than by remembering to.
+ */
+
+/** Today on Plateau's calendar, as a SQL `date`. */
+export const PLATEAU_TODAY_SQL = `(now() AT TIME ZONE '${PLATEAU_TIME_ZONE}')::date`;
+
+/** The Plateau calendar day of a `timestamptz` column, as a SQL `date`. */
+export function plateauDateSql(column: string): string {
+  return `(${column} AT TIME ZONE '${PLATEAU_TIME_ZONE}')::date`;
+}
+
+/**
+ * The time on a Plateau wall clock of a `timestamptz` column, as a SQL
+ * `timestamp` — for a label a person reads, or a month to group by.
+ */
+export function plateauWallClockSql(column: string): string {
+  return `(${column} AT TIME ZONE '${PLATEAU_TIME_ZONE}')`;
+}
+
+/**
+ * The instant a Plateau calendar day begins, as a SQL `timestamptz`.
+ *
+ * For comparing a bare `timestamptz` column against a day: converting the
+ * bound rather than the column leaves any index on the column usable, which
+ * matters for `audit_logs`.
+ */
+export function plateauMidnightSql(dateExpression: string): string {
+  return `((${dateExpression})::timestamp AT TIME ZONE '${PLATEAU_TIME_ZONE}')`;
+}
+
 const PLATEAU_CALENDAR = new Intl.DateTimeFormat('en-GB', {
   timeZone: PLATEAU_TIME_ZONE,
   year: 'numeric',

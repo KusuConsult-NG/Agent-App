@@ -69,7 +69,36 @@ export type NotificationEvent =
   | 'TAX_REMINDER_6W'
   | 'TAX_REMINDER_4W'
   | 'TAX_REMINDER_2W'
-  | 'TAX_OBLIGATION_ASSIGNED';
+  | 'TAX_REMINDER_1W'
+  | 'TAX_OBLIGATION_ASSIGNED'
+  /*
+   * What became of an objection.
+   *
+   * A trader who formally disputed an estimate was told nothing when it was
+   * decided, either way: the decision has a reason "the taxpayer can read",
+   * required by the service and by the database, and nothing ever sent it to
+   * them. Upheld, they went on believing they owed the money; rejected, they
+   * went on believing collection was suspended. Upheld on a bill they had
+   * already paid is its own message, because what they need to know is that
+   * a refund has been asked for.
+   */
+  | 'OBJECTION_UPHELD'
+  | 'OBJECTION_UPHELD_REFUND_REQUESTED'
+  | 'OBJECTION_REJECTED'
+  /*
+   * And that it was received. An objection is often recorded by an agent at
+   * the stall or an officer at a desk, not by the trader, and the trader left
+   * with nothing to show for it — while the reminder sweep stopped chasing
+   * the bill on the strength of a message, its own comment said, that the
+   * trader had been sent. Nobody had sent it.
+   */
+  | 'OBJECTION_RECEIVED'
+  /*
+   * The group leader's attestation link (migration 099). Sent to the leader's
+   * phone and returned to nobody, because the agent who asks for it is the
+   * person the leader's confirmation exists to check.
+   */
+  | 'GROUP_ATTESTATION_INVITATION';
 
 /**
  * Render `{{placeholders}}` from a template.
@@ -118,6 +147,17 @@ export interface QueueNotificationParams {
    * masked, which is what a support officer needs and all they need.
    */
   secretVariables?: string[];
+  /**
+   * Values worded differently in each language, picked by the language the
+   * template was actually rendered in.
+   *
+   * The recipient's language is resolved in here, so a caller cannot word a
+   * value for it in advance. A due date was formatted once, in English, and
+   * went into the Hausa reminder as "20 October 2026". Given here as
+   * `{ dueDate: { en, ha } }`, each rendering takes its own; a template in a
+   * language with no entry takes the English.
+   */
+  localisedVariables?: Record<string, { en: string; ha?: string }>;
   entityType?: string;
   entityId?: string;
 }
@@ -283,9 +323,18 @@ export async function queueNotification(
      * this file fails any ACTIVE template whose subject names `{{code}}` or
      * `{{link}}`, so this line is the floor under a rule caught earlier.
      */
-    const subject = template.subject ? render(template.subject, maskedVariables) : null;
-    const deliverable = render(template.body, variables);
-    const retained = secretVariables.length ? render(template.body, maskedVariables) : deliverable;
+    // The values worded for this template's language. Never credentials, so
+    // the masked copy takes them as they are.
+    const localised: Record<string, string> = {};
+    for (const [key, worded] of Object.entries(params.localisedVariables ?? {})) {
+      localised[key] = (template.language === 'ha' ? worded.ha : undefined) ?? worded.en;
+    }
+    const renderedVariables = { ...variables, ...localised };
+    const maskedForTemplate = { ...maskedVariables, ...localised };
+
+    const subject = template.subject ? render(template.subject, maskedForTemplate) : null;
+    const deliverable = render(template.body, renderedVariables);
+    const retained = secretVariables.length ? render(template.body, maskedForTemplate) : deliverable;
 
     await client.query(
       `INSERT INTO notifications

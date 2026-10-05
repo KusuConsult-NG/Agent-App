@@ -19,6 +19,7 @@
  * Application checks would be enough right up until the day they were not.
  */
 
+import { quantityHundredths } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, notFound } from '../lib/errors';
@@ -461,11 +462,15 @@ export async function roundSummary(db: Db, roundId: string) {
    *
    * Hundredths are exact here: NUMERIC(14,2) tops out well inside the range
    * where an integer number of hundredths is safely representable.
+   *
+   * The helper itself now lives in `@psirs/shared` as `quantityHundredths`,
+   * because keeping it local to this function is what let the rounds list and
+   * the create form rediscover the same arithmetic in the browser. The
+   * reasoning above is the reason it exists and stays here.
    */
-  const hundredths = (value: string | number): number => Math.round(Number(value) * 100);
-
-  const remainingHundredths = hundredths(round.total_quantity) - hundredths(totals!.awarded_quantity);
-  const perBeneficiaryHundredths = hundredths(round.quantity_per_beneficiary);
+  const remainingHundredths =
+    quantityHundredths(round.total_quantity) - quantityHundredths(totals!.awarded_quantity);
+  const perBeneficiaryHundredths = quantityHundredths(round.quantity_per_beneficiary);
 
   return {
     ...round,
@@ -488,22 +493,71 @@ export async function roundSummary(db: Db, roundId: string) {
  * against through the API, and the screen that shows it could only be reached
  * by typing its id into the address bar — which is the same "built but
  * unreachable" fault this codebase keeps turning up, committed fresh.
+ *
+ * WHAT IS LEFT IS COMPUTED HERE, AND THE REASON IS ARITHMETIC
+ *
+ * This returned `total_quantity` and `awarded_quantity` and let the screen
+ * subtract them. Both are `NUMERIC(14,2)`, and two exact decimals read into
+ * JavaScript numbers stop being exact: the rounds table printed
+ * "497.00 awarded, 3.0000000000000004 left" — through `String()`, with no
+ * rounding anywhere — and the create form, dividing the same way, told an
+ * officer a 2.90-unit round at 0.10 each would serve twenty-eight people when
+ * it serves twenty-nine.
+ *
+ * `getRound` had already met this and fixed it, counting in whole hundredths,
+ * with the measurement recorded beside it: 12,231 disagreements against the
+ * integer answer over every two-decimal combination a round plausibly holds,
+ * every one understating how many people the goods can serve. Its own worked
+ * example, `1.00 - 0.90`, is the subtraction the list was doing. The fix that
+ * put `awarded_quantity` on this list — so an officer could see how far
+ * through a round is, which is the number they close it on — reintroduced the
+ * bug one layer up from where it had been fixed.
+ *
+ * So the figures come from SQL. `NUMERIC` arithmetic in Postgres is exact
+ * without hundredths or rounding: `0.30 - 0.10` is `0.20` and
+ * `floor(0.30 / 0.10)` is `3`. A figure the database can compute exactly
+ * should not be reassembled anywhere else.
+ *
+ * The awarded total is named once in a CTE rather than written three times.
+ * Repeating an aggregate across a select list is how two of its three copies
+ * come to disagree.
+ *
+ * STILL TWO IMPLEMENTATIONS, AND THAT IS WORTH SAYING
+ *
+ * `getRound` computes the same two figures in hundredths in TypeScript. Both
+ * are exact, so neither is wrong; they are two definitions of one thing, and
+ * this codebase keeps recording what that costs. Consolidating is a separate
+ * change — its query is a different shape, and it is covered by its own
+ * tests — but it is the obvious next tidy and is not being left unsaid.
  */
 export async function listRounds(db: Db, options: { programmeId?: string; limit?: number } = {}) {
   return query(
     db,
-    `SELECT r.id, r.name, r.unit, r.total_quantity, r.quantity_per_beneficiary,
-            r.status, r.collection_point, r.opens_at, r.closes_at,
-            p.name AS programme_name, p.name_ha AS programme_name_ha,
-            COALESCE(SUM(a.quantity) FILTER (WHERE a.status <> 'FORFEITED'), 0)::text AS awarded_quantity,
-            count(a.id) FILTER (WHERE a.status = 'COLLECTED')::text AS collected_count,
-            count(a.id) FILTER (WHERE a.status <> 'FORFEITED')::text AS awarded_count
-       FROM incentive_allocation_rounds r
-       JOIN incentive_programmes p ON p.id = r.programme_id
-       LEFT JOIN incentive_awards a ON a.round_id = r.id
-      WHERE ($1::uuid IS NULL OR r.programme_id = $1)
-      GROUP BY r.id, p.name, p.name_ha
-      ORDER BY r.created_at DESC
+    `WITH rounds AS (
+       SELECT r.id, r.name, r.unit, r.total_quantity, r.quantity_per_beneficiary,
+              r.status, r.collection_point, r.opens_at, r.closes_at, r.created_at,
+              p.name AS programme_name, p.name_ha AS programme_name_ha,
+              COALESCE(SUM(a.quantity) FILTER (WHERE a.status <> 'FORFEITED'), 0) AS awarded,
+              count(a.id) FILTER (WHERE a.status = 'COLLECTED') AS collected_count,
+              count(a.id) FILTER (WHERE a.status <> 'FORFEITED') AS awarded_count
+         FROM incentive_allocation_rounds r
+         JOIN incentive_programmes p ON p.id = r.programme_id
+         LEFT JOIN incentive_awards a ON a.round_id = r.id
+        WHERE ($1::uuid IS NULL OR r.programme_id = $1)
+        GROUP BY r.id, p.name, p.name_ha
+     )
+     SELECT id, name, unit, total_quantity, quantity_per_beneficiary,
+            status, collection_point, opens_at, closes_at,
+            programme_name, programme_name_ha,
+            awarded::text AS awarded_quantity,
+            collected_count::text AS collected_count,
+            awarded_count::text AS awarded_count,
+            (total_quantity - awarded)::text AS remaining_quantity,
+            CASE WHEN quantity_per_beneficiary > 0
+                 THEN floor((total_quantity - awarded) / quantity_per_beneficiary)::text
+                 ELSE '0' END AS beneficiaries_remaining
+       FROM rounds
+      ORDER BY created_at DESC
       LIMIT $2`,
     [options.programmeId ?? null, options.limit ?? 100],
   );

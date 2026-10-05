@@ -38,9 +38,10 @@ import {
   revenueItemByCode,
 } from './helpers';
 import { query, queryOne } from '../db/pool';
+import { translations } from '@psirs/shared';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
-import { sendDueReminders } from '../services/reminders';
+import { REMINDER_WINDOWS, sendDueReminders } from '../services/reminders';
 
 let agent: { token: string; device: string };
 
@@ -84,13 +85,12 @@ beforeEach(async () => {
 });
 
 /**
- * An unpaid invoice due at a chosen instant.
+ * An unpaid invoice, with the expiry the platform gave it.
  *
- * Built through the API — the assessment is what creates the invoice — and
- * then moved in time, which is the honest way to reach a window that is two
- * weeks wide without waiting two weeks.
+ * Nothing is moved: this is what an invoice raised today actually looks like,
+ * which is the only way to ask whether a reminder window can be reached.
  */
-async function invoiceDueAt(suffix: string, expiresAt: Date): Promise<string> {
+async function freshInvoice(suffix: string): Promise<string> {
   const auth = { token: agent.token, deviceId: agent.device };
   const taxpayer = await post(
     '/taxpayers',
@@ -128,8 +128,21 @@ async function invoiceDueAt(suffix: string, expiresAt: Date): Promise<string> {
   );
   assert.ok(invoice, 'the assessment raised an invoice');
 
-  await pool.query('UPDATE invoices SET expires_at = $2 WHERE id = $1', [invoice!.id, expiresAt]);
   return invoice!.id;
+}
+
+/**
+ * The same invoice, due at a chosen instant.
+ *
+ * Moved in time, which is the honest way to reach a window that is two weeks
+ * wide without waiting two weeks — honest only as far as the instant chosen is
+ * one the platform can produce. See the last describe block in this file for
+ * what that rules out.
+ */
+async function invoiceDueAt(suffix: string, expiresAt: Date): Promise<string> {
+  const id = await freshInvoice(suffix);
+  await pool.query('UPDATE invoices SET expires_at = $2 WHERE id = $1', [id, expiresAt]);
+  return id;
 }
 
 /** Fourteen days out — squarely inside the two-week window (13–15 days). */
@@ -288,5 +301,303 @@ describe('The reminder sweep only counts what it actually queued', () => {
     assert.equal(result.sent, 0, JSON.stringify(result));
     assert.equal((await messagesFor(invoiceId)).length, 0);
     assert.equal(await reminderFlag(invoiceId), false);
+  });
+});
+
+// ===========================================================================
+describe('a bill that has to be issued again before it can be paid', () => {
+  /*
+   * Every reminder ends "pay now" with a link. For a bill whose charge a
+   * reversal ended, or that was raised in a month since closed, that was a
+   * link to a payment the platform would refuse.
+   */
+  it('is not told to pay when its charge was ended by a reversal', async () => {
+    const invoiceId = await invoiceDueAt('21', twoWeeksOut());
+    await pool.query(`UPDATE transactions SET status = 'REVERSED' WHERE invoice_id = $1`, [invoiceId]);
+
+    await sendDueReminders(pool);
+    assert.deepEqual(await messagesFor(invoiceId), []);
+    assert.equal(await reminderFlag(invoiceId), false, 'and its flag is left for the bill it becomes');
+  });
+
+  it('is not told to pay when its month has been closed', async () => {
+    const invoiceId = await invoiceDueAt('22', twoWeeksOut());
+    const now = new Date();
+    const lastMonth = {
+      start: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)),
+      end: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0)),
+      during: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 15, 10)),
+    };
+    await pool.query('ALTER TABLE transactions DISABLE TRIGGER transactions_immutable');
+    try {
+      await pool.query('UPDATE transactions SET created_at = $2 WHERE invoice_id = $1', [
+        invoiceId,
+        lastMonth.during,
+      ]);
+    } finally {
+      await pool.query('ALTER TABLE transactions ENABLE TRIGGER transactions_immutable');
+    }
+    await pool.query(
+      `INSERT INTO financial_periods (label, period_start, period_end, status, closed_at, closed_by, closing_note)
+       VALUES ('Last month', $1, $2, 'CLOSED', now(), (SELECT id FROM users LIMIT 1), 'Reconciled.')`,
+      [lastMonth.start, lastMonth.end],
+    );
+
+    await sendDueReminders(pool);
+    assert.deepEqual(await messagesFor(invoiceId), []);
+  });
+});
+
+/**
+ * A reminder nothing can reach.
+ *
+ * The sweep declared three windows — six, four and two weeks before an
+ * invoice's expiry — and the file that declares them read as a description of
+ * what PSIRS sends. (A fourth, in the final week, came with migration 098.) `createAssessmentIn` gives every invoice thirty days to be
+ * paid, and `invoiceValidityDays`, the parameter that would change that, is
+ * passed by nothing anywhere: not a route, not a service, not a test. So the
+ * gap between now and an invoice's expiry starts at thirty days and only
+ * shrinks, and a window whose floor is forty-one days cannot be entered.
+ *
+ * TAX_REMINDER_6W has therefore never been sent to anybody. The template is
+ * approved and the flag column exists on every invoice and is false on all of
+ * them. (This said the Hausa translation was written too, when no reminder
+ * had one; migration 101 wrote them.) The two suites that appeared to
+ * cover it first moved an invoice's expiry out to forty-two days, which is a
+ * state the platform cannot produce — so what they proved was that the
+ * fixture ran.
+ *
+ * These measure it instead of asserting it, against an invoice with the expiry
+ * the platform gave it, so the day a revenue item is given a longer window to
+ * pay this fails rather than the comment quietly going out of date.
+ */
+describe('the reminder ladder, against the invoices the platform issues', () => {
+  const window = (event: string) => {
+    const found = REMINDER_WINDOWS.find((entry) => entry.event === event);
+    assert.ok(found, `no ${event} window`);
+    return found!;
+  };
+
+  /** The validity of an invoice the platform just raised, in whole days. */
+  async function validityOf(invoiceId: string): Promise<number> {
+    const row = await queryOne<{ days: string }>(
+      pool,
+      `SELECT round(EXTRACT(EPOCH FROM (expires_at - now())) / 86400)::text AS days
+         FROM invoices WHERE id = $1`,
+      [invoiceId],
+    );
+    return Number.parseInt(row!.days, 10);
+  }
+
+  it('gives every invoice thirty days, because nothing can ask for more', async () => {
+    const invoiceId = await freshInvoice('10');
+    assert.equal(
+      await validityOf(invoiceId),
+      30,
+      'the only validity this platform issues, and the number every window below is judged against',
+    );
+  });
+
+  it('cannot reach the six-week window with any invoice it can raise', async () => {
+    const validity = await validityOf(await freshInvoice('11'));
+    const sixWeeks = window('TAX_REMINDER_6W');
+
+    assert.ok(
+      sixWeeks.minDays > validity,
+      `the six-week window opens at ${sixWeeks.minDays} days and an invoice is born with ` +
+        `${validity}; the gap only shrinks from there, so nothing can ever be inside it`,
+    );
+  });
+
+  it('reaches the other three, and reaches the four-week one the next day', async () => {
+    const validity = await validityOf(await freshInvoice('12'));
+
+    for (const event of ['TAX_REMINDER_4W', 'TAX_REMINDER_2W', 'TAX_REMINDER_1W']) {
+      assert.ok(
+        window(event).maxDays <= validity,
+        `${event} opens at ${window(event).maxDays} days, within the ${validity} an invoice has`,
+      );
+    }
+
+    /*
+     * And how soon. A thirty-day invoice is inside the 27–29 day window one
+     * day after it is raised, so the taxpayer assessed on the Monday is told
+     * on the Tuesday that they have four weeks to pay. True, and not what a
+     * ladder of three reminders was drawn for — recorded here as a figure
+     * rather than an opinion.
+     */
+    assert.equal(validity - window('TAX_REMINDER_4W').maxDays, 1);
+  });
+
+  it('sends no six-week reminder across the whole life of a real invoice', async () => {
+    /*
+     * The end-to-end form. The invoice is walked through every day of its life
+     * by moving its expiry one day closer at a time — each of those is a state
+     * the platform reaches on its own — and the sweep is run at each step.
+     * Forty-one days is never among them.
+     */
+    const invoiceId = await freshInvoice('13');
+
+    for (let daysLeft = 30; daysLeft >= 3; daysLeft -= 1) {
+      await pool.query(
+        `UPDATE invoices SET expires_at = now() + ($2 || ' days')::interval WHERE id = $1`,
+        [invoiceId, String(daysLeft)],
+      );
+      await sendDueReminders();
+    }
+
+    const flags = await queryOne<{
+      reminder_sent_6w: boolean;
+      reminder_sent_4w: boolean;
+      reminder_sent_2w: boolean;
+      reminder_sent_1w: boolean;
+    }>(
+      pool,
+      `SELECT reminder_sent_6w, reminder_sent_4w, reminder_sent_2w, reminder_sent_1w
+         FROM invoices WHERE id = $1`,
+      [invoiceId],
+    );
+
+    assert.equal(flags!.reminder_sent_4w, true, 'the four-week reminder went out');
+    assert.equal(flags!.reminder_sent_2w, true, 'and the two-week one');
+    assert.equal(flags!.reminder_sent_1w, true, 'and the one in its last week');
+    assert.equal(
+      flags!.reminder_sent_6w,
+      false,
+      'and the six-week one did not, on any day of the invoice it was meant for',
+    );
+
+    const sent = await query<{ event: string }>(
+      pool,
+      `SELECT DISTINCT event FROM notifications
+        WHERE entity_type = 'invoice' AND entity_id = $1 AND event LIKE 'TAX_REMINDER%'`,
+      [invoiceId],
+    );
+    const events = sent.map((row) => row.event).sort();
+    assert.deepEqual(
+      events,
+      ['TAX_REMINDER_1W', 'TAX_REMINDER_2W', 'TAX_REMINDER_4W'],
+      'three of the four reminders reach this taxpayer, and the suite says which three',
+    );
+  });
+
+  /*
+   * The last word before the date passes, and what it says about the date.
+   *
+   * Until the final-week reminder the last thing a taxpayer was sent was at
+   * two weeks. What changes after the date is not the debt but the bill: it
+   * has to be issued again before it can be paid, and that is worth knowing a
+   * week ahead rather than finding out at the stall.
+   */
+  it('reminds a bill in its last week, and says what happens when the date passes', async () => {
+    const lastWeek = new Date(Date.now() + 7 * 86_400_000);
+    lastWeek.setUTCHours(12, 0, 0, 0);
+    const invoiceId = await invoiceDueAt('14', lastWeek);
+
+    await sendDueReminders(pool);
+
+    const sms = (await messagesFor(invoiceId)).find((message) => message.channel === 'SMS');
+    assert.ok(sms, 'a text went out in the last week');
+    assert.match(sms!.message, /due in one week/);
+    assert.match(sms!.message, /issued again before it can be paid/);
+    assert.ok(!sms!.message.includes('{{'), `a placeholder reached the taxpayer: ${sms!.message}`);
+
+    // And once: the next sweep finds the window already flagged.
+    await sendDueReminders(pool);
+    const texts = (await messagesFor(invoiceId)).filter((message) => message.channel === 'SMS');
+    assert.equal(texts.length, 1, 'the last-week reminder was sent twice');
+  });
+});
+
+/*
+ * In the language the taxpayer reads.
+ *
+ * Every other message PSIRS sends had a Hausa text from migration 048; the
+ * reminders had none, so a Hausa reader was chased for money in English. The
+ * first test is the structural one, because a reminder with Hausa on SMS and
+ * English by email is the same gap one channel along.
+ */
+describe('a reminder for somebody who reads Hausa', () => {
+  it('exists for every reminder, on every channel the English goes out on', async () => {
+    const rows = await query<{ event: string; channel: string; languages: string[] }>(
+      pool,
+      `SELECT event, channel, array_agg(language ORDER BY language) AS languages
+         FROM notification_templates WHERE event LIKE 'TAX_REMINDER%'
+        GROUP BY event, channel ORDER BY event, channel`,
+    );
+    assert.equal(rows.length, 12, 'four reminders, three channels each');
+    for (const row of rows) {
+      assert.deepEqual(row.languages, ['en', 'ha'], `${row.event} on ${row.channel} has no Hausa`);
+    }
+  });
+
+  it('is sent in Hausa, with the item’s Hausa name and nothing left unfilled', async () => {
+    const invoiceId = await invoiceDueAt('31', twoWeeksOut());
+    await pool.query(
+      `UPDATE taxpayers SET preferred_language = 'ha'
+        WHERE id = (SELECT taxpayer_id FROM invoices WHERE id = $1)`,
+      [invoiceId],
+    );
+    const item = await queryOne<{ name: string; name_ha: string | null }>(
+      pool,
+      `SELECT ri.name, ri.name_ha FROM invoices i
+         JOIN assessments a ON a.id = i.assessment_id
+         JOIN revenue_items ri ON ri.id = a.revenue_item_id
+        WHERE i.id = $1`,
+      [invoiceId],
+    );
+
+    await sendDueReminders(pool);
+
+    const sms = await queryOne<{ message: string; language: string }>(
+      pool,
+      `SELECT message, language FROM notifications
+        WHERE entity_type = 'invoice' AND entity_id = $1 AND channel = 'SMS'`,
+      [invoiceId],
+    );
+    assert.ok(sms, 'no reminder was sent');
+    assert.equal(sms!.language, 'ha');
+    assert.match(sms!.message, /^GAGGAWA — PSIRS: Ranka ya dade /);
+    assert.ok(sms!.message.includes(item!.name_ha ?? item!.name), sms!.message);
+    assert.ok(!sms!.message.includes('{{'), `a placeholder reached the taxpayer: ${sms!.message}`);
+  });
+
+  /*
+   * And the date in Hausa too.
+   *
+   * The sweep formatted the due date once, with en-NG, before anything knew
+   * which language the message would go out in, so a Hausa reminder read
+   * "… zai kai ranar biya a 15 October 2026". The month is a word, and the
+   * dictionary has it in both languages (monthJan…monthDec); the day is the
+   * Plateau day, as the English test above holds it.
+   */
+  it('gives the due date in Hausa, on the Plateau calendar', async () => {
+    const expiresAt = twoWeeksOut(23, 30);
+    const invoiceId = await invoiceDueAt('32', expiresAt);
+    await pool.query(
+      `UPDATE taxpayers SET preferred_language = 'ha'
+        WHERE id = (SELECT taxpayer_id FROM invoices WHERE id = $1)`,
+      [invoiceId],
+    );
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat('en-NG', { timeZone: 'Africa/Lagos', day: 'numeric', month: 'numeric', year: 'numeric' })
+        .formatToParts(expiresAt)
+        .map((part) => [part.type, part.value]),
+    );
+    const monthKeys = [
+      'monthJan', 'monthFeb', 'monthMar', 'monthApr', 'monthMay', 'monthJun',
+      'monthJul', 'monthAug', 'monthSep', 'monthOct', 'monthNov', 'monthDec',
+    ] as const;
+    const key = monthKeys[Number(parts.month) - 1]!;
+    const hausa = `${Number(parts.day)} ${translations.ha[key]} ${parts.year}`;
+
+    await sendDueReminders(pool);
+
+    const messages = await messagesFor(invoiceId);
+    assert.ok(messages.length > 0, 'a reminder was queued');
+    for (const message of messages) {
+      assert.ok(message.message.includes(hausa), `${message.channel} does not say ${hausa}: ${message.message.slice(0, 200)}`);
+      assert.ok(!message.message.includes(translations.en[key]), `${message.channel} names the month in English`);
+    }
   });
 });

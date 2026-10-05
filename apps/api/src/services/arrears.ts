@@ -30,13 +30,14 @@
  * is people an officer can ring today and who can pay while still on the
  * phone, which is the only version of this list that turns into revenue. It is
  * ranked by what each one owes, and within that by whose window shuts first,
- * because a debt about to lapse is a debt about to need re-assessing.
+ * because a debt about to lapse is a debt about to need issuing again.
  *
  * The money on lapsed invoices has not gone anywhere, and it is reported in
  * the summary rather than dropped — but as its own figure, because it needs a
- * different action. Collecting it means raising a fresh assessment first. That
- * is a re-assessment queue, not a call list, and merging the two would have
- * officers making calls that cannot end in a payment.
+ * different action. Collecting it means issuing the bill again first
+ * (`reissueInvoice`), which the officer or the agent can do on the spot, but
+ * which a payment link sent by text cannot. It is reported as its own line so
+ * an officer knows which calls need that step before money can change hands.
  *
  * FOUR MORE THINGS THIS QUERY IS CAREFUL ABOUT.
  *
@@ -87,6 +88,7 @@
 
 import type { Db } from '../db/pool';
 import { UNDER_OPEN_OBJECTION_SQL } from '../lib/enforcement-suspended';
+import { PAYABLE_INVOICE_SQL } from '../lib/payable-invoice';
 import { query, queryOne } from '../db/pool';
 import { scopeParams, type ReportScope } from './report-scope';
 
@@ -109,7 +111,7 @@ export interface ArrearsRow {
   oldestDaysOutstanding: number;
   /**
    * Days until the soonest of these invoices stops being payable, after which
-   * collecting needs a fresh assessment. Null when none of them expires.
+   * collecting needs the bill issued again. Null when none of them expires.
    * This is the officer's ordering within a day's calls: the debt about to
    * fall off the edge is the one worth ringing first.
    */
@@ -137,9 +139,10 @@ export interface ArrearsSummary {
   /**
    * Owed on invoices that have passed their payment deadline. Real money, and
    * excluded from the list above for a reason an officer needs told: the
-   * platform will refuse a payment against these, so collecting means raising
-   * a fresh assessment first. Kept as its own figure so nobody mistakes it for
-   * money a phone call can bring in.
+   * platform will refuse a payment against these, so collecting means issuing
+   * the bill again first. Kept as its own figure so nobody mistakes it for
+   * money a phone call alone can bring in. Still owed — it counts against the
+   * taxpayer wherever what they owe is the question (`OWED_INVOICE_SQL`).
    */
   lapsedKobo: string;
   /** How many invoices that lapsed money sits on. */
@@ -152,8 +155,42 @@ export interface ArrearsSummary {
   inFlightInvoices: number;
 }
 
+/**
+ * What the officer's own filters left on the list.
+ *
+ * `summary` is the scope: everyone the caller may see who owes a collectable
+ * debt. It deliberately ignores the limit, so a short page is not read as a
+ * small debt. What it also ignored was the minimum and the deadline window —
+ * not by decision but because those two predicates sit in the list query and
+ * were never passed to the summary one. The LGA filter *was* passed, so the
+ * figures moved for one of the three filters and stood still for the other
+ * two, which is the worst of both readings: an officer who watches the totals
+ * respond to a filter concludes they respond to all of them.
+ *
+ * They are both worth having. The scope figure answers "is this list most of
+ * the money or a corner of it"; this one answers "what am I looking at". So
+ * the screen is given both rather than one of them being quietly redefined.
+ */
+export interface ArrearsFiltered {
+  /** Taxpayers meeting the amount and deadline asked for, before the limit. */
+  taxpayers: number;
+  /** What those taxpayers owe between them, in kobo. */
+  totalKobo: string;
+}
+
 export interface ArrearsWorklist {
   summary: ArrearsSummary;
+  /** The set `rows` is drawn from, counted whole even where it is capped. */
+  filtered: ArrearsFiltered;
+  /**
+   * True when the filtered set is larger than the rows returned.
+   *
+   * Taken from the counted set rather than from `rows.length === limit`, which
+   * is wrong at exactly the cap: a list of a hundred debts out of a hundred
+   * would be reported as cut short, and the officer sent to narrow a filter
+   * with nothing left to find.
+   */
+  truncated: boolean;
   rows: ArrearsRow[];
 }
 
@@ -221,15 +258,15 @@ export async function arrearsWorklist(
         FROM invoices i
         JOIN assessments a    ON a.id = i.assessment_id
         JOIN revenue_items ri ON ri.id = a.revenue_item_id
-       WHERE i.status IN ('UNPAID', 'PARTIALLY_PAID')
+       /*
+        * Still payable. Past its expiry the payment path refuses the money
+        * (INVOICE_EXPIRED), so a lapsed invoice on a call list is a call that
+        * cannot end in a payment. That money is counted in the summary
+        * instead, where it is labelled for what it is. This was the first
+        * reader to get that right, and the shared fragment is its predicate.
+        */
+       WHERE ${PAYABLE_INVOICE_SQL}
          AND i.total_amount_kobo > i.amount_paid_kobo
-         /*
-          * Still payable. Past its expiry the payment path refuses the money
-          * (INVOICE_EXPIRED), so a lapsed invoice on a call list is a call
-          * that cannot end in a payment. That money is counted in the summary
-          * instead, where it is labelled for what it is.
-          */
-         AND (i.expires_at IS NULL OR i.expires_at > now())
          AND NOT EXISTS (
                SELECT 1
                  FROM payments p
@@ -315,6 +352,49 @@ export async function arrearsWorklist(
   );
 
   /*
+   * The same list the officer is looking at, counted rather than returned.
+   *
+   * The predicates are the list query's, down to the inner join on `lgas`:
+   * the comment above `base` warns about two queries answering one question
+   * differently, and this is the second query. The join cannot change the set
+   * while `taxpayers.lga_id` is NOT NULL against `lgas(id)`, and it is kept
+   * anyway so the two selects can be read side by side. `taxpayer_compliance`
+   * is left out because it contributes nothing but `last_payment_at`, which
+   * this query does not select.
+   *
+   * The invariant that keeps them in step is asserted rather than assumed:
+   * where nothing was capped, this count equals the number of rows.
+   */
+  const filtered = await queryOne<{ taxpayers: string; total_kobo: string }>(
+    db,
+    `${base},
+     on_the_list AS (
+       SELECT t.id, SUM(c.owed_kobo) AS owed_kobo
+         FROM collectable c
+         JOIN taxpayers t ON t.id = c.taxpayer_id
+         JOIN lgas l      ON l.id = t.lga_id
+        WHERE t.status = 'ACTIVE'
+          AND ($2 OR t.lga_id = ANY($3::uuid[]))
+          AND ($4::uuid IS NULL OR t.lga_id = $4::uuid)
+        GROUP BY t.id
+       HAVING SUM(c.owed_kobo) >= $5::bigint
+          AND ($6::int IS NULL
+               OR MIN(c.expires_at) <= now() + ($6::int || ' days')::interval)
+     )
+     SELECT count(*)::text                        AS taxpayers,
+            COALESCE(SUM(owed_kobo), 0)::text     AS total_kobo
+       FROM on_the_list`,
+    [
+      IN_FLIGHT_PAYMENT_STATUSES,
+      statewide,
+      lgaIds,
+      params.lgaId ?? null,
+      minimum.toString(),
+      lapsingWithinDays,
+    ],
+  );
+
+  /*
    * The summary counts the whole scoped population, not the page.
    *
    * A total that only added up the rows returned would fall every time
@@ -387,6 +467,8 @@ export async function arrearsWorklist(
     [IN_FLIGHT_PAYMENT_STATUSES, statewide, lgaIds, params.lgaId ?? null],
   );
 
+  const onTheList = Number.parseInt(filtered?.taxpayers ?? '0', 10);
+
   return {
     summary: {
       taxpayers: Number.parseInt(summary?.taxpayers ?? '0', 10),
@@ -396,6 +478,11 @@ export async function arrearsWorklist(
       lapsedInvoices: Number.parseInt(summary?.lapsed_invoices ?? '0', 10),
       inFlightInvoices: Number.parseInt(summary?.in_flight ?? '0', 10),
     },
+    filtered: {
+      taxpayers: onTheList,
+      totalKobo: filtered?.total_kobo ?? '0',
+    },
+    truncated: onTheList > rows.length,
     rows: rows.map((row) => ({
       taxpayerId: row.taxpayer_id,
       taxpayerType: row.taxpayer_type,

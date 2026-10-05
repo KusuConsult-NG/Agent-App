@@ -1,12 +1,12 @@
 # Hausa review: everything still waiting on a decision
 
-`HAUSA-REVIEW.md` carries all 3,031 dictionary strings, and most of its length
+`HAUSA-REVIEW.md` carries all 3,556 dictionary strings, and most of its length
 is those tables. The open questions are scattered through seven sections of the
 prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
 was already done.
 
-This is that list and nothing else. Eighteen questions, grouped by who can
+This is that list and nothing else. Nineteen questions, grouped by who can
 answer them and what it costs to leave them open. Every one links back to the
 section of `HAUSA-REVIEW.md` that sets it out properly — this page is an index,
 not a replacement, and none of it repeats the reasoning.
@@ -18,7 +18,7 @@ new strings and none of review.
 
 ## 1. Not a translation question — PSIRS decides
 
-**332 strings address the reader as `ka`: masculine singular.** A woman
+**447 strings address the reader as `ka`: masculine singular.** A woman
 collecting revenue in Bokkos is addressed as a man by the application she uses
 all day.
 
@@ -31,23 +31,30 @@ about field staff. Counting says otherwise:
 
 | Who reads it | Strings |
 |---|---|
-| The agent app | 179 |
-| The officer portal | 111 |
-| Citizens, referees and group leaders | 42 |
-| **Total** | **332** of 3,031 |
+| The agent app | 254 |
+| The officer portal | 150 |
+| Citizens, referees and group leaders | 43 |
+| **Total** | **447** of 3,556 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
 polite plural, is the only one of the three options that is both
 gender-neutral and unremarkable to address a stranger with — which may matter
-more for the 42 than for the 179.
+more for the 43 than for the 243.
 
-The forms are `ka` (337 occurrences), the possessive `-nka` (56), `-rka` (44),
-`dinka` (6), `maka` (6), `naka` (5) and `kanka` (2); many strings carry more
-than one. Nothing currently uses `ku`.
+The forms are `ka` (467 occurrences), the possessive `-nka` (82), `-rka` (56),
+`dinka` (8), `maka` (11), `naka` (6) and `kanka` (2); many strings carry more
+than one.
+
+**One string already uses `ku`, and it is the one a citizen holds.** This page
+said nothing did. `rcpThanks` — "Mun gode da sauke nauyin ku", on the printed
+receipt, discussed in § 3.2 below — was written in the polite plural after that
+sentence was, by somebody reaching for the form this question is about. It is
+one string against 440, so it settles nothing; it is worth knowing that the
+first person to need a form for a stranger picked `ku` without being asked.
 
 **Two earlier figures in this document were wrong, and the second was worse.**
-It said 216. That over-counted by treating `kai` as the pronoun — all 49 of its
+It said 216. That over-counted by treating `kai` as the pronoun — all 70 of its
 uses here are something else (`Kimanta kai`, self-assessment; `kai tsaye`,
 directly; `ya kai`, reached; `hadin kai`, cooperation) — and under-counted by
 missing `dinka`, `kanka` and `maka`. Correcting those gave 222, which was still
@@ -59,6 +66,16 @@ it moved to 320 when deleting the dead camera-scanner path took `camAlign`
 strings below were written in the same convention as everything around them, to
 328 with the eleven strings the `lib/` lint pass brought in, to 330 with
 the receipt template, and to 332 with the printer's own messages.
+
+**That chain stops here, and not because it was finished.** Every figure on
+this page was hand-written and none was checked, so they stayed at 332 and
+3,031 while the dictionary went past three and a half thousand — understating
+the biggest decision on the page by a hundred strings, on the page the sheet
+sends the reviewer to before anything else. `scripts/build-hausa-review.mjs`
+now recomputes both and refuses the build when this document disagrees with it,
+the way it already refused a stale count in the sheet itself. The count above
+is 440 because that is what the script measured, not because somebody added
+one hundred and one strings in a single change.
 
 ### What it would cost to change
 
@@ -394,7 +411,7 @@ roll. If any correction you make runs long, that test will say so rather than
 the receipt.
 
 **And `scanHelp` was not the only dead string in this table.** Checking it
-raised the obvious next question, so it was measured: **33 of the 3,031 keys
+raised the obvious next question, so it was measured: **43 of the 3,556 keys
 are never named anywhere outside the dictionary**, and four of them are in the
 table above — `statusOffline`, `offlineMessage`, `statusFailed`, and
 `civicDutyThanks`, the one the `Mungode` typo was in. Three of the four
@@ -458,6 +475,116 @@ saita`**, which is a draft and wants your eye.
 `2026-09-08 – 2027-09-08` rather than spelling the months, because a period is
 a span, it sits beside a window line already written that way, and two spelt-out
 months is more than the row can carry. Say if you would rather see them.
+
+**4.8 — Eight strings for the refusals one level down the collect path.** Six
+refusals an agent meets while collecting were still reaching them in English:
+one from the rate engine's caller, five from the request that starts a payment.
+Composed from this dictionary's own words, not invented:
+
+| Key | Hausa | Borrowed from |
+|---|---|---|
+| `errNoEffectiveRate` | Babu kudin da Gwamnati ta amince da shi a aiki… | `Gwamnati ta amince`, `errRevenueItemInactive` |
+| `nsNoEffectiveRate` | Dole Gwamnati ta amince da kudi kafin a iya karba… | same |
+| `errInvoiceAlreadyPaid` | An riga an biya wannan takardar biya… | `An riga an …` (3 strings), `takardar biya` (13) |
+| `nsInvoiceAlreadyPaid` | Ka bude rasit daga tarihin ma’amaloli. | `Ka rike rasit`, `ma’amala` |
+| `errPaymentAlreadyVerified` | …kuma an tabbatar da biyan. Kada ka sake karbar kudi. | `an tabbatar`, `Kada ka sake` |
+| `errInvoiceNotPayable` | Wannan takardar biya tana {{state}}… | `kimantawa` |
+| `errInvoiceExpired` | Wannan takardar biya ta kare… | `ta kare` (5) |
+| `errTransactionNotPayable` | Wannan ma’amala tana {{state}}… | `ma’amala` |
+
+I had written `shaidar biya` — proof of payment — for the receipt in
+`nsInvoiceAlreadyPaid`, and `hausa-dictionary-consistency.test.tsx` refused it:
+this dictionary's word for a receipt is `rasit`, in all 54 places it appears,
+and one string using a second word for it is how a vocabulary comes apart. It
+now reads `Ka bude rasit`, matching `Ka rike rasit a cikin firam`. Worth a
+reading on whether the definite `rasitin` would be better for a receipt the
+agent is being sent to one particular one of.
+
+Two of them carry `{{state}}`, and the state now arrives as a field so it can
+be filled from this dictionary rather than left in English. Worth a reading on
+one point: `tana {{state}}` puts the state after the subject as a continuous
+verb — "this bill is cancelled" — and if a Hausa reader would rather it read
+`an soke wannan takardar biya` (a completed action, "this bill has been
+cancelled"), that changes the sentence rather than the label and is worth
+saying now.
+
+**4.7 — `Bai dace ba` for a bank verdict that does not match.** The bank
+verification provider answers VERIFIED, MISMATCH, NOT_FOUND or UNAVAILABLE.
+Three had Hausa; MISMATCH had no entry at all, because it is a TypeScript union
+inside the API rather than a database constraint, so the check that reads states
+out of the schema could not see it. An officer reading Hausa was told "Banki bai
+tabbatar da shi ba har yanzu (mismatch)". It now reads `Bai dace ba`, following
+the `bai dace ba` already in three strings. If a verdict about a *name* should
+say so — the account name is what did not match — that is a reading decision.
+
+**4.6 — Five labels for who read a taxpayer's record.** The platform now
+records who opened a person's record and what they were shown, and the auditor's
+screen renders those two states through the shared enum table. Five labels were
+needed and I composed them from words already in this dictionary rather than
+inventing any:
+
+| Value | English | Hausa | Borrowed from |
+|---|---|---|---|
+| `TAXPAYER_RECORD` | Taxpayer record | Rikodin mai biyan haraji | `ofcTrTitle` |
+| `PAYMENT_HISTORY` | Payment history | Tarihin biyayya | `ofcCfRateHistoryFor`, `ofcPhPartial` |
+| `TAX_OBLIGATIONS` | Tax obligations | Wajiban haraji | `ofcTrObligationsUpdated` |
+| `INCENTIVE_STANDING` | Incentive standing | Matsayin tallafi | `ofcNavProgrammes`, `ofcOrHistory` |
+| `CHANGE` | Changed | An canza | `ofcAgAccountChanged` |
+
+`READ` was already in the table as `An karanta`, and `CHANGE` is written to
+match it: both are the kind of a log entry, so both read as past events rather
+than as nouns. If a noun pair would be better on a table heading — *karatu* and
+*canji* — that is a reading decision and worth saying.
+
+**4.9 — Six strings for the refusals on the registration screen.** Registering
+somebody is the first thing an agent does for anybody and the gate everything
+else is behind: nothing can be assessed, collected or receipted against a
+person who is not on the register. All four refusals that screen can show were
+reaching the agent in the server's English.
+
+Two of them had their **next step** in Hausa already and their headline in
+English. `nsTinServiceUnavailable` and `nsTinNotFound` were written when the
+advice on those two branches was corrected — the advice that used to tell an
+agent to register a second TIN for somebody who already had one — and the
+sentence they are advice about was left behind. So the agent read what to do in
+their own language, and what had happened in somebody else's.
+
+| Key | Hausa | Borrowed from |
+|---|---|---|
+| `errTaxpayerAlreadyExists` | An riga an yi rajistar wannan mutumin a matsayin {{subject}}… | `An riga an …` (13), `rajista` (132), `kwafi` (8) |
+| `nsTaxpayerAlreadyExists` | Ka bude rikodin da ke akwai ka ci gaba daga nan. | `Ka bude rasit`, `rikodi` (52) |
+| `errPossibleDuplicateTaxpayer` | An sami rikodin da zai yiwu na wannan mutumin ne… | `An sami` (5), `tpCheckSamePerson` |
+| `nsPossibleDuplicateTaxpayer` | Ka yi rajistarsa a matsayin sabo sai idan babu daya daga cikinsu… | `tpNoneOfThese` |
+| `errTinServiceUnavailable` | Ba a iya isa ga sabis din TIN na PSIRS ba… | `isa ga` (12), `tabbatar da` (90) |
+| `errTinNotFound` | Ba a sami TIN {{tin}} a sabis din TIN na PSIRS ba. | `Ba a sami` (6) |
+
+**Two readings are wanted on these, and one is a judgement about how PSIRS
+works rather than about Hausa.**
+
+The first is `{{subject}}` in `errTaxpayerAlreadyExists`. It is filled with a
+name and, when the person has one, a TIN — *Rahila Provisions Store (TIN
+274034597)* — composed as a single value by the API rather than as two. A
+translation carrying `(TIN {{tin}})` separately would print that literally for
+everybody who has not got a TIN, because an unsent placeholder is deliberately
+left alone rather than blanked. If the parenthesis reads wrongly in Hausa the
+answer is a different composition on the server, not a different sentence here,
+and it is worth saying.
+
+The second is `nsPossibleDuplicateTaxpayer`, which is **not** a translation of
+the API's next step. The API says to resubmit with `acknowledgeDuplicates` set
+to true — correct for a client, and a thing no person can do — and that
+sentence was reaching an agent in English on the screen where they decide
+whether two records are the same human being. The Hausa names the test to apply
+before pressing the button the screen already carries. An earlier draft pointed
+at the panel below instead (*the matching records are listed below*) and was
+wrong: that panel has a second form which appears precisely when the matches
+could **not** be listed, so the sentence would have been false exactly when the
+agent most needed care.
+
+`mutumin` — the person — is used in all four rather than `mai biyan haraji`,
+because somebody being refused registration is not yet a taxpayer. If that
+reads as presumptuous about an individual where a business is being registered,
+that is a reading decision.
 
 > `HAUSA-REVIEW.md` §§ *Strings that had Hausa and were not being shown*, *And
 > every other date*, *`enumAssigned` was doing double duty*
@@ -529,6 +656,175 @@ three real agents rather than applied as corrections:
   numeral **five**.
 
 > `HAUSA-REVIEW.md` § *Group 3*
+
+---
+
+## 7. The refusals the officer portal still says in English
+
+**Which of these should be translated, and which should keep the server's
+words?** This is the only question on this page that is about the officer
+portal rather than the agent application, and it exists because the portal is
+translated: three thousand interface strings, with the language toggle in the
+sidebar of every signed-in page so an officer who finds they want Hausa does
+not have to sign out to say so.
+
+Its error component translated six codes and every one of them was raised by
+the browser rather than by PSIRS — a request that never arrived, an upload that
+failed, a step-up the officer walked away from. `STEP_UP_REQUIRED` has now been
+added, because it guards every consequential money action in the portal and its
+instruction was already in Hausa under an English heading.
+
+**The scale, counted rather than estimated.** The platform raises **185
+distinct error codes**; the officer portal says 8 of them in Hausa, and the
+agent application says 41. The last two are `CASE_MOVED`, raised when two
+officers escalate one case together and the second finds it already with
+somebody else, and `SWEEP_ALREADY_RUNNING`, raised when one presses any of the
+six buttons that start a background sweep by hand — reminders, refunds, TINs,
+vehicle-authority notices, commission promotion, the connection graph — while
+that sweep is already in flight. One code covers all six because the officer
+knows which button they pressed; what differs between them is the advice, and
+the advice is carried in the message rather than in the code. Both are English,
+like the rest of the administrative row in the table below, and for the same
+reason: whether an officer working a case file or a sweep needs those sentences
+in Hausa is a question for the reviewer rather than an answer this document can
+assume. The first version of this section said twenty-six,
+from a search that matched `conflict('CODE'` on a single line and missed every
+multi-line call and every `new AppError({ code: … })` literal — which is most
+of them. It understated the gap by a factor of six, on the page this document
+exists to keep honest, which is why all three figures are now recomputed by
+`scripts/build-hausa-review.mjs` and the build refuses when this sentence
+disagrees with them.
+
+Not all 185 can reach an officer. Many are the agent's, many are the platform
+talking to itself — a storage write that did not complete, a malformed body, a
+route that does not exist. The ones below are a **sample, not the set**: those
+an officer meets while doing the work the portal is for, each carrying a code
+of its own and naming one fixed state, which is the test the map in
+`apps/portal/src/ui.tsx` sets for what may be translated at all:
+
+| Where an officer meets it | Refusals |
+|---|---|
+| Revenue periods | `PERIOD_CLOSED`, `PERIOD_NOT_OPEN`, `PERIOD_OPEN` |
+| The audit workbench | `ALREADY_SIGNED`, `ALREADY_WITHDRAWN`, `SAMPLE_COMPLETED`, `SAMPLE_ALREADY_COMPLETE` |
+| Roles and departments | `ROLE_EXISTS`, `ROLE_RETIRED`, `ROLE_NOT_RETIRED`, `ALREADY_GRANTED`, `DEPARTMENT_EXISTS` |
+| Officer devices and sessions | `DEVICE_ALREADY_BLOCKED`, `DEVICE_NOT_BLOCKED`, `SESSION_ALREADY_ENDED`, `DEVICE_ALREADY_SUSPENDED` |
+| Enumeration and objections | `ASSESSMENT_WITHDRAWN`, `OBJECTION_DECIDED` |
+| Allocations and awards | `ALREADY_FORFEITED`, `AWARD_FORFEITED`, `ROUND_EXHAUSTED` |
+| The rest | `GROUP_NOT_ACTIVE`, `INVITATION_ALREADY_USED`, `KYC_ALREADY_CLEARED`, `PAYE_ALREADY_CANCELLED`, `REVENUE_ITEM_INACTIVE`, `TARGET_NOT_ACTIVE` |
+
+**Why they are listed rather than translated.** A page of Hausa sentences
+written in one pass and reviewed by nobody would be worse than the English they
+replace: the reader cannot tell a guess from a translation, which is the policy
+the map's own comment states. And the selection is a judgement about which
+refusals cost an officer something when unread — the same judgement
+`apps/agent/src/tests/hausa-safety-strings.test.tsx` records for the agent,
+where the tier is not every string that touches money but the ones whose
+meaning inverted leaves somebody out of pocket.
+
+Our reading is that the first two rows are the tier: closing a revenue period
+and signing an audit report are acts an officer's name goes on, and "already
+closed" read as "closed now" is an officer believing they have done something
+they have not. The last row is mostly administrative and can stay in English.
+But that is a judgement about how PSIRS works, not about Hausa, and it is
+yours.
+
+### 7.1 — The revenue period row, done, and what it needed first
+
+The first of those two rows is now translated, which is why this section says
+the portal speaks 4 of the 172 rather than 1. It is an increment on purpose:
+three sentences composed from this dictionary's own words, with the questions
+they raise written down here, rather than a page of Hausa written in one pass.
+
+| Key | Hausa | Borrowed from |
+|---|---|---|
+| `ofcErrPeriodClosed` | An riga an rufe {{period}}. | `An riga an …` (13), `rufe` (56) |
+| `ofcErrPeriodOpen` | An riga an bude {{period}}. | same, `bude` (89) |
+| `ofcErrPeriodNotOpen` | Ba a bude {{period}} ba. Matsayinsa shi ne: {{state}}. | `Ba a … ba`, `enumClosing`, `enumClosed` |
+
+### 7.2 — The audit-report row, done, and a race that was saying it wrong
+
+| Key | Hausa | Borrowed from |
+|---|---|---|
+| `ofcErrAlreadySigned` | An riga an sa hannu kan {{report}}. | `An riga an …` (16), `sa hannu` (11) |
+| `ofcErrAlreadyWithdrawn` | An riga an janye {{report}}. | same, `janye` (18) |
+
+**Neither of these was reaching an officer at all when two of them acted at
+once.** `signReport` read the report's status, refused `ALREADY_SIGNED` on it,
+and wrote the signature — without locking the row it had just read. Two
+officers who opened the same unsigned report both read GENERATED and both
+wrote. Nothing was overwritten, because the integrity trigger refuses the
+second write, but the officer was then told *"who signed an audit report, and
+when, cannot be rewritten"* — a sentence about rewriting a signature, for
+somebody who signed a report that was unsigned when they looked at it. It
+arrives as `FINANCIAL_CONTROL_BLOCKED`, which names neither the report nor what
+happened and is not a code this map holds. `withdrawReport` had the same shape.
+
+So the Hausa was the second half of that fix, not the whole of it: the service
+had to be able to say `ALREADY_SIGNED` before there was anything to translate.
+
+**The third row of this tier was one code doing two jobs, and is now two.**
+`SAMPLE_COMPLETED` was raised from two places with two different sentences —
+*"This sample has been completed and its findings are final"*, with advice
+under it, and *"This sample is already complete"*, with none. This page
+previously recorded that as two sentences wanting consolidation, and that was
+the wrong reading.
+
+They are two refusals about one state, told apart by what the auditor was
+trying to do. `recordFinding` is somebody trying to **examine** a transaction
+in a closed sample, and *"Draw a new sample to examine these transactions
+again"* is exactly what they need. `completeSample` is somebody trying to
+**close** a sample that is already closed, and that advice is wrong for them:
+they were not looking at anything, and there is nothing left to do.
+
+Consolidating would have carried false advice onto one screen or stripped true
+advice from the other. So the codes are split —
+`SAMPLE_COMPLETED` keeps the advice, `SAMPLE_ALREADY_COMPLETE` has none — and
+each now means one fixed thing, which is the test the map sets for what may be
+translated at all. That is what took the portal from 6 of the platform's
+refusals to 8, and it is why the API now raises 173 rather than 172.
+
+| Key | Hausa | Borrowed from |
+|---|---|---|
+| `ofcErrSampleCompleted` | An kammala wannan samfurin, kuma binciken sa na karshe ne. | `kammala` (31), `samfur` (13), `binciken karshe` (`ofcIgLimits`) |
+| `ofcNsSampleCompleted` | Ka zana sabon samfuri domin ka sake duba wadannan ma’amaloli. | `Zana samfur` (`ofcWbDraw`), `ma’amaloli` (38) |
+| `ofcErrSampleAlreadyComplete` | An riga an kammala wannan samfurin. | `An riga an …` (16), `kammala` (31) |
+
+One reading is wanted: `binciken sa na karshe ne` renders "its findings are
+final" with the dictionary's own phrase for a finding, `binciken karshe`, which
+already carries "final" inside it — so the sentence says *final* twice in
+Hausa where the English says it once. Whether that reads as emphasis or as
+clumsiness is a judgement about Hausa, not about audit.
+
+**The portal had no way to put a value into a sentence.** Its error component
+read the translation and rendered it as it stood, so any translation naming its
+subject would have printed `{{period}}` to the officer. That had never shown,
+because the one refusal PSIRS composed that the portal translated —
+`STEP_UP_REQUIRED` — names nothing. The agent application has had substitution
+since its refusals started carrying figures; this side simply never needed it.
+Writing these three without building it first would have put the hole on the
+screen that closes a financial month.
+
+**Three readings are wanted.**
+
+`Matsayinsa shi ne:` — "its status is:" — is a construction chosen to avoid a
+concord decision. `{{state}}` is filled from the shared enum table, whose names
+for these are full clauses (`An rufe`, `Ana rufewa`), so "{{period}} tana
+{{state}}" would read "January 2026 is it-has-been-closed". A colon sidesteps
+that. If a Hausa reader would rather the sentence read as one clause — *an rufe
+{{period}}* — that changes the sentence and is worth saying now.
+
+`-nsa` in `Matsayinsa` treats a period as masculine. A month (`wata`) is
+feminine and would want `Matsayinta`. The label is a month today but the column
+holds any period a finance officer opens, so the masculine was chosen as the
+less wrong default rather than the right one. This is the clearest single
+question on this page.
+
+The impersonal `Ba a bude … ba` and `An riga an …` were used throughout rather
+than addressing the officer, because none of the three asks them to do
+anything — they say what the month already is. They added nothing to the `ka`
+count for that reason.
+
+> `apps/portal/src/ui.tsx` § *TRANSLATED_ERRORS*
 
 ---
 

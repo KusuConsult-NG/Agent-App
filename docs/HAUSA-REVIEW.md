@@ -4,9 +4,9 @@
 
 > **If you want only the questions, read
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
-> eighteen decisions still waiting on somebody, gathered out of the prose
+> nineteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,406 strings; that one is two pages and links back
+> because it carries all 3,556 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,406 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,556 dictionary strings and 47 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -47,9 +47,9 @@ language the recipient reads rather than always in English.
 Two things follow, and both matter to how you spend your time.
 
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
-them from `packages/shared/src/i18n.ts` and from the migration that inserts the
+them from `packages/shared/src/i18n.ts` and from the migrations that insert the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,406 strings is worse than no sheet, because it looks complete; this one cannot
+3,556 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -59,7 +59,7 @@ and if your time runs out it is the right place for it to run out. The agent
 groups come first in the table for that reason.
 
 **Table C is new, and it is the one to read if you read nothing else.** Those
-thirty messages reach a citizen who holds no account, has no app, and has
+forty-seven messages reach a citizen who holds no account, has no app, and has
 nobody standing beside them to explain what arrived. The acknowledgement
 wording is the sharpest case: it has to be unmistakably **not** a receipt,
 because the money has not reached government yet, and a citizen who reads it
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,406 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,556 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,406 strings: where the
+- The glossary below is applied consistently across all 3,556 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -406,6 +406,14 @@ quietly leave it.
 | `commissionAccountNote` | Verified before any commission can be paid. Government revenue never enters this account. | Ana tabbatar da shi kafin a biya kowane kwamishan. Kudin gwamnati ba ya shiga wannan asusu ko kadan. | ☐ | |
 | `paymentFailed` | Payment did not go through | Biyan kudin bai yi nasara ba | ☐ | |
 | `paymentFailedBody` | No money has been taken from the taxpayer. You can start the payment again. | Ba a karbi kudi daga mai biyan haraji ba. Kana iya sake fara biyan. | ☐ | |
+| `paymentEndedBody` | No money has been taken from the taxpayer. This bill can no longer be paid. | Ba a karbi kudi daga mai biyan haraji ba. Ba za a iya biyan wannan takardar biya yanzu ba. | ☐ | |
+| `colLapsedBody` | No money has been taken. It can no longer be paid as it stands — issue it again, for the same amount, to take the payment. | Ba a karbi kudi ba. Ba za a iya biyanta yadda take ba — a sake fitar da ita, a kan adadin kudi daya, don a karbi biyan. | ☐ | |
+| `colPeriodClosedBody` | No money has been taken. The month it was raised in has been closed, so it cannot be paid as it stands — issue it again, for the same amount and the same deadline, to take the payment. | Ba a karbi kudi ba. An rufe watan da aka fitar da ita, don haka ba za a iya biyanta yadda take ba — a sake fitar da ita, a kan adadin kudi daya da wa’adi daya, don a karbi biyan. | ☐ | |
+| `colUnderReviewBody` | The payment system reported a different amount from this bill, so the payment is held for review and no receipt has been issued. Do not collect payment again. Check its status later: it is completed, or ended, when the payment system answers again. | Na’urar biyan kudi ta ba da adadin da ya bambanta da na wannan takardar biya, don haka an rike biyan don dubawa kuma ba a fitar da rasit ba. Kada a sake karbar kudi. A duba matsayinsa daga baya: za a kammala shi, ko a kare shi, idan na’urar biyan kudi ta sake amsawa. | ☐ | |
+| `colReplacedBody` | No money was taken against this one. Take the payment against the new bill. | Ba a karbi kudi a kan wannan ba. A karbi biyan a kan sabuwar takardar. | ☐ | |
+| `errInvoicePaymentInProgress` | A payment against this bill is still being processed. Check its status first, and do not collect again. | Ana kan sarrafa wani biya da aka yi kan wannan takardar biya. A duba matsayinsa tukuna, kuma kada a sake karbar kudi. | ☐ | |
+| `colReversedOwedBody` | The money went back to the payer, so the receipt no longer stands and the bill is owed again. Issue it again to collect it. | Kudin ya koma ga mai biya, don haka rasit din bai tsaya ba kuma ana bin takardar biyan kuma. A sake fitar da ita don a karba. | ☐ | |
+| `colReversedWithdrawnBody` | The money went back to the payer and the bill was withdrawn. Nothing is owed on it. | Kudin ya koma ga mai biya kuma an janye takardar biyan. Babu bashin komai a kanta. | ☐ | |
 | `paymentUnconfirmed` | Payment not yet confirmed | Ba a tabbatar da biyan kudin ba tukuna | ☐ | |
 | `paymentUnconfirmedBody` | This payment has NOT been marked as received. Do not ask the taxpayer to pay again — check again in a moment. | BA A nuna an karbi wannan kudin ba. Kada ka ce wa mai biyan haraji ya sake biya — ka sake dubawa nan da dan lokaci. | ☐ | |
 | `findTaxpayerFirst` | Find the taxpayer first. Every payment must be attributed. | Ka nemo mai biyan haraji tukuna. Dole a danganta kowane biyan kudi ga wani. | ☐ | |
@@ -428,6 +436,8 @@ quietly leave it.
 | `emailIncomplete` | That email address does not look complete. Correct it, or leave it blank. | Adireshin imel din bai cika ba. Ka gyara shi, ko ka bar shi babu komai. | ☐ | |
 | `deviceNotRegistered` | This device is not registered to your agent account. Register it before collecting revenue. | Ba a yi rajistar wannan na’ura ga asusun wakilcin ka ba. Ka yi rajistar ta kafin ka karbi haraji. | ☐ | |
 | `deviceAfterApproval` | You can register a device once PSIRS has approved your application. | Za ka iya yin rajistar na’ura bayan PSIRS ta amince da bukatarka. | ☐ | |
+| `errNoTaxPayable` | No tax is payable on the amount declared, so there is no invoice to raise. The figures are not wrong — this taxpayer is below the threshold. | Babu harajin da ya kamata a biya kan adadin da aka bayyana, don haka babu takardar biya da za a yi. Lissafin ba kuskure ba ne — wannan mai biyan haraji yana kasa da iyakar. | ☐ | |
+| `nsNoTaxPayable` | Do not increase the amount to make the assessment go through. Tell the taxpayer there is nothing to pay on this. | Kada ka kara adadin don kimantawar ta wuce. Ka gaya wa mai biyan haraji babu abin da zai biya kan wannan. | ☐ | |
 | `errPaymentUnconfirmed` | The payment could not be confirmed yet. The money has NOT been marked as received. Do not ask the taxpayer to pay again — check this transaction again in a few minutes. | Ba a iya tabbatar da biyan kudin ba tukuna. BA a rubuta cewa an karbi kudin ba. Kada ka ce wa mai biyan haraji ya sake biya — ka sake duba wannan ma’amala bayan wasu mintuna. | ☐ | |
 | `errPaymentPendingReconciliation` | The payment has been received but is waiting for settlement. Do not collect again. The receipt is issued as soon as the government account has the money. | An karbi kudin amma ana jiran a sasanta shi. Kada ka sake karba. Za a bayar da rasit da zarar kudin ya isa asusun gwamnati. | ☐ | |
 | `errPaymentFailed` | The payment did not go through. No money has been taken from the taxpayer. You can start it again. | Biyan kudin bai yi nasara ba. Ba a karbi kudi daga mai biyan haraji ba. Kana iya sake farawa. | ☐ | |
@@ -462,6 +472,7 @@ quietly leave it.
 | `colInvoiceNoReference` | Start the payment first if they want to pay at a bank: the reference a bank asks for is issued then, and the invoice does not carry it. | Ka fara biyan kudin idan suna son biya a banki: lambar da banki ke nema ana bayar da ita a lokacin, kuma takardar biya ba ta dauke da ita ba. | ☐ | |
 | `pubVerdictValid` | VALID | INGANTACCE | ☐ | |
 | `pubVerdictAcknowledgement` | VALID — NOT A RECEIPT | INGANTACCE — BA RASIT BA NE | ☐ | |
+| `pubVerdictInvoice` | VALID — AN INVOICE, NOT A RECEIPT | INGANTACCE — TAKARDAR BIYA CE, BA RASIT BA | ☐ | |
 | `pubVerdictReversed` | REVERSED | AN JUYAR DA SHI | ☐ | |
 | `pubVerdictNotFound` | NOT FOUND | BA A SAMU BA | ☐ | |
 | `pubVerdictInvalid` | INVALID | BA INGANTACCE BA | ☐ | |
@@ -478,10 +489,16 @@ quietly leave it.
 | `verifyDocumentExpired` | This document expired on {{date}}. | Wannan takardar ta kare a {{date}}. | ☐ | |
 | `verifyDocumentGenuine` | This is a genuine government document issued by PSIRS. | Wannan takardar gwamnati ce ta gaskiya wadda PSIRS ta bayar. | ☐ | |
 | `verifyDocumentGenuineUnchecked` | This is a genuine government document issued by PSIRS. The stored copy could not be checked just now, so its fingerprint has not been confirmed on this attempt. | Wannan takardar gwamnati ce ta gaskiya wadda PSIRS ta bayar. Ba a iya duba kwafin da aka adana a yanzu ba, don haka ba a tabbatar da asalin sa a wannan yunkurin ba. | ☐ | |
+| `verifyInvoicePayable` | This is a genuine PSIRS invoice, and it can still be paid. | Wannan takardar biya ta PSIRS ce ta gaskiya, kuma har yanzu ana iya biyanta. | ☐ | |
+| `verifyInvoicePaid` | This is a genuine PSIRS invoice, and it has been paid. Nothing more is owed on it. | Wannan takardar biya ta PSIRS ce ta gaskiya, kuma an biya ta. Babu sauran bashi a kanta. | ☐ | |
+| `verifyInvoiceReplaced` | This invoice was replaced by a new one for the same amount and can no longer be paid. Pay against the new invoice, not this one. | An maye gurbin wannan takardar biya da sabuwa a kan adadin kudi daya, kuma ba za a iya biyanta ba. A biya a kan sabuwar takardar, ba wannan ba. | ☐ | |
+| `verifyInvoiceWithdrawn` | This invoice was withdrawn and nothing is owed on it. Do not pay against it. | An janye wannan takardar biya kuma babu bashin komai a kanta. Kada a biya a kanta. | ☐ | |
+| `verifyInvoiceLapsed` | This is a genuine PSIRS invoice, but its payment deadline has passed and it cannot be paid as it stands. A revenue agent or PSIRS office can issue it again for the same amount. | Wannan takardar biya ta PSIRS ce ta gaskiya, amma lokacin biyanta ya wuce kuma ba za a iya biyanta yadda take ba. Wakilin karbar haraji ko ofishin PSIRS na iya sake fitar da ita a kan adadin kudi daya. | ☐ | |
+| `verifyInvoiceReissueNeeded` | This is a genuine PSIRS invoice, still in date, but it cannot be paid as it stands. A revenue agent or PSIRS office can issue it again for the same amount. | Wannan takardar biya ta PSIRS ce ta gaskiya, kuma wa’adinta bai kare ba, amma ba za a iya biyanta yadda take ba. Wakilin karbar haraji ko ofishin PSIRS na iya sake fitar da ita a kan adadin kudi daya. | ☐ | |
 
 ### B · The rest of the dictionary, by screen
 
-3327 strings, grouped by where an agent meets them. Lower stakes
+3460 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -528,6 +545,7 @@ instructions — but they are what an agent reads all day.
 | `ofcNavOrganisation` | Departments & offices | Sassa da ofisoshi | ☐ | |
 | `ofcNavTaxpayerAnalytics` | Taxpayer base | Masu biyan haraji | ☐ | |
 | `ofcNavTargets` | Targets & forecast | Manufura da hasashe | ☐ | |
+| `ofcNavFieldWork` | Your field work | Aikinka na fili | ☐ | |
 
 #### The officer portal — menu headings
 
@@ -1141,6 +1159,8 @@ instructions — but they are what an agent reads all day.
 | `ofcFnTransferFailed` | Transfer failed | Turawa ta gaza | ☐ | |
 | `ofcFnMakerChecker` | Maker-checker approvals | Amincewar mai yi da mai duba | ☐ | |
 | `ofcFnMakerCheckerBody` | The officer who raises a request can never review or authorise it. Reversals need a third officer to execute, with step-up authentication. | Jami’in da ya daga bukata ba zai taba duba ta ko ba ta izini ba. Juyarwa tana bukatar jami’i na uku ya aiwatar, tare da karin tantancewa. | ☐ | |
+| `ofcFnQueueStopsShort` | This list stops short | Wannan jerin ya tsaya kafin karshe | ☐ | |
+| `ofcFnQueueStopsShortBody` | {{matched}} requests match this filter and the list shows the newest {{shown}}, so the oldest — the ones that have waited longest — are not on it. Filter by type to bring them into view. | Bukatu {{matched}} sun dace da wannan tacewa, kuma jerin yana nuna sababbi {{shown}} kawai, don haka mafi dadewa — wadanda suka fi jira — ba sa cikinsa. A tace bisa nau’i domin a gan su. | ☐ | |
 | `ofcFnApproved` | Approved | An amince | ☐ | |
 | `ofcFnRejected` | Rejected | An ki | ☐ | |
 | `ofcFnExecuted` | Executed | An aiwatar | ☐ | |
@@ -1250,6 +1270,7 @@ instructions — but they are what an agent reads all day.
 | `ofcOvOneAgentCollected` | Everything one agent collected | Duk abin da wakili daya ya karba | ☐ | |
 | `ofcOvReceiptsOneItem` | Receipts issued under one revenue item | Rasit din da aka bayar a karkashin nau’in haraji daya | ☐ | |
 | `ofcOvWhoLookedAtRecord` | Who has looked at one taxpayer’s record | Wa ya duba rikodin mai biyan haraji daya | ☐ | |
+| `ofcOvWhoSearchedTheRegister` | Who has been searching the register | Wa ya ke bincike a cikin rajista | ☐ | |
 | `ofcOvJob` | Job | Aiki | ☐ | |
 | `ofcOvRuns` | Runs | Gudanarwa | ☐ | |
 | `ofcOvLastSucceeded` | Last succeeded | Nasara ta karshe | ☐ | |
@@ -1484,6 +1505,8 @@ instructions — but they are what an agent reads all day.
 | `ofcOsEnded` | Ended | Ya kare | ☐ | |
 | `ofcOsQueueUnreadable` | A queue could not be read | Ba a iya karanta wani jeri ba | ☐ | |
 | `ofcOsQueueUnreadableBody` | {{n}} of the queues on this page could not be loaded, so what is shown is not the whole picture. An empty section below does not mean that queue is empty — it means nobody can see it. Reload, and raise it if it does not clear. | Ba a iya lodin jeri {{n}} a wannan shafi ba, don haka abin da ake nunawa ba shi ne cikakken hoto ba. Sashe mara komai a kasa ba yana nufin jerin babu komai ba — yana nufin babu wanda ke iya ganin sa. Ka sake lodi, kuma ka daga kara idan bai warware ba. | ☐ | |
+| `ofcOsListsArePartial` | Some lists below stop short | Wasu jerin a kasa sun tsaya kafin karshe | ☐ | |
+| `ofcOsListsArePartialBody` | The figures above cover everything outstanding. These lists do not: {{queues}}. Each one shows the hundred oldest, so the bottom of the list is where it was cut off rather than where the queue ends. Work it down and reload to see the next hundred. | Lambobin da ke sama sun rufe duk abin da ya rage. Wadannan jerin ba su rufe ba: {{queues}}. Kowanne yana nuna dari da suka fi tsufa, don haka karshen jerin shi ne wurin da aka yanke shi ba wurin da jerin ya kare ba. Ka yi aiki da shi sannan ka sake lodi domin ka ga dari na gaba. | ☐ | |
 | `ofcOsRefundsReturned` | {{n}} refund(s) returned to taxpayers. | An mayar da kudi {{n}} ga masu biyan haraji. | ☐ | |
 | `ofcOsRefundsPartly` | {{done}} returned; {{left}} still owed. Those taxpayers have not had their money back yet. | An mayar {{done}}; {{left}} har yanzu ana bin su. Wadannan masu biyan haraji ba su samu kudinsu ba tukuna. | ☐ | |
 | `ofcOsTinsAssigned` | {{n}} TIN(s) assigned. | An ba da TIN {{n}}. | ☐ | |
@@ -1548,6 +1571,7 @@ instructions — but they are what an agent reads all day.
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
 | `ofcSpOpenComplaints` | {{n}} open complaint(s) about conduct or charges | Korafe-korafe {{n}} a bude kan hali ko kudi | ☐ | |
+| `ofcSpComplaintsBeyondThisPage` | {{n}} of them are not in the table below, which shows the most urgent and the most recent. Filter by category to work through the rest. | Daga cikinsu, {{n}} ba sa cikin teburin da ke kasa, wanda ke nuna wadanda suka fi gaggawa da na baya-bayan nan. A tace da nau’i domin a bi sauran. | ☐ | |
 | `ofcSpAboutRevenue` | These are reports about how revenue was collected, not about the platform. They are listed first below. | Wadannan rahotanni ne kan yadda aka karbi haraji, ba kan dandalin ba. An jera su a farko a kasa. | ☐ | |
 | `ofcSpSupportQueue` | Support queue | Jerin gwanon taimako | ☐ | |
 | `ofcSpQueueIntro` | Ordered by priority. A ticket is answered in its thread — a status change on its own tells the person who reported it nothing. | An jera bisa muhimmanci. Ana amsa rahoto a cikin zaren sa — canza matsayi kadai ba ya gaya wa wanda ya kai rahoton komai. | ☐ | |
@@ -1596,8 +1620,8 @@ instructions — but they are what an agent reads all day.
 | `ofcGpAwardedNotCollected` | {{n}} beneficiaries were awarded and have not turned up. That is either a distribution that is not reaching people, or names on a list that do not correspond to anybody — worth establishing which before the next round. | An ba {{n}} masu amfana kyauta amma ba su zo ba. Ko dai rabon bai isa ga mutane ba, ko kuma sunaye ne a jerin da ba su dace da kowa ba — ya kamata a tabbatar da wanne kafin zagaye na gaba. | ☐ | |
 | `ofcGpMembersFor` | Members — {{name}} | Mambobi — {{name}} | ☐ | |
 | `ofcGpEnoughForMore` | enough for {{n}} more | ya isa ga wasu {{n}} | ☐ | |
-| `ofcGpConfirmationLinkFor` | Confirmation link for {{group}} | Hanyar tabbatarwa ta {{group}} | ☐ | |
-| `ofcGpLeaderCodeOnce` | Send this to the group leader. It is shown once — PSIRS stores only a hash of it, so it cannot be read back later. Request another if it is lost. | Ka tura wannan ga shugaban kungiyar. Ana nuna shi sau daya — PSIRS na adana sa hannunsa kawai, don haka ba za a iya sake karanta shi ba. Ka nemi wani idan ya bata. | ☐ | |
+| `ofcGpLinkSentFor` | Confirmation link sent for {{group}} | An tura hanyar tabbatarwa ta {{group}} | ☐ | |
+| `ofcGpLinkSentBody` | It went by text message to {{phone}}, the leader’s number on the group’s record. It is not shown here: only the leader may confirm the list, and the agent who recorded the members must not be able to. Ask again if the leader did not receive it. | An tura ta ta sakon tes zuwa {{phone}}, lambar shugaba a bayanan kungiyar. Ba a nuna ta a nan ba: shugaba kadai ke iya tabbatar da jerin, kuma wakilin da ya rubuta mambobin bai kamata ya iya ba. Ka sake nema idan shugaba bai karba ba. | ☐ | |
 | `ofcGpWaitingDecision` | Waiting for a decision | Ana jiran shawara | ☐ | |
 | `ofcGpWaitingIntro` | An agent has recorded these groups in the field. Members cannot be added until a group is approved, so nothing else happens while they sit here. | Wakili ya rubuta wadannan kungiyoyi a filin aiki. Ba za a iya kara mambobi ba sai an amince da kungiya, don haka babu abin da ke faruwa yayin da suke nan. | ☐ | |
 | `ofcGpDistributions` | Distributions | Rabo | ☐ | |
@@ -1625,7 +1649,7 @@ instructions — but they are what an agent reads all day.
 | `ofcGpCollectedOfAwarded` | {{collected}} of {{awarded}} ({{rate}}%) | {{collected}} daga cikin {{awarded}} ({{rate}}%) | ☐ | |
 | `ofcGpEachBeneficiaryGets` | {{quantity}} {{unit}} each | {{quantity}} {{unit}} kowanne | ☐ | |
 | `ofcGpMemberLeft` | {{member}} is recorded as having left {{group}}. They keep what they already collected and will not be counted in future allocations. | An rubuta cewa {{member}} ya bar {{group}}. Yana rike da abin da ya riga ya karba kuma ba za a kirga shi a rabon nan gaba ba. | ☐ | |
-| `ofcGpConfirmationLinkCreated` | Confirmation link created. | An kirkiri hanyar tabbatarwa. | ☐ | |
+| `ofcGpConfirmationLinkCreated` | Confirmation link sent to the group leader. | An tura hanyar tabbatarwa ga shugaban kungiyar. | ☐ | |
 
 #### The officer portal — levies
 
@@ -1673,14 +1697,15 @@ instructions — but they are what an agent reads all day.
 | `ofcArWithin30` | 30 days | Kwana 30 | ☐ | |
 | `ofcArCollectableNow` | Collectable now | Ana iya karba yanzu | ☐ | |
 | `ofcArTaxpayers` | Taxpayers owing | Masu biyan haraji da ke bin bashi | ☐ | |
-| `ofcArNeedsReassessment` | Needs re-assessment | Yana bukatar sake kimantawa | ☐ | |
+| `ofcArNeedsReassessment` | Needs issuing again | Sai an sake fitar da su | ☐ | |
 | `ofcArEndedElsewhere` | Owed by closed records | Bashin rikodin da aka rufe | ☐ | |
 | `ofcArWhoIsMissing` | Who is not on this list | Wanda ba ya cikin wannan jerin | ☐ | |
 | `ofcArInFlightExplained` | Anyone part-way through paying is left off, so this list is safe to work as it stands: {{n}} invoice(s) are excluded because a payment is running against them right now. Nobody holding a receipt will be called. | An bar duk wanda ke tsakiyar biya, don haka ana iya aiki da wannan jerin kamar yadda yake: an cire daftari {{n}} saboda ana biya a kansu yanzu. Ba za a kira wanda ke rike da rasit ba. | ☐ | |
 | `ofcArLapsedTitle` | Debt that cannot be paid as it stands | Bashin da ba a iya biya kamar yadda yake | ☐ | |
-| `ofcArLapsedExplained` | {{n}} invoice(s) have passed their payment deadline. The platform will refuse money against them, so they are counted above but kept off the call list — collecting means raising a fresh assessment first. | Daftari {{n}} sun wuce ranar karshen biya. Tsarin zai ki karbar kudi a kansu, don haka an kidaya su a sama amma ba a sa su cikin jerin kira ba — karba yana nufin fara sabon kimantawa. | ☐ | |
+| `ofcArLapsedExplained` | {{n}} invoice(s) have passed their payment deadline. The platform will refuse money against them, so they are counted above but kept off the call list — collecting means issuing the bill again first, from the bill itself. | Daftari {{n}} sun wuce ranar karshen biya. Tsarin zai ki karbar kudi a kansu, don haka an kidaya su a sama amma ba a sa su cikin jerin kira ba — karba yana nufin a fara sake fitar da takardar biyan, daga takardar kanta. | ☐ | |
 | `ofcArWhoToCall` | Who to call | Wanda za a kira | ☐ | |
-| `ofcArShowingLargest` | Showing the {{n}} largest debts. Narrow by LGA or amount to see further down. | Ana nuna manyan bashi {{n}}. Ka rage ta LGA ko adadi domin ganin kasa. | ☐ | |
+| `ofcArShowingLargest` | Showing the {{n}} largest of the {{m}} debts on this list. Narrow by LGA or amount to see further down. | Ana nuna manyan bashi {{n}} daga cikin bashi {{m}} da ke wannan jerin. Ka rage ta LGA ko adadi domin ganin kasa. | ☐ | |
+| `ofcArFiltersAreNarrower` | The four figures above cover everyone in this scope. The list below is narrower: {{n}} taxpayer(s), owing {{amount}} between them, meet the amount and the deadline you asked for. | Jimillar hudu da ke sama sun kunshi kowa a wannan iyaka. Jerin da ke kasa ya fi kankanta: masu biyan haraji {{n}}, da ke bin {{amount}} tsakaninsu, sun dace da adadin da ranar karshe da ka nema. | ☐ | |
 | `ofcArOwedFor` | Owed for | Bashin | ☐ | |
 | `ofcArDaysLeft` | Days left to pay | Kwanakin da suka rage a biya | ☐ | |
 | `ofcArNoDeadline` | No deadline | Babu ranar karshe | ☐ | |
@@ -1742,7 +1767,7 @@ instructions — but they are what an agent reads all day.
 | `ofcIgSince` | Since | Tun | ☐ | |
 | `ofcIgPayableNow` | Can be paid now | Ana iya biya yanzu | ☐ | |
 | `ofcIgPayableYes` | Yes | Eh | ☐ | |
-| `ofcIgPayableNeedsReassessment` | No — needs a fresh assessment | A’a — yana bukatar sabon kimantawa | ☐ | |
+| `ofcIgPayableNeedsReassessment` | No — it has to be issued again | A’a — sai an sake fitar da ita | ☐ | |
 | `ofcIgOwesNothing` | They owe the State nothing. | Ba sa bin jiha komai. | ☐ | |
 
 #### The officer portal — employers and payroll returns
@@ -1898,6 +1923,10 @@ instructions — but they are what an agent reads all day.
 | `ofcEnReject` | Reject the objection | Ki kalubalen | ☐ | |
 | `ofcEnReasonFirst` | Write the reason first. | Ka fara rubuta dalili. | ☐ | |
 | `ofcEnNoObjections` | No estimate is under objection. | Babu kiyasin da ake kalubalanta. | ☐ | |
+| `ofcEnBill` | Bill | Takardar biya | ☐ | |
+| `ofcEnBillOwed` | Not paid | Ba a biya ba | ☐ | |
+| `ofcEnBillPaid` | Paid {{amount}}. Upholding this asks for a refund. | An biya {{amount}}. Amincewa da kalubalen zai nemi a mayar da kudin. | ☐ | |
+| `ofcEnBillPaying` | A payment is in progress. Decide once it has settled. | Ana kan biya. A yanke hukunci bayan biyan ya kammala. | ☐ | |
 
 #### The officer portal — distribution rounds
 
@@ -2076,11 +2105,13 @@ instructions — but they are what an agent reads all day.
 | `ofcPhForWhat` | What it went to | Abin da aka biya | ☐ | |
 | `ofcPhLevy` | Tax or levy | Haraji ko kudin shiga | ☐ | |
 | `ofcPhEachPayment` | Each payment | Kowane biya | ☐ | |
+| `ofcPhPartial` | The totals above cover the whole period, but this list stopped at {{n}} payments: it holds only the most recent {{n}} and the earliest part of the period is not on it. Narrow the dates before telling the taxpayer what their lines add up to. | Jimillar da ke sama ta kunshi dukan lokacin, amma wannan jerin ya tsaya a biyayya {{n}}: na baya-bayan nan {{n}} kadai ke ciki kuma farkon lokacin ba ya ciki. Ka rage kwanakin kafin ka gaya wa mai biyan haraji jimlar layukansa. | ☐ | |
 | `ofcPhWhen` | When | Yaushe | ☐ | |
 | `ofcPhPeriod` | Period | Lokaci | ☐ | |
 | `ofcPhAmount` | Amount | Adadi | ☐ | |
 | `ofcPhReceipt` | Receipt | Rasit | ☐ | |
 | `ofcPhNothingPaid` | Nothing was paid in this period. | Ba a biya komai a wannan lokacin ba. | ☐ | |
+| `ofcRefundAsked` | A refund of {{amount}} on {{reference}} has been asked for. Another officer grants it from the approvals queue. | An nemi a mayar da {{amount}} na {{reference}}. Wani jami’i ne zai amince da shi daga jerin abubuwan da ke jiran amincewa. | ☐ | |
 | `ofcCwNoEvidence` | None attached | Babu wanda aka hada | ☐ | |
 | `ofcAllStatuses` | All statuses | Dukkan matsayi | ☐ | |
 | `ofcAllLgas` | All LGAs | Dukkan Kananan Hukumomi | ☐ | |
@@ -2164,6 +2195,8 @@ instructions — but they are what an agent reads all day.
 | `ofcExportPdf` | Document to file | Takarda don ajiyewa | ☐ | |
 | `ofcExportWorking` | Preparing... | Ana shirya... | ☐ | |
 | `ofcDownloadCsv` | Download CSV | Sauke CSV | ☐ | |
+| `ofcAnswerStoppedAtCap` | This answer stopped at {{n}} rows and holds only the most recent of them. It is not the whole answer to the question above. | Wannan amsa ta tsaya a layuka {{n}} kuma na baya-bayan nan kadai ke ciki. Ba ita ce cikakkiyar amsar tambayar da ke sama ba. | ☐ | |
+| `ofcListStoppedAtCap` | This list stopped at {{n}} rows and holds only the most recent of them. The earliest part of what you asked for is not on it — narrow the dates or the filters to see the rest. | Wannan jerin ya tsaya a layuka {{n}} kuma na baya-bayan nan kadai ke ciki. Farkon abin da ka nema ba ya cikin jerin — ka rage kwanakin ko tacewar don ka ga sauran. | ☐ | |
 | `ofcNothingToShow` | Nothing to show. | Babu abin da za a nuna. | ☐ | |
 | `ofcRevenueAdministration` | Revenue administration | Gudanar da haraji | ☐ | |
 | `ofcDistributionRound` | Distribution round | Zagayen rabo | ☐ | |
@@ -2284,6 +2317,10 @@ instructions — but they are what an agent reads all day.
 | `ofcWbAltered` | Altered | An sauya | ☐ | |
 | `ofcWbAlteredTitle` | A report on this page no longer matches its checksum | Wani rahoto a wannan shafi bai sake dacewa da lambar tantancewarsa ba | ☐ | |
 | `ofcWbAlteredBody` | {{n}} report(s) below hold figures that no longer hash to the checksum recorded when they were generated. A signature on such a report does not cover what it now shows. This is a change made in the database rather than through the platform — do not rely on those figures, and raise it. | Rahotanni {{n}} da ke kasa suna dauke da lambobin da ba su sake dacewa da lambar tantancewar da aka rubuta lokacin da aka kirkire su ba. Sa hannu a kan irin wannan rahoto bai shafi abin da yake nunawa yanzu ba. Wannan sauyi ne da aka yi a cikin bayanan kai tsaye, ba ta hanyar dandalin ba — kada ka dogara da wadannan lambobin, kuma ka daga kara. | ☐ | |
+| `ofcWbChecksumReachTitle` | The checksum check covers this page only | Binciken lambar tantancewa ya rufe wannan shafi kadai | ☐ | |
+| `ofcWbChecksumReach` | {{n}} further report(s) were not examined. The check recomputes the checksum of the reports listed below, which are the most recent ones, so a report altered further back raises nothing here. Filter by type, or open an older report directly, to cover it. | Akwai wasu rahotanni {{n}} da ba a bincika ba. Binciken yana sake lissafin lambar tantancewar rahotannin da ke kasa, wadanda su ne na baya-bayan nan, don haka rahoton da aka sauya tun da can ba ya tada wani abu a nan. A tace da nau’i, ko a bude tsohon rahoto kai tsaye, domin a rufe shi. | ☐ | |
+| `ofcWbListsStopShort` | The tables below stop short | Teburan da ke kasa sun tsaya kafin karshe | ☐ | |
+| `ofcWbListsStopShortBody` | The figures above cover everything. These tables do not: {{lists}}. Each shows the {{cap}} most recent, so the bottom of the table is where it was cut off rather than where the work ends. Filter to narrow it, or open what you need directly. | Lambobin da ke sama sun rufe komai. Wadannan teburan ba su rufe ba: {{lists}}. Kowanne yana nuna {{cap}} na baya-bayan nan, don haka karshen teburin shi ne wurin da aka yanke shi ba wurin da aikin ya kare ba. A tace domin a rage shi, ko a bude abin da ake bukata kai tsaye. | ☐ | |
 | `ofcWbNoReports` | No report has been generated yet. | Ba a samar da rahoto ba tukuna. | ☐ | |
 | `ofcWbGenerate` | Generate a report | Samar da rahoto | ☐ | |
 | `ofcWbGenerateHint` | Generating freezes the figures. Signing is a separate step, and often a different officer. | Samar da rahoto yana daskarar da lambobin. Sa hannu mataki ne daban, kuma sau da yawa jami’i ne daban. | ☐ | |
@@ -2314,12 +2351,13 @@ instructions — but they are what an agent reads all day.
 | `ofcPeClosingNote` | What is being certified | Abin da ake tabbatarwa | ☐ | |
 | `ofcPeReopenReason` | Why it is being reopened | Dalilin sake budewa | ☐ | |
 | `ofcPeNotReady` | Not ready to close | Bai shirya rufewa ba | ☐ | |
-| `ofcPeNotReadyBody` | Closing over an unresolved exception or a pending payment freezes a figure already known to be wrong. It is sometimes the right call, and it is never a silent one. | Rufewa a kan bambancin da ba a warware ba ko biyan da ke jira yana daskarar da adadin da aka riga aka san ba daidai ba ne. Wani lokaci shi ne daidai, kuma ba a taba yin sa a boye ba. | ☐ | |
+| `ofcPeNotReadyBody` | Closing over an unresolved exception, a pending payment or a collection the bank has not yet paid in freezes a figure that is wrong or not yet whole. It is sometimes the right call, and it is never a silent one. | Rufewa a kan bambancin da ba a warware ba, biyan da ke jira, ko karbar kudin da banki bai tura ba tukuna yana daskarar da adadin da ba daidai ba ne ko bai cika ba. Wani lokaci shi ne daidai, kuma ba a taba yin sa a boye ba. | ☐ | |
 | `ofcPeOverride` | Why you are closing over them | Dalilin rufewa duk da haka | ☐ | |
 | `ofcPeFiguresUnknown` | What this month still holds could not be read | Ba a iya karanta abin da wannan wata ke rike da shi ba | ☐ | |
 | `ofcPeFiguresUnknownBody` | The platform could not count this month's unresolved exceptions or pending payments, so it cannot tell you whether the figure is settled. It may be. Closing is still possible, and it needs a reason in writing, because a month closed without knowing is a month closed over whatever was there. | Dandalin bai iya kirga sauran matsalolin da ba a warware ba ko biyan da ke jira na wannan wata ba, don haka ba zai iya gaya maka ko lambar ta tabbata ba. Watakila ta tabbata. Har yanzu ana iya rufewa, kuma yana bukatar dalili a rubuce, domin wata da aka rufe ba tare da sani ba, an rufe shi ne a kan duk abin da ke ciki. | ☐ | |
 | `ofcPeUnreconciled` | Unresolved exceptions | Bambancin da ba a warware ba | ☐ | |
 | `ofcPePendingPayments` | Payments still pending | Biyan da ke jira | ☐ | |
+| `ofcPeAwaitingSettlement` | Collections not yet paid into a government account | Karbar kudin da bai isa asusun gwamnati ba tukuna | ☐ | |
 | `ofcPeFiguresNow` | What the month holds now | Abin da watan ke da shi yanzu | ☐ | |
 | `ofcPeFrozen` | Frozen at close | An daskare a rufewa | ☐ | |
 | `ofcPeReopenSeparate` | Reopening is the administrator's, not the closer's. The officer who closes the books also being able to unclose them removes most of what a period lock is for. | Sake budewa na mai gudanarwa ne, ba na wanda ya rufe ba. Idan jami’in da ya rufe littattafan zai iya sake budewa, hakan na kawar da yawancin dalilin kulle lokacin. | ☐ | |
@@ -2438,6 +2476,8 @@ instructions — but they are what an agent reads all day.
 | `ofcCwDepartment` | Send to | Aika wa | ☐ | |
 | `ofcCwAssignee` | Assign to | Ba wa | ☐ | |
 | `ofcCwNobody` | Nobody yet | Babu kowa tukuna | ☐ | |
+| `ofcCwTableStopsShort` | The table below stops short | Teburin da ke kasa ya tsaya kafin karshe | ☐ | |
+| `ofcCwTableStopsShortBody` | The figures above cover every case this filter matched. The table shows {{shown}} of {{matched}} — the most urgent and the soonest due — so its last row is where it was cut off rather than where the work ends. Narrow the filter to bring the rest into view. | Lambobin da ke sama sun rufe duk shari’ar da wannan tacewa ta samu. Teburin yana nuna {{shown}} daga {{matched}} — wadanda suka fi gaggawa da wadanda lokacinsu ya fi kusa — don haka layin karshe shi ne wurin da aka yanke shi ba wurin da aikin ya kare ba. A rage tacewa domin a ga sauran. | ☐ | |
 | `ofcCwAnyDepartment` | No department | Babu sashe | ☐ | |
 | `ofcCwDue` | Due | Ranar karshe | ☐ | |
 | `ofcCwOnlyOpen` | Only open cases | Kararrakin da ba a rufe ba kadai | ☐ | |
@@ -2486,6 +2526,17 @@ instructions — but they are what an agent reads all day.
 | `ofcT3After` | After | Bayan | ☐ | |
 | `ofcT3CasesAndFlags` | Cases and risk flags | Kararraki da alamun hadari | ☐ | |
 | `ofcT3OpenCaseAbout` | Open a case about this transaction | Bude kara game da wannan ma’amala | ☐ | |
+| `ofcT3ReverseTitle` | Ask for this payment to be reversed | A nemi a mayar da wannan biyan | ☐ | |
+| `ofcT3ReverseHint` | The whole payment goes back to the payer, its receipt is voided and the agent's commission is recovered. A second officer decides, and a third carries it out. | Za a mayar wa mai biya da dukan kudin, a soke rasit dinsa kuma a dawo da kwamishan din wakili. Jami’i na biyu ne zai yanke hukunci, kuma na uku ne zai aiwatar. | ☐ | |
+| `ofcT3ReverseAmount` | Amount returned: {{amount}} | Adadin da za a mayar: {{amount}} | ☐ | |
+| `ofcT3ReverseWhose` | Whose doing was it | Laifin wane ne | ☐ | |
+| `ofcT3ReverseGovernment` | The State's — a duplicate, or a charge on the wrong record. The bill is withdrawn. | Na Gwamnati — kwafi, ko caji a kan bayanan da ba daidai ba. Za a janye takardar biyan. | ☐ | |
+| `ofcT3ReverseTaxpayer` | The payer's — their bank recalled the payment, or they asked. The bill is owed again. | Na mai biya — bankinsu ya janye biyan, ko sun nema. Za a ci gaba da bin takardar biyan. | ☐ | |
+| `ofcT3ReverseGateway` | The gateway's. The bill is owed again. | Na hanyar biya. Za a ci gaba da bin takardar biyan. | ☐ | |
+| `ofcT3ReverseReason` | What happened | Abin da ya faru | ☐ | |
+| `ofcT3ReverseSend` | Send for a decision | Aika don a yanke hukunci | ☐ | |
+| `ofcT3ReverseSending` | Sending… | Ana aikawa… | ☐ | |
+| `ofcT3ReverseSent` | Sent. A second officer decides it, and a third carries it out. | An aika. Jami’i na biyu ne zai yanke hukunci, kuma na uku ne zai aiwatar. | ☐ | |
 | `ofcT3Withheld` | Not shown to your role | Ba a nuna wa matsayinka ba | ☐ | |
 | `ofcT3WithheldBody` | These parts exist and your permissions do not reach them. They are named so an empty section is never mistaken for an empty record. | Wadannan sassan suna nan amma izininka bai kai gare su ba. An ambace su domin kada a dauki sashe mara komai a matsayin rijista mara komai. | ☐ | |
 | `ofcT3NoPayment` | No payment has been attempted. | Ba a yi yunkurin biyan kudi ba. | ☐ | |
@@ -2504,8 +2555,23 @@ instructions — but they are what an agent reads all day.
 | `ofcChIssued` | Issued | An fitar | ☐ | |
 | `ofcChPayableUntil` | Payable until | Ana iya biya har zuwa | ☐ | |
 | `ofcChLapsedTitle` | The deadline has passed | Lokacin ya wuce | ☐ | |
-| `ofcChLapsed` | This invoice lapsed on {{date}}. The platform will refuse money against it, so collecting means raising a fresh assessment first. | Wannan takardar biya ta kare a {{date}}. Dandalin zai ki karbar kudi a kanta, don haka sai an sabunta tantancewa kafin a iya karba. | ☐ | |
-| `ofcChLapsedNoDate` | This invoice has lapsed. The platform will refuse money against it, so collecting means raising a fresh assessment first. | Wannan takardar biya ta kare. Dandalin zai ki karbar kudi a kanta, don haka sai an sabunta tantancewa kafin a iya karba. | ☐ | |
+| `ofcChLapsed` | This invoice lapsed on {{date}}. The platform will refuse money against it, so it has to be issued again before anything can be collected. | Wannan takardar biya ta kare a {{date}}. Dandalin zai ki karbar kudi a kanta, don haka sai an sake fitar da ita kafin a iya karbar komai. | ☐ | |
+| `ofcChLapsedNoDate` | This invoice has lapsed. The platform will refuse money against it, so it has to be issued again before anything can be collected. | Wannan takardar biya ta kare. Dandalin zai ki karbar kudi a kanta, don haka sai an sake fitar da ita kafin a iya karbar komai. | ☐ | |
+| `ofcChStrandedTitle` | Owed again after a reversal | Ana bin kudin kuma bayan mayarwa | ☐ | |
+| `ofcChStranded` | A payment against this invoice was reversed for a reason that was not the State's, so the money is owed again — but its old charge cannot take a payment. Issue it again to collect it. | An mayar da wani biya da aka yi kan wannan takardar biya saboda dalilin da ba na Gwamnati ba, don haka ana bin kudin kuma — amma tsohon cajinta ba zai iya karbar biya ba. A sake fitar da ita don a karba. | ☐ | |
+| `ofcChMonthClosedTitle` | Raised in a month that has been closed | An fitar da ita a watan da aka rufe | ☐ | |
+| `ofcChMonthClosed` | This bill is still in date, but {{period}} has been closed, so it cannot be paid as it stands. Issue it again — for the same amount and the same deadline — and take the payment against the new invoice. | Wa’adin wannan takardar biya bai kare ba, amma an rufe {{period}}, don haka ba za a iya biyanta yadda take ba. A sake fitar da ita — a kan adadin kudi daya da wa’adi daya — sannan a karbi biyan a kan sabuwar takardar biya. | ☐ | |
+| `ofcChReplacedTitle` | Issued again | An sake fitar da ita | ☐ | |
+| `ofcChReplaced` | This invoice was replaced by {{number}}, for the same amount. Money is taken against the new invoice, not this one. | An maye gurbin wannan takardar biya da {{number}}, a kan adadin kudi daya. Ana karbar kudi a kan sabuwar takardar, ba a kan wannan ba. | ☐ | |
+| `ofcChOpenReplacement` | Open {{number}} | Bude {{number}} | ☐ | |
+| `ofcChReissue` | Issue this invoice again | Sake fitar da wannan takardar biya | ☐ | |
+| `ofcChReissuing` | Issuing… | Ana fitarwa… | ☐ | |
+| `ofcChWithdrawTitle` | Raised in error? | An fitar da ita bisa kuskure? | ☐ | |
+| `ofcChWithdrawHint` | If this invoice should never have been raised — a duplicate, or a charge against the wrong record — ask for it to be withdrawn. Another officer decides, and nothing changes until they do. | Idan bai kamata a fitar da wannan takardar biya ba — kwafi ce, ko caji a kan bayanan da ba daidai ba — a nemi a janye ta. Wani jami’i ne zai yanke hukunci, kuma babu abin da zai canza kafin a yanke shi. | ☐ | |
+| `ofcChWithdrawReason` | What was wrong with it | Abin da ba daidai ba a kanta | ☐ | |
+| `ofcChWithdrawSend` | Ask for it to be withdrawn | A nemi a janye ta | ☐ | |
+| `ofcChWithdrawSending` | Sending… | Ana aikawa… | ☐ | |
+| `ofcChWithdrawSent` | Sent. Another officer must approve it before the invoice is withdrawn. | An aika. Sai an samu amincewar wani jami’i kafin a janye takardar biyan. | ☐ | |
 | `ofcChHowComputed` | How the figure was arrived at | Yadda aka kai ga wannan adadi | ☐ | |
 | `ofcChTraceFrozen` | Recorded when the assessment was raised, and frozen since. This is what the calculation did on the day, not what it would do today. | An rubuta shi lokacin da aka yi tantancewar, kuma ba a canza shi ba tun daga nan. Wannan shi ne abin da lissafin ya yi a ranar, ba abin da zai yi a yau ba. | ☐ | |
 | `ofcChNoTrace` | No calculation was recorded against this assessment. | Ba a rubuta wani lissafi a kan wannan tantancewa ba. | ☐ | |
@@ -2534,8 +2600,24 @@ instructions — but they are what an agent reads all day.
 | `ofcReadOnly` | read-only | karatu kawai | ☐ | |
 | `ofcDailyTrend` | Daily collection trend | Yanayin karban kudi na kullum | ☐ | |
 | `ofcNoDataForPeriod` | No data for this period. | Babu bayanai na wannan lokacin. | ☐ | |
+| `ofcFieldWorkTitle` | You are signed in as a field agent | Ka shiga a matsayin wakilin fili | ☐ | |
+| `ofcFieldWorkBody` | This portal is where the State administers revenue. You are welcome in it, and the few things here that belong to your work are listed below. | Wannan shafin shi ne inda Jiha ke tafiyar da harkar haraji. Kana da izinin shiga, kuma abubuwa kadan da suka shafi aikinka suna kasa. | ☐ | |
+| `ofcFieldWorkToolsHeading` | Your collection tools are in the agent app | Kayan aikin karbar harajinka suna a manhajar wakilai | ☐ | |
+| `ofcFieldWorkToolsBody` | Enumeration, assessment, collection, your groups and your commission all live in the PSIRS agent app, which works offline. Nothing on this portal replaces it. | Rajista, kimantawa, karbar kudi, kungiyoyinka da kwamishan dinka duk suna a manhajar wakilai ta PSIRS, wadda ke aiki ba tare da layi ba. Babu abin da ke wannan shafin da zai maye gurbinta. | ☐ | |
+| `ofcFieldWorkNoLink` | Ask your supervisor for the address of the agent app on this deployment. | Ka tambayi shugabanka adireshin manhajar wakilai a wannan na’urar. | ☐ | |
+| `ofcFieldWorkHereHeading` | What this portal holds for you | Abin da wannan shafin ke da shi a gare ka | ☐ | |
+| `ofcFieldWorkHereBody` | The rate catalogue and the presumptive schedules — the figures you quote at a stall. They are read-only here, and they are the same ones the agent app uses. | Jadawalin kudade da jadawalin kiyasi — adadin da kake fada a wurin kasuwanci. Anan karatu kawai ake yi, kuma su ne daidai wadanda manhajar wakilai ke amfani da su. | ☐ | |
 | `ofcGrApproved` | {{name}} approved. Members can now be recorded. | An amince da {{name}}. Yanzu za a iya rubuta mambobi. | ☐ | |
 | `ofcGrCollectedAt` |  · collected at {{place}} |  · ana karba a {{place}} | ☐ | |
+| `ofcStepUpNeeded` | This action needs a one-time code before it can go through. | Wannan aikin yana bukatar lamba ta lokaci daya kafin ya wuce. | ☐ | |
+| `ofcErrPeriodClosed` | {{period}} is already closed. | An riga an rufe {{period}}. | ☐ | |
+| `ofcErrPeriodOpen` | {{period}} is already open. | An riga an bude {{period}}. | ☐ | |
+| `ofcErrPeriodNotOpen` | {{period}} is not open. Its status is: {{state}}. | Ba a bude {{period}} ba. Matsayinsa shi ne: {{state}}. | ☐ | |
+| `ofcErrAlreadySigned` | {{report}} has already been signed. | An riga an sa hannu kan {{report}}. | ☐ | |
+| `ofcErrAlreadyWithdrawn` | {{report}} is already withdrawn. | An riga an janye {{report}}. | ☐ | |
+| `ofcErrSampleCompleted` | This sample has been completed and its findings are final. | An kammala wannan samfurin, kuma binciken sa na karshe ne. | ☐ | |
+| `ofcErrSampleAlreadyComplete` | This sample is already complete. | An riga an kammala wannan samfurin. | ☐ | |
+| `ofcNsSampleCompleted` | Draw a new sample to examine these transactions again. | Ka zana sabon samfuri domin ka sake duba wadannan ma’amaloli. | ☐ | |
 | `ofcItemBackInCatalogue` | {{name}} is back in the catalogue and can be assessed again. | {{name}} ya dawo cikin lissafin kuma ana iya kimanta shi kuma. | ☐ | |
 | `ofcItemSuspended` | {{name}} is suspended. No new assessment can be raised against it; invoices already issued stay payable. | An dakatar da {{name}}. Ba za a iya kada wani sabon kimantawa a kansa ba; takardun biya da aka riga aka fitar sun ci gaba da zama abin biya. | ☐ | |
 | `ofcItemRetired` | {{name}} has been retired. Invoices already issued stay payable, and the item cannot be brought back. | An yi ritayar {{name}}. Takardun biya da aka riga aka fitar sun ci gaba da zama abin biya, kuma ba za a iya mayar da abun ba. | ☐ | |
@@ -2599,6 +2681,23 @@ instructions — but they are what an agent reads all day.
 | `colNeedBaseAmount` | Enter the amount the assessment is based on, in naira. | Ka shigar da kudin da aka gina kimar a kansa, da naira. | ☐ | |
 | `colNoTin` | No TIN | Babu TIN | ☐ | |
 | `colBasisAmountHint` | For example turnover, income or contract value. The charge itself is set by government. | Misali kudin shiga, riba ko darajar kwangila. Gwamnati ce ke saita kudin da kansa. | ☐ | |
+| `colMeasureHint` | What this charge is worked out from. Enter it as a number, for example 15.5. | Abin da ake lissafa wannan kudin da shi. Ka shigar da shi a matsayin lamba, misali 15.5. | ☐ | |
+| `colNeedMeasure` | Enter {{name}} as a number, zero or more. | Ka shigar da {{name}} a matsayin lamba, sifili ko fiye. | ☐ | |
+| `colFiFloorAreaSqm` | Floor area (square metres) | Girman dakin kasuwanci (murabba’in mita) | ☐ | |
+| `colFiLandAreaSqm` | Plot area (square metres) | Girman fili (murabba’in mita) | ☐ | |
+| `colFiSignAreaSqm` | Size of the sign (square metres) | Girman allon talla (murabba’in mita) | ☐ | |
+| `colFiFrontageMetres` | Frontage onto the road (metres) | Tsawon gaba a bakin hanya (mita) | ☐ | |
+| `colFiRooms` | Number of rooms | Yawan dakuna | ☐ | |
+| `colFiSeats` | Number of seats | Yawan kujeru | ☐ | |
+| `colFiEmployees` | Number of employees | Yawan ma’aikata | ☐ | |
+| `colFiVehicles` | Number of vehicles | Yawan motoci | ☐ | |
+| `colFiAnimals` | Number of animals | Yawan dabbobi | ☐ | |
+| `colFiStalls` | Number of stalls | Yawan rumfuna | ☐ | |
+| `colFiMachines` | Number of machines | Yawan na’urori | ☐ | |
+| `colFiMonths` | Number of months | Yawan watanni | ☐ | |
+| `colFiDays` | Number of days | Yawan kwanaki | ☐ | |
+| `colFiTonnes` | Weight (tonnes) | Nauyi (tan) | ☐ | |
+| `colFiRenewalPeriodMonths` | Renewal period (months) | Tsawon lokacin sabuntawa (watanni) | ☐ | |
 | `colTaxpayerLabel` | Taxpayer | Mai biyan haraji | ☐ | |
 | `colRevenueLabel` | Revenue | Haraji | ☐ | |
 | `colGovernmentRevenue` | Government revenue | Harajin gwamnati | ☐ | |
@@ -2629,6 +2728,18 @@ instructions — but they are what an agent reads all day.
 | `colOwesUnknown` | Their open invoices could not be read | Ba a iya karanta takardun biyansu ba | ☐ | |
 | `colOwesUnknownBody` | Nothing here says they owe nothing; it says the platform could not tell you. Raising a charge now risks charging twice for the same levy. | Wannan ba ya nufin ba su da bashi; yana nufin dandalin bai iya gaya maka ba. Yin sabon caji yanzu na iya haifar da cajin abu daya sau biyu. | ☐ | |
 | `colTakeThisPayment` | Take this payment | Karbi wannan biyan | ☐ | |
+| `colNeedsReissue` | Lapsed — it has to be issued again before it can be paid. | Ta kare — sai an sake fitar da ita kafin a iya biyanta. | ☐ | |
+| `colPeriodClosedReissue` | Raised in a month that has been closed — it has to be issued again before it can be paid. | An fitar da ita a watan da aka rufe — sai an sake fitar da ita kafin a iya biyanta. | ☐ | |
+| `colPeriodClosedTitle` | This bill’s month has been closed | An rufe watan wannan takardar biya | ☐ | |
+| `colUnderReviewTitle` | Payment held for review | An rike biyan don dubawa | ☐ | |
+| `colIssueAgain` | Issue this bill again | Sake fitar da wannan takardar biya | ☐ | |
+| `colIssuingAgain` | Issuing… | Ana fitarwa… | ☐ | |
+| `colLapsedTitle` | This bill has lapsed | Wannan takardar biya ta kare | ☐ | |
+| `colReplacedTitle` | This bill was issued again | An sake fitar da wannan takardar biya | ☐ | |
+| `colOpenReplacement` | Open the new bill | Bude sabuwar takardar | ☐ | |
+| `colReversedTitle` | This payment was reversed | An mayar da wannan biyan | ☐ | |
+| `colUnderObjection` | Under objection | Ana kalubalanta | ☐ | |
+| `colUnderObjectionBody` | the trader has formally disputed this estimate. PSIRS is not pursuing it while the objection is decided, so do not ask for this payment. | mai sana’ar ya kalubalanci wannan kiyasi a hukumance. PSIRS ba ta neman wannan kudi har sai an yanke hukunci kan kalubalen, don haka kada a nemi wannan biyan. | ☐ | |
 | `colChargeRaisedTitle` | The charge was raised. The payment was not. | An yi kimantawa, amma ba a fara biyan kudi ba. | ☐ | |
 | `colChargeRaisedBody` | Transaction {{reference}} now exists and the taxpayer owes it. Do not work this out again — a second attempt raises a second charge for the same thing, and both would have to be paid. Open the transaction to give them the invoice or to start the payment again. | Ma’amala {{reference}} ta wanzu yanzu kuma mai biyan haraji na bin ta. Kada ka sake lissafa wannan — sake gwadawa zai haifar da kimantawa ta biyu a kan abu daya, kuma za a bukaci a biya dukansu. Ka bude ma’amalar domin ba shi takardar biya ko ka sake fara biyan kudin. | ☐ | |
 | `colOpenCharge` | Open this transaction | Bude wannan ma’amala | ☐ | |
@@ -2930,7 +3041,8 @@ instructions — but they are what an agent reads all day.
 | `grpRecorded` | Recorded | An rubuta | ☐ | |
 | `grpWaitingOfficer` | Waiting for an officer | Ana jiran jami’i | ☐ | |
 | `grpAskLeaderConfirm` | Ask the leader to confirm | Ka nemi shugaba ya tabbatar | ☐ | |
-| `grpSendToLeader` | Send this to the leader | Tura wannan ga shugaba | ☐ | |
+| `grpSentToLeader` | Sent to the leader’s phone | An tura zuwa wayar shugaba | ☐ | |
+| `grpSentToLeaderBody` | The confirmation link went by text message to {{phone}}, the leader’s number on the group’s record. It is not shown here, because the leader is the one who confirms the members you recorded. | An tura hanyar tabbatarwa ta sakon tes zuwa {{phone}}, lambar shugaba a bayanan kungiyar. Ba a nuna ta a nan ba, saboda shugaba ne ke tabbatar da mambobin da ka rubuta. | ☐ | |
 | `grpNoAssessment` | This does not assess anybody | Wannan ba ya sanya wa kowa haraji | ☐ | |
 
 #### Handing out an allocation
@@ -3131,6 +3243,8 @@ instructions — but they are what an agent reads all day.
 | `moreNoReceipts` | No receipts yet. | Babu rasit tukuna. | ☐ | |
 | `moreSavedRecords` | Saved records on this device | Bayanan da aka ajiye a wannan na’ura | ☐ | |
 | `moreNothingWaiting` | Nothing is waiting to be sent. | Babu abin da ke jiran a aika. | ☐ | |
+| `moreSavedRecordsUnreadable` | The saved records on this device could not be read | Ba a iya karanta bayanan da aka ajiye a wannan na’ura ba | ☐ | |
+| `moreSavedRecordsUnreadableBody` | This does not mean nothing is waiting. Captures made offline may still be on this device. Keep it, do not clear its data, and report this to PSIRS support. | Wannan ba yana nufin babu abin da ke jira ba. Abubuwan da aka dauka ba tare da intanet ba suna iya kasancewa a wannan na’ura. A ajiye ta, kada a goge bayananta, kuma a sanar da tallafin PSIRS. | ☐ | |
 | `moreSavedOnPhone` | Saved on this phone | An ajiye a wannan wayar | ☐ | |
 | `moreVehicleRenewal` | Vehicle particulars renewal | Sabunta takardun mota | ☐ | |
 | `moreSearchVehicle` | Search vehicle | Nemo mota | ☐ | |
@@ -3248,6 +3362,28 @@ instructions — but they are what an agent reads all day.
 | `errBankChangeAlreadyPending` | A change to your bank account is already with an officer. It has to be approved or refused before you can ask for another. | Canjin asusun bankinka yana hannun jami’i. Sai an amince ko an ki shi kafin ka nemi wani. | ☐ | |
 | `errBankChangeAlreadySettled` | A decision has already been made on this change. | An riga an yanke shawara kan wannan canjin. | ☐ | |
 | `errPayoutInFlight` | A payout has not reached your account yet. Your bank details cannot change while money is on its way to them. | Akwai kudin da ba su kai asusunka ba tukuna. Ba za a canza bayanan bankinka ba yayin da kudi ke kan hanya zuwa gare su. | ☐ | |
+| `errTaxpayerNotActive` | This taxpayer record has been closed, so nothing new can be assessed against it. Any PSIRS office can put it back on the register. | An rufe rikodin wannan mai biyan haraji, don haka ba za a kimanta masa wani sabon abu ba. Kowane ofishin PSIRS zai iya mayar da shi cikin rajista. | ☐ | |
+| `errRevenueItemInactive` | This tax or levy is not being collected at the moment. Choose another, or ask a PSIRS officer. | Ba a karbar wannan haraji ko kudin shiga a yanzu. Ka zabi wani, ko ka tambayi jami’in PSIRS. | ☐ | |
+| `errRevenueItemNotForTaxpayerType` | This tax or levy does not apply to this kind of taxpayer. Check whether the record is an individual or a business. | Wannan haraji ko kudin shiga bai shafi irin wannan mai biyan haraji ba. Ka duba ko rikodin na mutum ne ko na kasuwanci. | ☐ | |
+| `errRevenueItemNotInLga` | This tax or levy is not collected in this taxpayer’s Local Government Area. | Ba a karbar wannan haraji ko kudin shiga a karamar hukumar wannan mai biyan haraji ba. | ☐ | |
+| `errAssessmentAmountZero` | The amount works out to nothing from the figures entered. Check them, and tell a PSIRS officer if they are right — the rate may be wrong rather than the figures. | Adadin ya zo babu daga lissafin da aka shigar. Ka duba su, kuma ka gaya wa jami’in PSIRS idan sun dace — watakila kudin ne ba daidai ba, ba lissafin ba. | ☐ | |
+| `errInvoiceAlreadyPaid` | This bill has already been paid. Do not collect payment again. | An riga an biya wannan takardar biya. Kada ka sake karbar kudi. | ☐ | |
+| `errTaxpayerAlreadyExists` | This person is already registered as {{subject}}. A second record would be a duplicate. | An riga an yi rajistar wannan mutumin a matsayin {{subject}}. Rikodi na biyu zai zama kwafi. | ☐ | |
+| `errPossibleDuplicateTaxpayer` | A record was found that may be this same person. Check it before opening a new one. | An sami rikodin da zai yiwu na wannan mutumin ne. Ka duba shi kafin ka bude sabuwar rajista. | ☐ | |
+| `errTinServiceUnavailable` | The PSIRS TIN service could not be reached, so this TIN cannot be confirmed. Nobody has been registered. | Ba a iya isa ga sabis din TIN na PSIRS ba, don haka ba a tabbatar da wannan TIN ba. Ba a yi rajistar kowa ba. | ☐ | |
+| `errTinNotFound` | TIN {{tin}} could not be found in the PSIRS TIN service. | Ba a sami TIN {{tin}} a sabis din TIN na PSIRS ba. | ☐ | |
+| `errAttestationNotSent` | The confirmation link could not be sent to the group leader, so no request was made. Try again later. | Ba a iya tura hanyar tabbatarwa ga shugaban kungiyar ba, don haka ba a yi wata bukata ba. Ka sake gwadawa nan gaba. | ☐ | |
+| `errInvoiceExpired` | This bill has expired. Issue it again from the taxpayer's list of bills. | Wannan takardar biya ta kare. A sake fitar da ita daga jerin takardun biyan mai biyan haraji. | ☐ | |
+| `errInvoicePeriodClosed` | This bill was raised in a month that has been closed. No money has been taken. Issue it again from the taxpayer's list of bills, then take the payment. | An fitar da wannan takardar biya a watan da aka rufe. Ba a karbi kudi ba. A sake fitar da ita daga jerin takardun biyan mai biyan haraji, sannan a karbi biyan. | ☐ | |
+| `errInvoiceStillPayable` | This bill can still be paid. Take the payment against it. | Har yanzu ana iya biyan wannan takardar biya. A karbi biya a kanta. | ☐ | |
+| `errInvoiceUnderObjection` | This bill is under objection, and collection is suspended until the objection is decided. | Ana kalubalantar wannan takardar biya, kuma an dakatar da karba har sai an yanke hukunci kan kalubalen. | ☐ | |
+| `errInvoiceWithdrawn` | This bill was withdrawn. Nothing is owed on it. | An janye wannan takardar biya. Babu bashin komai a kanta. | ☐ | |
+| `errInvoicePartPaid` | Part of this bill has been paid, so it cannot be issued again. Ask a PSIRS officer. | An biya wani bangare na wannan takardar biya, don haka ba za a iya sake fitar da ita ba. A tambayi jami’in PSIRS. | ☐ | |
+| `errVehicleRenewalClosed` | This bill was for a vehicle renewal that has ended, so it cannot be issued again. Ask a PSIRS officer. | Wannan takardar biya ta sabunta abin hawa ce da ta kare, don haka ba za a iya sake fitar da ita ba. A tambayi jami’in PSIRS. | ☐ | |
+| `errInvoiceNotPayable` | This bill is {{state}} and can no longer be paid. If it lapsed, issue it again; if it was replaced, take the payment against the new bill. | Wannan takardar biya tana {{state}} kuma ba za a iya biyanta ba. Idan ta kare, a sake fitar da ita; idan an maye gurbinta, a karbi biya a kan sabuwar takardar. | ☐ | |
+| `errNoEffectiveRate` | No rate approved by government is in force for this tax or levy, so nothing can be assessed on it. Choose another, or tell a PSIRS officer. | Babu kudin da Gwamnati ta amince da shi a aiki kan wannan haraji ko kudin shiga, don haka ba za a iya kimanta komai kan sa ba. Ka zabi wani, ko ka gaya wa jami’in PSIRS. | ☐ | |
+| `errPaymentAlreadyVerified` | This charge has already been paid and the payment confirmed. Do not collect payment again. | An riga an biya wannan kudin kuma an tabbatar da biyan. Kada ka sake karbar kudi. | ☐ | |
+| `errTransactionNotPayable` | This charge is {{state}} and cannot take a payment now. | Wannan ma’amala tana {{state}} kuma ba za ta karbi biya a yanzu ba. | ☐ | |
 | `errRateLimited` | Too many attempts. Wait a moment and try again. | Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa. | ☐ | |
 | `errReference` | Reference | Lamba | ☐ | |
 | `errUploadFailed` | The document could not be sent. Try again. | Ba a iya aika takardar ba. Ka sake gwadawa. | ☐ | |
@@ -3285,6 +3421,7 @@ instructions — but they are what an agent reads all day.
 | `pubVerifyAction` | Verify | Tantance | ☐ | |
 | `pubVerifyChecking` | Checking… | Ana bincike… | ☐ | |
 | `pubVerifyReceiptNumber` | Receipt number | Lambar rasit | ☐ | |
+| `pubVerifyDocumentNumber` | Document number | Lambar takarda | ☐ | |
 | `pubVerifyRevenueType` | Revenue type | Nau’in haraji | ☐ | |
 | `pubVerifyAmount` | Amount | Adadi | ☐ | |
 | `pubVerifyIssued` | Issued | Ranar bayarwa | ☐ | |
@@ -3397,6 +3534,7 @@ instructions — but they are what an agent reads all day.
 | `pubStmtReturnedRow` | returned to you | an mayar maka | ☐ | |
 | `pubStmtForWhat` | What it went to | Abin da aka biya | ☐ | |
 | `pubStmtEach` | Each payment | Kowane biya | ☐ | |
+| `pubStmtPartial` | The totals above cover the whole period, but only your {{n}} most recent payments are listed below. The earliest part of the period is not on the list, so these lines will not add up to the total. Ask for a shorter period to see the rest. | Jimillar da ke sama ta kunshi dukan lokacin, amma biyayyarka {{n}} na baya-bayan nan kadai ke cikin jerin a kasa. Farkon lokacin ba ya cikin jerin, don haka wadannan layukan ba za su hada su kai jimillar ba. Ka nemi gajeren lokaci don ka ga sauran. | ☐ | |
 | `pubStmtNothing` | Nothing was paid in this period. | Ba a biya komai a wannan lokacin ba. | ☐ | |
 | `pubStmtFooter` | Keep your receipts. If this list and your receipts disagree, take them to a PSIRS office — the receipt is the proof, this is the record. | Ka ajiye rasitunka. Idan wannan jerin da rasitunka ba su dace ba, ka kai su ofishin PSIRS — rasit shi ne hujja, wannan kuwa rikodi ne. | ☐ | |
 | `pubCitizenFooter` | For questions about your account, visit any PSIRS office or contact an authorised revenue agent. | Don tambaya game da asusunka, ka ziyarci kowane ofishin PSIRS ko ka tuntubi wakilin karbar haraji da izini. | ☐ | |
@@ -3622,6 +3760,7 @@ instructions — but they are what an agent reads all day.
 | `enumInvited` | Invited | An gayyata | ☐ | |
 | `enumInvoice` | Invoice | Takardar biya | ☐ | |
 | `enumInvoiceGenerated` | Invoice issued | An fitar da takardar biya | ☐ | |
+| `enumInvoiceWithdrawal` | Withdrawing an invoice raised in error | Janye takardar biya da aka fitar bisa kuskure | ☐ | |
 | `enumInvoiced` | Invoiced | An fitar da takardar biya | ☐ | |
 | `enumIssued` | Issued | An bayar | ☐ | |
 | `enumKilogram` | Kilogram | Kilogiram | ☐ | |
@@ -3647,6 +3786,7 @@ instructions — but they are what an agent reads all day.
 | `enumMatched` | Matched | Ya dace | ☐ | |
 | `enumMedium` | Medium | Matsakaici | ☐ | |
 | `enumMerged` | Merged | An hade | ☐ | |
+| `enumMismatch` | Does not match | Bai dace ba | ☐ | |
 | `enumMigration` | Migration | Canja bayanai | ☐ | |
 | `enumMining` | Mining | Hakar ma’adinai | ☐ | |
 | `enumMissingPayment` | Payment missing | Babu biyan kudi | ☐ | |
@@ -3707,6 +3847,12 @@ instructions — but they are what an agent reads all day.
 | `enumQuarterly` | Quarterly | Kowane wata uku | ☐ | |
 | `enumQueued` | Queued | Yana layi | ☐ | |
 | `enumRead` | Read | An karanta | ☐ | |
+| `enumChange` | Changed | An canza | ☐ | |
+| `enumIncentiveStanding` | Incentive standing | Matsayin tallafi | ☐ | |
+| `enumPaymentHistory` | Payment history | Tarihin biyayya | ☐ | |
+| `enumTaxObligations` | Tax obligations | Wajiban haraji | ☐ | |
+| `enumTaxpayerRecord` | Taxpayer record | Rikodin mai biyan haraji | ☐ | |
+| `enumOutstandingBills` | Outstanding bills | Bashin da ba a biya ba | ☐ | |
 | `enumReadyForReview` | Ready for review | A shirye don dubawa | ☐ | |
 | `enumRealProperty` | Land and buildings | Filaye da gine-gine | ☐ | |
 | `enumReceipt` | Receipt | Rasit | ☐ | |
@@ -4038,10 +4184,14 @@ instructions — but they are what an agent reads all day.
 | `nsUpdateRequiredToEnumerate` | Close and reopen the app to install the latest version. Anything already saved on this phone will still be sent. | Ka rufe manhajar ka sake budewa domin shigar da sabuwar siga. Duk abin da aka riga aka ajiye a wannan waya za a aika shi. | ☐ | |
 | `nsTinServiceUnavailable` | Try again in a few minutes. Do NOT register this taxpayer as a new TIN applicant — that would create a second TIN for someone who already has one. | Ka sake gwadawa nan da mintuna kadan. KADA ka yi rajistar wannan mai biyan haraji a matsayin sabon mai neman TIN — hakan zai kirkiri TIN na biyu ga wanda ya riga ya mallaki daya. | ☐ | |
 | `nsTinNotFound` | Check the number against the taxpayer’s own document first — a mistyped digit is the usual cause. Only if they have never had a TIN, go back and register them without one; the platform will apply for a new TIN for them. | Da farko ka duba lambar da takardar mai biyan harajin kansa — yawanci kuskuren buga lamba ne sanadi. Sai kawai idan bai taba mallakar TIN ba, ka koma ka yi rajistarsa ba tare da TIN ba; dandalin zai nema masa sabuwar TIN. | ☐ | |
+| `nsTaxpayerAlreadyExists` | Open the existing record and continue from there. | Ka bude rikodin da ke akwai ka ci gaba daga nan. | ☐ | |
+| `nsPossibleDuplicateTaxpayer` | Register them as new only if none of the matches is the same person. | Ka yi rajistarsa a matsayin sabo sai idan babu daya daga cikinsu da shi ne mutumin. | ☐ | |
 | `nsKycProviderUnavailable` | Try again in a few minutes. Your application is unchanged. | Ka sake gwadawa nan da mintuna kadan. Nemanka bai canza ba. | ☐ | |
 | `nsPaymentUnconfirmed` | Open the transaction from your history to see its current status. | Ka bude cinikin daga tarihinka domin ka ga halin da yake ciki yanzu. | ☐ | |
 | `nsPaymentFailed` | Start the payment again, or choose a different payment method. | Ka sake fara biyan, ko ka zabi wata hanyar biya. | ☐ | |
 | `nsAgentNotCleared` | Open "My Application" to see what is still outstanding. | Ka bude "Nemana" domin ka ga abin da ya rage. | ☐ | |
+| `nsInvoiceAlreadyPaid` | Open the receipt from the transaction history. | Ka bude rasit daga tarihin ma’amaloli. | ☐ | |
+| `nsNoEffectiveRate` | Government has to approve a rate before this can be collected. A PSIRS officer can have it looked at. | Dole Gwamnati ta amince da kudi kafin a iya karba kan wannan. Jami’in PSIRS zai iya sa a duba shi. | ☐ | |
 | `agVehFoundConfirmed` | Vehicle found and confirmed against the vehicle authority record. | An sami motar kuma an tabbatar da ita a rajistar hukumar motoci. | ☐ | |
 | `agVehFoundUnconfirmed` | Vehicle found on the platform. It has not been confirmed against the vehicle authority. | An sami motar a dandalin. Ba a tabbatar da ita a hukumar motoci ba tukuna. | ☐ | |
 | `agVehRegistryUnavailable` | The vehicle authority could not be reached, so we cannot say whether this vehicle is registered. Try again shortly. If the renewal cannot wait, capture the details manually — the record will be flagged for checking once the authority is back. | Ba a iya tuntubar hukumar motoci ba, don haka ba za mu iya cewa an yi rajistar wannan mota ba. Ka sake gwadawa nan ba da dadewa ba. Idan sabuntawar ba za ta iya jira ba, ka shigar da bayanan da hannu — za a yi wa rajistar alama domin a duba ta idan hukumar ta dawo. | ☐ | |
@@ -4059,7 +4209,7 @@ instructions — but they are what an agent reads all day.
 
 ### C · The messages PSIRS sends
 
-30 templates, and the highest-stakes strings in the project. A
+47 templates, and the highest-stakes strings in the project. A
 citizen holds no account here: the SMS is the entire record of the
 transaction as far as they are concerned, and nobody is standing beside
 them to explain it. Read the acknowledgement wording especially closely —
@@ -4097,6 +4247,23 @@ it has to be unmistakably **not** a receipt.
 | `AGENT_BANK_CHANGE_REFUSED_SMS_HA` | SMS | — | PSIRS: Ba a amince da bukatar canza asusun kwamishan dinka ba. Dalili: {{reason}}. Asusun ka na yanzu bai canza ba. | ☐ | |
 | `TAXPAYER_RECORD_CORRECTED_SMS_HA` | SMS | — | PSIRS: An gyara {{fields}} a kan bayananka na mai biyan haraji ta hannun jami’in haraji. Idan ba kai ka nema ba, ka je kowane ofishin PSIRS. | ☐ | |
 | `USER_ROLE_CHANGED_SMS_HA` | SMS | — | PSIRS: An canza matsayinka daga {{previousRole}} zuwa {{newRole}}. An fitar da kai, dole ka sake shiga. Idan ba a sa ran haka ba, ka tuntubi mai gudanarwarka yanzu. | ☐ | |
+| `OBJECTION_UPHELD_SMS_HA` | SMS | — | PSIRS: An amince da kalubalen da aka yi kan kimantawa {{reference}}: {{reason}}. An janye kiyasin, kuma babu bashin komai a kansa. | ☐ | |
+| `OBJECTION_UPHELD_REFUND_REQUESTED_SMS_HA` | SMS | — | PSIRS: An amince da kalubalen da aka yi kan kimantawa {{reference}}: {{reason}}. An janye kiyasin, kuma an nemi a mayar da {{amount}} da aka biya. | ☐ | |
+| `OBJECTION_REJECTED_SMS_HA` | SMS | — | PSIRS: Ba a amince da kalubalen da aka yi kan kimantawa {{reference}} ba: {{reason}}. Kimantawar {{amount}} tana nan. Idan ba a biya ba tukuna, a biya ta hannun wakilin karbar haraji ko ofishin PSIRS. | ☐ | |
+| `OBJECTION_RECEIVED_SMS_HA` | SMS | — | PSIRS: An karbi kalubalen da aka yi kan kimantawa {{reference}}. Ba a tilasta biya ba yayin da PSIRS ke duba shi, kuma za a aiko da hukuncin. Ba sai an yi komai ba a wannan lokaci. | ☐ | |
+| `GROUP_ATTESTATION_INVITATION_SMS_HA` | SMS | — | PSIRS: An rubuta ka a matsayin shugaban {{group}} ({{code}}). Ka tabbatar da wadanda ke cikin kungiyar a {{link}} kafin {{expiry}}. Kada ka tura wannan sakon ga kowa: hanyar tabbatarwar taka ce. | ☐ | |
+| `TAX-REMINDER-6W-SMS-HA` | SMS | — | Ranka ya dade {{name}}, biyan {{revenueItemHa}} dinka na {{amount}} (TIN: {{tinNumber}}) zai kai ranar biya a {{dueDate}}. Ka biya da wuri domin ka ci gaba da bin ka’ida kuma ka samu tallafin gwamnati. Ka duba a {{portalUrl}} | ☐ | |
+| `TAX-REMINDER-6W-EMAIL-HA` | EMAIL | Ana bukatar mataki: biyan {{revenueItemHa}} zai kai ranar biya a {{dueDate}} | Ranka ya dade {{name}}, Wannan tunatarwa ce ta makonni 6 daga Hukumar Haraji ta Jihar Plateau (PSIRS). Biyan {{revenueItemHa}} dinka na {{amount}} zai kai ranar biya a {{dueDate}}. Lambar Shaidar Mai Biyan Haraji (TIN): {{tinNumber}} Bin ka’ida yana sa asusunka na PSIRS ya ci gaba da aiki, kuma yana sa ka cancanci shirye-shiryen tallafi na Jihar Plateau, ciki har da inshorar lafiya, tallafin noma da tallafin karatu. Domin biya ko duba matsayinka, ziyarci: {{portalUrl}} Hukumar Haraji ta Jihar Plateau Gidan Zaman Lafiya da Yawon Bude Ido | ☐ | |
+| `TAX-REMINDER-6W-WHATSAPP-HA` | WHATSAPP | — | 🔔 *Tunatarwar Haraji ta PSIRS* Ranka ya dade {{name}}, Biyan *{{revenueItemHa}}* dinka na *{{amount}}* zai kai ranar biya a *{{dueDate}}*. TIN: {{tinNumber}} Ka biya a kan lokaci domin ka ci gaba da bin ka’ida kuma ka samu tallafin gwamnati. Duba matsayinka: {{portalUrl}} _Hukumar Haraji ta Jihar Plateau_ | ☐ | |
+| `TAX-REMINDER-4W-SMS-HA` | SMS | — | TUNATARWAR PSIRS: Ranka ya dade {{name}}, {{revenueItemHa}} dinka ({{amount}}) zai kai ranar biya a {{dueDate}}. TIN: {{tinNumber}}. Ka biya yanzu domin kada ka shiga bashi. {{portalUrl}} | ☐ | |
+| `TAX-REMINDER-4W-EMAIL-HA` | EMAIL | Tunatarwa: {{revenueItemHa}} zai kai ranar biya cikin makonni 4 — {{dueDate}} | Ranka ya dade {{name}}, Saura makonni 4 kafin ranar biyan {{revenueItemHa}} dinka na {{amount}} ({{dueDate}}). TIN: {{tinNumber}} Rashin biyan abin da ake bin ka yana shafar makin bin ka’idarka, kuma yana iya dakatar da samun shirye-shiryen tallafi na Jihar Plateau. Ka biya yanzu ko ka duba abin da ake bin ka a: {{portalUrl}} Hukumar Haraji ta Jihar Plateau | ☐ | |
+| `TAX-REMINDER-4W-WHATSAPP-HA` | WHATSAPP | — | ⏰ *PSIRS — Tunatarwar Makonni 4* Ranka ya dade {{name}}, Biyan *{{revenueItemHa}}* dinka na *{{amount}}* zai kai ranar biya a *{{dueDate}}*. TIN: {{tinNumber}} Kada ka shiga bashi — ka biya kafin ranar biya. {{portalUrl}} _Hukumar Haraji ta Jihar Plateau_ | ☐ | |
+| `TAX-REMINDER-2W-SMS-HA` | SMS | — | GAGGAWA — PSIRS: Ranka ya dade {{name}}, {{revenueItemHa}} dinka ({{amount}}) zai kai ranar biya nan da makonni 2, a {{dueDate}}. TIN: {{tinNumber}}. Ka biya nan take domin kada a ci ka tara. {{portalUrl}} | ☐ | |
+| `TAX-REMINDER-2W-EMAIL-HA` | EMAIL | GAGGAWA: {{revenueItemHa}} zai kai ranar biya cikin makonni 2 — ka dauki mataki yanzu | Ranka ya dade {{name}}, TUNATARWA TA GAGGAWA daga Hukumar Haraji ta Jihar Plateau. Biyan {{revenueItemHa}} dinka na {{amount}} zai kai ranar biya a {{dueDate}} — wato nan da kwanaki 14. TIN: {{tinNumber}} Rashin biya a kan lokaci zai sa a rubuta bashi a bayananka na PSIRS, wanda zai shafi makin bin ka’idarka da cancantarka ga shirye-shiryen tallafin gwamnati. Ka biya yanzu a: {{portalUrl}} Hukumar Haraji ta Jihar Plateau Gidan Zaman Lafiya da Yawon Bude Ido | ☐ | |
+| `TAX-REMINDER-2W-WHATSAPP-HA` | WHATSAPP | — | 🚨 *PSIRS — GAGGAWA: Sanarwar Makonni 2* Ranka ya dade {{name}}, Biyan *{{revenueItemHa}}* dinka na *{{amount}}* zai kai ranar biya a *{{dueDate}}* — saura kwanaki 14 kacal. TIN: {{tinNumber}} Don Allah ka biya nan take domin kada ka shiga bashi. 👉 {{portalUrl}} _Hukumar Haraji ta Jihar Plateau_ | ☐ | |
+| `TAX-REMINDER-1W-SMS-HA` | SMS | — | PSIRS: Ranka ya dade {{name}}, {{revenueItemHa}} dinka ({{amount}}) zai kai ranar biya nan da mako daya, a {{dueDate}}. TIN: {{tinNumber}}. Bayan wannan rana, sai an sake fitar da takardar biya kafin a iya biya. {{portalUrl}} | ☐ | |
+| `TAX-REMINDER-1W-EMAIL-HA` | EMAIL | Saura mako daya: {{revenueItemHa}} zai kai ranar biya a {{dueDate}} | Ranka ya dade {{name}}, Biyan {{revenueItemHa}} dinka na {{amount}} zai kai ranar biya a {{dueDate}}, nan da mako daya. TIN: {{tinNumber}} Bayan wannan rana takardar biya za ta kare. Abin da ake bin ka ba zai bace ba, amma sai wakilin karbar haraji ko ofishin PSIRS ya sake fitar da takardar kafin a iya biya. Domin biya ko duba matsayinka, ziyarci: {{portalUrl}} Hukumar Haraji ta Jihar Plateau | ☐ | |
+| `TAX-REMINDER-1W-WHATSAPP-HA` | WHATSAPP | — | *PSIRS: saura mako daya* Ranka ya dade {{name}}, Biyan *{{revenueItemHa}}* dinka na *{{amount}}* zai kai ranar biya a *{{dueDate}}*. TIN: {{tinNumber}} Bayan wannan rana, sai an sake fitar da takardar biya kafin a iya biya. {{portalUrl}} _Hukumar Haraji ta Jihar Plateau_ | ☐ | |
 
 <!-- END:GENERATED -->
 

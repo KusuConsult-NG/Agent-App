@@ -41,6 +41,14 @@ const SAFETY_KEYS: (keyof TranslationDictionary)[] = [
   'commissionAccountNote',
   'paymentFailed',
   'paymentFailedBody',
+  'paymentEndedBody',
+  'colLapsedBody',
+  'colPeriodClosedBody',
+  'colUnderReviewBody',
+  'colReplacedBody',
+  'errInvoicePaymentInProgress',
+  'colReversedOwedBody',
+  'colReversedWithdrawnBody',
   'paymentUnconfirmed',
   'paymentUnconfirmedBody',
   'findTaxpayerFirst',
@@ -73,6 +81,21 @@ const SAFETY_KEYS: (keyof TranslationDictionary)[] = [
    * or the sentence that keeps government revenue out of an agent's own
    * account.
    */
+  /*
+   * The one refusal on the collect path whose meaning inverts into money.
+   *
+   * `NO_TAX_PAYABLE` says there is nothing to charge, and its next step says
+   * in so many words not to raise the figure to make the assessment go
+   * through. An agent who cannot read either is exactly the agent who raises
+   * the figure, and the trader pays a tax the schedule does not ask for.
+   *
+   * The other five refusals added beside it in `ui.tsx` are deliberately not
+   * here. They stop the collection — a closed record, a levy not collected in
+   * this LGA — and being unable to read one leaves the agent stuck rather than
+   * leaving somebody out of pocket, which is the line this tier draws.
+   */
+  'errNoTaxPayable',
+  'nsNoTaxPayable',
   'errPaymentUnconfirmed',
   'errPaymentPendingReconciliation',
   'errPaymentFailed',
@@ -110,6 +133,7 @@ const SAFETY_KEYS: (keyof TranslationDictionary)[] = [
   // not, which is the failure this tier exists to catch.
   'pubVerdictValid',
   'pubVerdictAcknowledgement',
+  'pubVerdictInvoice',
   'pubVerdictReversed',
   'pubVerdictNotFound',
   'pubVerdictInvalid',
@@ -139,6 +163,12 @@ const SAFETY_KEYS: (keyof TranslationDictionary)[] = [
   'verifyDocumentExpired',
   'verifyDocumentGenuine',
   'verifyDocumentGenuineUnchecked',
+  'verifyInvoicePayable',
+  'verifyInvoicePaid',
+  'verifyInvoiceReplaced',
+  'verifyInvoiceWithdrawn',
+  'verifyInvoiceLapsed',
+  'verifyInvoiceReissueNeeded',
 ];
 
 describe('the safety tier is really in Hausa', () => {

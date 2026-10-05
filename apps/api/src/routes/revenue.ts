@@ -2,15 +2,19 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
-import { serialiseKobo } from '@psirs/shared';
+import { BASE_AMOUNT_INPUT, FORMULA_INPUT_NAMES, serialiseKobo } from '@psirs/shared';
+import { inputsFor } from '../services/rate-engine';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { authenticate, requirePermission, requireActiveAgent, requireStepUp } from '../middleware/auth';
 import { idempotent } from '../middleware/idempotency';
 import { asyncHandler, koboSchema, uuidSchema, validateBody, validateQuery } from '../middleware/validate';
 import { assertOwnRecord, callerAgentId, seesEverything } from '../lib/ownership';
-import { notFound, badRequest } from '../lib/errors';
+import { conflict, notFound, badRequest } from '../lib/errors';
+import { VEHICLE_RENEWAL_ITEM_CODES } from '../lib/vehicle-renewal-items';
+import { CHARGE_PERIOD_SHUT_SQL } from '../lib/payable-invoice';
 import * as revenue from '../services/revenue';
 import { recordAudit } from '../services/audit';
+import { recordTaxpayerAccess } from '../services/taxpayer-access';
 import { registerDocument, renderInvoicePdf } from '../services/documents';
 import { signDocumentUrl } from '../services/storage';
 
@@ -52,13 +56,34 @@ revenueRouter.get(
       lgaId: uuidSchema.optional(),
       search: z.string().optional(),
       includeWithdrawn: z.coerce.boolean().optional(),
+      /*
+       * The taxpayer the list is for, as the quote takes it.
+       *
+       * The collect screen asked by taxpayer type alone, so the list never
+       * knew where the taxpayer was: it offered items limited to other
+       * Councils, which the charge then refused, and showed whichever
+       * Council's rate was newest. Given a taxpayer, the place and the type
+       * come from their record rather than from the request, and only what
+       * can be charged there is listed.
+       */
+      taxpayerId: uuidSchema.optional(),
     }),
     async (req, res, data) => {
       // Seeing what has been withdrawn is part of configuring the catalogue,
       // not part of reading it: an agent asking for the withdrawn items gets
       // the catalogue they can actually sell from.
       const includeWithdrawn = data.includeWithdrawn === true && req.auth!.permissions.includes('catalogue:configure');
-      res.json(await revenue.listItems(pool, { ...data, includeWithdrawn }));
+      let place: { lgaId?: string; taxpayerType?: string; chargeableOnly?: boolean } = {};
+      if (data.taxpayerId) {
+        const taxpayer = await queryOne<{ lga_id: string; taxpayer_type: string }>(
+          pool,
+          'SELECT lga_id, taxpayer_type FROM taxpayers WHERE id = $1',
+          [data.taxpayerId],
+        );
+        if (!taxpayer) throw notFound('That taxpayer');
+        place = { lgaId: taxpayer.lga_id, taxpayerType: taxpayer.taxpayer_type, chargeableOnly: true };
+      }
+      res.json(await revenue.listItems(pool, { ...data, ...place, includeWithdrawn }));
     },
   ),
 );
@@ -144,6 +169,39 @@ revenueRouter.post(
         const [field, message] = required[data.rateType];
         if (data[field] === undefined || data[field] === null || data[field] === '') {
           ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message });
+        }
+
+        /*
+         * A formula reads only measurements the field app can ask for in both
+         * languages.
+         *
+         * The field app asks the agent for each input a formula names, and its
+         * label comes from the dictionary by that name. A name the officer
+         * invented has no label in either language: the box would show the
+         * name itself, spelt like code, to a reader of Hausa as much as of
+         * English. So the names are a list (FORMULA_INPUTS, plus the declared
+         * amount), and anything else is refused here, naming the list.
+         */
+        if (data.rateType === 'FORMULA' && typeof data.formula === 'string' && data.formula.trim()) {
+          let names: string[] = [];
+          try {
+            names = inputsFor({ rate_type: 'FORMULA', formula: data.formula });
+          } catch {
+            // An unsupported character is refused when the formula is checked;
+            // there is no name to judge here.
+          }
+          const allowed = new Set<string>([...FORMULA_INPUT_NAMES, BASE_AMOUNT_INPUT]);
+          const unknown = names.filter((name) => !allowed.has(name));
+          if (unknown.length > 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['formula'],
+              message:
+                `A formula can read only measurements the field app asks for: ` +
+                `${[...allowed].join(', ')}. ${unknown.map((name) => `"${name}"`).join(', ')} ` +
+                `${unknown.length === 1 ? 'is' : 'are'} not one of them.`,
+            });
+          }
         }
 
         if (data.rateType === 'TIERED' && data.tiers !== undefined) {
@@ -333,6 +391,32 @@ revenueRouter.post(
 // --- Quote, assessment, invoice --------------------------------------------
 
 /** Price a revenue item without creating anything (PRD §15). */
+/*
+ * What the field app has to ask before it can quote this item for this taxpayer.
+ *
+ * By taxpayer rather than LGA, for the reason the quote below gives: the place
+ * decides which Council's rate applies, and the client is not the one to say.
+ */
+revenueRouter.get(
+  '/items/:id/inputs',
+  requirePermission('assessment:create'),
+  validateQuery(
+    z.object({ taxpayerId: uuidSchema.optional() }),
+    async (req, res, data) => {
+      const lgaId = data.taxpayerId
+        ? (
+            await queryOne<{ lga_id: string }>(
+              pool,
+              'SELECT lga_id FROM taxpayers WHERE id = $1',
+              [data.taxpayerId],
+            )
+          )?.lga_id ?? null
+        : null;
+      res.json(await revenue.collectionInputs(pool, { revenueItemId: req.params.id!, lgaId }));
+    },
+  ),
+);
+
 revenueRouter.post(
   '/quote',
   requirePermission('assessment:create'),
@@ -395,6 +479,27 @@ revenueRouter.post(
       longitude: z.number().min(-180).max(180).optional(),
     }),
     async (req, res, data) => {
+      /*
+       * Not a vehicle renewal. Those are raised by the renewal flow, which
+       * checks the vehicle and its owner, allows 6, 12 or 24 months, records
+       * the renewal and issues the papers once paid; charged here, none of
+       * that happens. The collect screen could not reach these only because
+       * it sent no inputs for a formula item, and it now asks for them.
+       */
+      const item = await queryOne<{ code: string }>(
+        pool,
+        'SELECT code FROM revenue_items WHERE id = $1',
+        [data.revenueItemId],
+      );
+      if (item && VEHICLE_RENEWAL_ITEM_CODES.includes(item.code)) {
+        throw conflict(
+          'RENEWED_FROM_THE_VEHICLE',
+          'Vehicle particulars are renewed from the vehicle itself, which checks the vehicle and its ' +
+            'owner and issues the papers once the payment lands. Nothing has been charged.',
+          'Open the vehicle and renew it from there.',
+        );
+      }
+
       const result = await revenue.createAssessment({
         ...data,
         actorId: req.auth!.userId,
@@ -428,7 +533,12 @@ revenueRouter.get(
          FROM assessments a
          JOIN revenue_items ri ON ri.id = a.revenue_item_id
          JOIN revenue_categories rc ON rc.id = ri.category_id
-         LEFT JOIN invoices i ON i.assessment_id = a.id
+         /*
+          * Its live invoice. An assessment whose bill was issued again has
+          * two, and joining both made this answer with whichever row came
+          * first — the cancelled one as often as not.
+          */
+         LEFT JOIN invoices i ON i.assessment_id = a.id AND i.reissued_as IS NULL
         WHERE a.id = $1`,
       [req.params.id],
     );
@@ -452,12 +562,19 @@ revenueRouter.get(
       `SELECT i.*, a.assessment_number, a.period_label, a.computation_trace,
               ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
               rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
-              t.transaction_reference, t.status AS transaction_status
+              t.transaction_reference, t.status AS transaction_status,
+              -- What replaced it, by number, so the screen can say so.
+              replacement.invoice_number AS reissued_as_number,
+              -- The closed month it was raised in, while its charge still waits
+              -- for a payment: issued again before it is paid.
+              CASE WHEN t.status IN ('INVOICE_GENERATED', 'FAILED') THEN ${CHARGE_PERIOD_SHUT_SQL} END
+                AS period_closed
          FROM invoices i
          JOIN assessments a ON a.id = i.assessment_id
          JOIN revenue_items ri ON ri.id = a.revenue_item_id
          JOIN revenue_categories rc ON rc.id = ri.category_id
          LEFT JOIN transactions t ON t.invoice_id = i.id
+         LEFT JOIN invoices replacement ON replacement.id = i.reissued_as
         WHERE i.id = $1`,
       [req.params.id],
     );
@@ -465,6 +582,50 @@ revenueRouter.get(
     assertOwnRecord(req, 'invoice:read:all', (invoice as { agent_id?: string | null }).agent_id ?? null, 'That invoice');
     res.json(invoice);
   }),
+);
+
+/**
+ * Issue a bill again that can no longer be paid (see `reissueInvoice`).
+ *
+ * `invoice:create`, which agents have held since the start and nothing
+ * consulted: creating an assessment writes its first invoice, and that act is
+ * guarded by `assessment:create`. This is the one route that creates an
+ * invoice and nothing else — a fresh demand for a liability already
+ * determined, at the amount already determined — so it is guarded by the
+ * permission that names it. Revenue officers hold it too, for the lapsed
+ * bills on their arrears list; they cannot raise an assessment, and this
+ * gives them no way to.
+ */
+revenueRouter.post(
+  '/invoices/:id/reissue',
+  requirePermission('invoice:create'),
+  requireActiveAgent(),
+  idempotent('invoice.reissue'),
+  validateBody(
+    z.object({
+      latitude: z.number().min(-90).max(90).optional(),
+      longitude: z.number().min(-180).max(180).optional(),
+    }),
+    async (req, res, data) => {
+      if (!uuidSchema.safeParse(req.params.id).success) throw notFound('That invoice');
+      const result = await revenue.reissueInvoice({
+        invoiceId: String(req.params.id),
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+        agentId: req.agent?.agentId ?? null,
+        territoryId: req.agent?.territoryId ?? null,
+        deviceId: req.agent?.deviceId ?? null,
+        latitude: data.latitude ?? null,
+        longitude: data.longitude ?? null,
+        channel: req.auth!.role === 'agent' ? 'AGENT_PWA' : 'OFFICER',
+        ipAddress: req.clientIp,
+      });
+      res.status(result.reissued ? 201 : 200).json({
+        ...result,
+        totalKobo: serialiseKobo(result.totalKobo),
+      });
+    },
+  ),
 );
 
 /** Render the invoice as a PDF the taxpayer can keep (PRD §15, §23). */
@@ -562,7 +723,28 @@ revenueRouter.get(
    * and they are in front of the agent asking.
    */
   asyncHandler(async (req, res) => {
-    res.json(await revenue.getObligations(pool, req.params.id));
+    const bills = await revenue.getObligations(pool, req.params.id);
+    /*
+     * And recorded, because "any agent may read it" is exactly why who did
+     * has to be answerable. Logged after the read and only for a taxpayer that
+     * exists — the log's foreign key would refuse anything else, and an empty
+     * list for a real taxpayer is still a look at their affairs.
+     */
+    const exists = await queryOne<{ id: string }>(pool, 'SELECT id FROM taxpayers WHERE id = $1', [
+      req.params.id,
+    ]);
+    if (exists) {
+      await recordTaxpayerAccess({
+        taxpayerId: req.params.id!,
+        accessedBy: req.auth!.userId,
+        actorRole: req.auth!.role,
+        surface: 'OUTSTANDING_BILLS',
+        ipAddress: req.clientIp,
+        deviceId: req.auth!.deviceId,
+        requestId: req.requestId,
+      });
+    }
+    res.json(bills);
   }),
 );
 

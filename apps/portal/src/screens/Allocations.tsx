@@ -29,7 +29,7 @@ import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { withJustification } from '../lib/justify';
 import { Alert, Badge, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
-import { enumLabel, localName } from '@psirs/shared';
+import { enumLabel, localName, quantityHundredths } from '@psirs/shared';
 
 interface Round {
   id: string;
@@ -46,6 +46,13 @@ interface Round {
   /** Both come back on every row of `listRounds`; both were being dropped. */
   awarded_count?: string;
   awarded_quantity?: string;
+  /*
+   * Computed by the server in SQL, where NUMERIC arithmetic is exact.
+   * Optional so an older API degrades to `exactRemaining` below rather than
+   * to a blank cell.
+   */
+  remaining_quantity?: string;
+  beneficiaries_remaining?: string;
 }
 
 interface Programme {
@@ -70,6 +77,19 @@ interface Award {
  * here — which is how two of them stayed English while the rest were keyed.
  */
 const UNITS = ['BAG_50KG', 'BAG_25KG', 'LITRE', 'KILOGRAM', 'TRACTOR_DAY', 'SEEDLING', 'UNIT'] as const;
+
+/**
+ * What is left in a round, when the server did not send it.
+ *
+ * Only reached by an older API or a test mock that predates
+ * `remaining_quantity`. Still in hundredths rather than a float subtraction,
+ * because the whole point of this change is that there is no version of this
+ * figure worth printing from `Number(a) - Number(b)`.
+ */
+function exactRemaining(row: Round): string {
+  const left = quantityHundredths(row.total_quantity) - quantityHundredths(row.awarded_quantity ?? 0);
+  return (left / 100).toFixed(2);
+}
 
 export function AllocationsScreen() {
   const { lang, t } = usePortalI18n();
@@ -210,10 +230,24 @@ export function AllocationsScreen() {
     return null;
   })();
 
-  const beneficiaries =
-    Number(form.totalQuantity) > 0 && Number(form.quantityPerBeneficiary) > 0
-      ? Math.floor(Number(form.totalQuantity) / Number(form.quantityPerBeneficiary))
-      : null;
+  /*
+   * "Enough for N beneficiaries", in whole hundredths.
+   *
+   * This was `Math.floor(Number(total) / Number(each))` on two-decimal input,
+   * which is the arithmetic `allocations.ts` measured: `0.30 / 0.10` floors to
+   * 2, `2.90 / 0.10` to 28, and every disagreement understates how many
+   * people the goods can serve. An officer sizing a round was being told it
+   * reaches one fewer person than it does, on the figure they size it by.
+   *
+   * There is no round to ask the database about yet — this previews input
+   * nobody has saved — so it is the one place the hundredths have to be done
+   * here. `quantityHundredths` is shared with the service that found this.
+   */
+  const beneficiaries = (() => {
+    const total = quantityHundredths(form.totalQuantity);
+    const each = quantityHundredths(form.quantityPerBeneficiary);
+    return total > 0 && each > 0 ? Math.floor(total / each) : null;
+  })();
 
   /*
    * Only while it is genuinely in flight. A refused list is answered below,
@@ -466,10 +500,18 @@ export function AllocationsScreen() {
                   .replace('{{per}}', row.quantity_per_beneficiary)} · ` +
                 t.ofcAlAwardedLeft
                   .replace('{{awarded}}', row.awarded_quantity ?? '0')
-                  .replace(
-                    '{{left}}',
-                    String(Number(row.total_quantity) - Number(row.awarded_quantity ?? 0)),
-                  ),
+                  /*
+                   * From the server, not subtracted here.
+                   *
+                   * These are NUMERIC(14,2), and this line read
+                   * `String(Number(total) - Number(awarded))` — so a round
+                   * with 3.00 left printed "3.0000000000000004 left" into the
+                   * column an officer closes a round on. `listRounds`
+                   * computes it in SQL now, where the arithmetic is exact.
+                   * The fallback keeps an older API rendering the figure it
+                   * always did rather than a blank.
+                   */
+                  .replace('{{left}}', row.remaining_quantity ?? exactRemaining(row)),
             },
             { key: 'collection_point', label: 'ofcAlCollectionPoint' },
             {

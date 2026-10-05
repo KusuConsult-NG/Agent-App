@@ -138,6 +138,22 @@ paymentRouter.post(
 );
 
 /**
+ * Whether `POST /payments/simulate` would be accepted on this deployment.
+ *
+ * One predicate, used by the simulate route itself and sent to the agent app
+ * on every transaction status, so the button and the endpoint can never
+ * disagree. The app used to decide for itself with `import.meta.env.DEV`,
+ * which was right while the only deployment that could simulate was a
+ * developer's — and wrong the moment `DEMO_ALLOW_MOCK_GATEWAY` existed,
+ * because a production build hid the control on exactly the deployment that
+ * had just been given it.
+ */
+export function simulationAvailable(): boolean {
+  if (!isMockGateway()) return false;
+  return !config.isProduction || config.payments.demoAllowMockGateway;
+}
+
+/**
  * Recover a transaction's true state (Addendum §44).
  * Works after the browser closed, the device died, or the agent signed out.
  */
@@ -152,7 +168,7 @@ paymentRouter.get(
       (status.transaction as { agent_id?: string | null }).agent_id ?? null,
       'That transaction',
     );
-    res.json(status);
+    res.json({ ...status, simulation_available: simulationAvailable() });
   }),
 );
 
@@ -191,8 +207,12 @@ paymentRouter.get(
 
 /**
  * Simulate a gateway outcome so the full flow can be exercised end to end
- * without a live processor. Refuses to exist unless the mock gateway is
- * selected, and config.ts refuses to boot in production with it selected.
+ * without a live processor.
+ *
+ * Refused unless the mock gateway is selected, which `config.ts` in turn
+ * refuses to boot with in production — unless that deployment named itself a
+ * demonstration with `DEMO_ALLOW_MOCK_GATEWAY`. `simulationAvailable()` is
+ * the whole of that rule, in one place.
  */
 paymentRouter.post(
   '/simulate',
@@ -204,7 +224,9 @@ paymentRouter.post(
       deliverWebhook: z.boolean().default(true),
     }),
     async (req, res, data) => {
-      if (!isMockGateway() || config.isProduction) {
+      // The same predicate the agent app was told, so the button it shows
+      // and the endpoint behind it cannot disagree.
+      if (!simulationAvailable()) {
         throw forbidden('Payment simulation is only available with the development gateway.');
       }
 

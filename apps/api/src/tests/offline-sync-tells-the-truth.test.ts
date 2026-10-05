@@ -241,6 +241,53 @@ describe('re-sending a draft after a lost reply', () => {
  * the queue can carry. The draft is refused with the matches as they stand
  * now, and the agent makes the call with the current record in front of them.
  */
+describe('a capture of somebody who is already on the register', () => {
+  /*
+   * The ordinary case, and it had no test.
+   *
+   * An agent captures somebody offline who turns out to be registered
+   * already — by another agent, or by this one before the phone lost signal.
+   * The duplicate control refuses it, and the honest reply names the record
+   * so the agent can find it rather than key the person in again.
+   *
+   * WHY THIS FILE AND WHY NOW. The sync path has a branch that reports a
+   * collision as "already synchronised" when the colliding record is this
+   * draft's own sibling mid-flight, and widening that branch to cover a
+   * second collision shape — which 086's identity index introduced — made it
+   * answer this case the same way. "This draft was already synchronised. It
+   * has not been duplicated." for a capture that was refused as a duplicate
+   * is a false reassurance about the one thing this file exists to hold, and
+   * the whole suite passed with it in place. So the case is pinned here.
+   */
+  it('names the existing record rather than claiming the draft went through', async () => {
+    const already = await post('/taxpayers', registration('seed-only').payload, {
+      token: agent.token,
+      deviceId: agent.device,
+      idempotencyKey: 'already-registered',
+    });
+    assert.equal(already.status, 201, JSON.stringify(already.body));
+
+    const response = await sync([registration('late-capture')]);
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+
+    const [result] = response.body.results;
+    assert.equal(
+      result.status,
+      'REJECTED',
+      `DUPLICATE here tells the agent their capture was synchronised when it was ` +
+        `refused: ${JSON.stringify(result)}`,
+    );
+    assert.equal(result.code, 'TAXPAYER_ALREADY_EXISTS');
+    assert.match(result.message, /already registered as Ladi Danjuma/);
+
+    // And the draft stays on the phone with the reason against it, which is
+    // what lets the agent act on it.
+    const stored = await storedDraft('late-capture');
+    assert.equal(stored!.status, 'REJECTED');
+    assert.match(stored!.rejection_reason!, /already registered/i);
+  });
+});
+
 describe('an acknowledgement made before the queue', () => {
   const CITIZEN_PHONE = '+2348037000512';
 

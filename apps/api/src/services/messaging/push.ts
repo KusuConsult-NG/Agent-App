@@ -67,7 +67,7 @@ export class WebPushProvider implements MessageProvider {
       };
     }
 
-    let result: { sent: number; failed: number };
+    let result: { sent: number; failed: number; unavailable: number };
     try {
       result = await sendPushNotification(
         { userId },
@@ -101,6 +101,20 @@ export class WebPushProvider implements MessageProvider {
 
     if (result.sent > 0) {
       return { outcome: 'SENT', reference: `push:${result.sent}`, provider: this.name };
+    }
+
+    /*
+     * Nothing sent, and at least one device could not be reached rather than
+     * refusing: the service was down, rate-limiting, or the connection failed.
+     * That is transient, as an unconfigured server is, and the queue retries
+     * it. Reporting it as REJECTED marked the notification FAILED for good over
+     * a fault that was nobody's verdict on the handset.
+     */
+    if (result.unavailable > 0) {
+      return deliveryUnavailable(
+        this.name,
+        `No device could be reached just now (${result.unavailable} unavailable); it will be tried again.`,
+      );
     }
 
     return {

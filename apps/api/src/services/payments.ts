@@ -21,6 +21,7 @@
  *     apart from the money.
  */
 
+import { CHARGE_PERIOD_SHUT_SQL } from '../lib/payable-invoice';
 import type { PoolClient } from 'pg';
 import {
   assertPaymentTransition,
@@ -35,9 +36,9 @@ import { config } from '../config';
 import { gateway } from '../integrations/gateway';
 import {
   AppError,
-  conflict,
   notFound,
   paymentFailed,
+  paymentRefused,
   paymentUnconfirmed,
 } from '../lib/errors';
 import { nextPaymentReference } from '../lib/references';
@@ -87,11 +88,12 @@ export async function initiatePayment(
       email: string | null;
       invoice_status: string;
       invoice_expires_at: Date | null;
+      period_shut: string | null;
     }>(
       client,
       `SELECT t.id, t.transaction_reference, t.status, t.total_amount_kobo, t.taxpayer_id,
               t.invoice_id, tp.phone, tp.email, i.status AS invoice_status,
-              i.expires_at AS invoice_expires_at
+              i.expires_at AS invoice_expires_at, ${CHARGE_PERIOD_SHUT_SQL} AS period_shut
          FROM transactions t
          JOIN taxpayers tp ON tp.id = t.taxpayer_id
          JOIN invoices i ON i.id = t.invoice_id
@@ -102,28 +104,59 @@ export async function initiatePayment(
 
     if (!transaction) throw notFound('That transaction');
 
+    /*
+     * Each of these says what happened to the money, because the agent's
+     * screen only prints that sentence when the refusal names a state — and it
+     * is the one sentence always rendered in the agent's language. See
+     * `paymentRefused` for what was missing and why it mattered most here.
+     */
     if (transaction.invoice_status === 'PAID') {
-      throw conflict(
-        'INVOICE_ALREADY_PAID',
-        'This invoice has already been paid. Do not collect payment again.',
-        'Open the receipt from the transaction history.',
-      );
+      throw paymentRefused({
+        code: 'INVOICE_ALREADY_PAID',
+        message: 'This invoice has already been paid. Do not collect payment again.',
+        // The bill is settled. An agent who reads this as a failure collects a
+        // second time, which is the whole reason this sentence exists.
+        moneyStatus: 'RECEIVED',
+        nextStep: 'Open the receipt from the transaction history.',
+      });
     }
     if (transaction.invoice_status === 'CANCELLED' || transaction.invoice_status === 'EXPIRED') {
-      throw conflict(
-        'INVOICE_NOT_PAYABLE',
-        `This invoice is ${transaction.invoice_status.toLowerCase()} and can no longer be paid. ` +
-          'Raise a new assessment.',
-      );
+      throw paymentRefused({
+        code: 'INVOICE_NOT_PAYABLE',
+        /*
+         * Not "raise a new assessment", which was the advice before a bill
+         * could be issued again, and which billed the taxpayer twice. A lapsed
+         * bill is issued again; a cancelled one was either replaced — the
+         * replacement is the one to pay — or withdrawn, and is not owed.
+         */
+        message:
+          `This invoice is ${transaction.invoice_status.toLowerCase()} and can no longer be paid. ` +
+          (transaction.invoice_status === 'EXPIRED'
+            ? "Issue it again from the taxpayer's list of bills."
+            : "If it was replaced, take the payment against the new invoice on the taxpayer's list of bills."),
+        // Nothing was started, so nothing was taken — which is what the agent
+        // has to be able to tell the person in front of them.
+        moneyStatus: 'NOT_DEBITED',
+        /*
+         * The state as a field, not only inside the sentence.
+         *
+         * The agent application translates this refusal by its code, and its
+         * Hausa says "Wannan takardar biya tana {{state}}". Without this it
+         * had nothing to put in the hole, so the choice was an English
+         * sentence or a Hausa one with a gap in it.
+         */
+        details: [{ field: 'state', issue: transaction.invoice_status, code: 'STATE' }],
+      });
     }
     if (
       transaction.invoice_expires_at &&
       transaction.invoice_expires_at.getTime() < Date.now()
     ) {
-      throw conflict(
-        'INVOICE_EXPIRED',
-        'This invoice has expired. Raise a new assessment for the taxpayer.',
-      );
+      throw paymentRefused({
+        code: 'INVOICE_EXPIRED',
+        message: "This invoice has expired. Issue it again from the taxpayer's list of bills.",
+        moneyStatus: 'NOT_DEBITED',
+      });
     }
 
     // A payment already in flight is returned rather than duplicated: the
@@ -146,10 +179,12 @@ export async function initiatePayment(
 
     if (inFlight) {
       if (inFlight.status === 'VERIFIED') {
-        throw conflict(
-          'PAYMENT_ALREADY_VERIFIED',
-          'This transaction has already been paid and verified. Do not collect payment again.',
-        );
+        throw paymentRefused({
+          code: 'PAYMENT_ALREADY_VERIFIED',
+          message:
+            'This transaction has already been paid and verified. Do not collect payment again.',
+          moneyStatus: 'RECEIVED',
+        });
       }
       return {
         paymentId: inFlight.id,
@@ -161,11 +196,46 @@ export async function initiatePayment(
       };
     }
 
-    if (!['INVOICE_GENERATED', 'PAYMENT_INITIATED'].includes(transaction.status)) {
-      throw conflict(
-        'TRANSACTION_NOT_PAYABLE',
-        `This transaction is in state ${transaction.status} and cannot accept a payment now.`,
-      );
+    /*
+     * FAILED is a transaction whose last attempt did not go through, and the
+     * bill behind it is still owed and still in date — both checked above. It
+     * was refused here, and with nothing able to raise a second transaction a
+     * single declined card made the bill unpayable. See FAILED in
+     * `TRANSACTION_TRANSITIONS`.
+     */
+    /*
+     * A bill raised in a month since closed is issued again before it is paid.
+     *
+     * The close froze the month's revenue, counted by the month a bill was
+     * raised in, so this payment would add to a figure an officer has signed
+     * off; the database refuses the move into revenue (migration 093). It used
+     * to refuse at this transaction's first transition, which at least came
+     * before any money moved. Now that the lock lets an attempt start, the
+     * refusal has to be made here instead — before the gateway is asked for
+     * anything — or the money would be taken and then could not be recorded.
+     * Issuing the bill again raises it in an open month, for the same amount
+     * and the same deadline.
+     */
+    if (transaction.period_shut) {
+      throw paymentRefused({
+        code: 'INVOICE_PERIOD_CLOSED',
+        message:
+          `This bill was raised in ${transaction.period_shut}, which has been closed, so it cannot be paid ` +
+          "as it stands. Issue it again from the taxpayer's list of bills, then take the payment against " +
+          'the new invoice.',
+        moneyStatus: 'NOT_DEBITED',
+        details: [{ field: 'period', issue: transaction.period_shut, code: 'STATE' }],
+      });
+    }
+
+    if (!['INVOICE_GENERATED', 'PAYMENT_INITIATED', 'FAILED'].includes(transaction.status)) {
+      throw paymentRefused({
+        code: 'TRANSACTION_NOT_PAYABLE',
+        message:
+          `This transaction is in state ${transaction.status} and cannot accept a payment now.`,
+        moneyStatus: 'NOT_DEBITED',
+        details: [{ field: 'state', issue: transaction.status, code: 'STATE' }],
+      });
     }
 
     const amount = parseKobo(transaction.total_amount_kobo);
@@ -204,7 +274,7 @@ export async function initiatePayment(
       ],
     );
 
-    if (transaction.status === 'INVOICE_GENERATED') {
+    if (transaction.status === 'INVOICE_GENERATED' || transaction.status === 'FAILED') {
       await transitionTransaction(client, {
         transactionId: transaction.id,
         to: 'PAYMENT_INITIATED',
@@ -810,6 +880,22 @@ async function verifyAndRecord(params: {
       );
 
       /*
+       * And an assessment the expiry sweep gave up on is billed again.
+       *
+       * The sweep marks a bill's assessment EXPIRED with the invoice, and a
+       * payment already in flight can still land afterwards: the invoice then
+       * reads PAID and the assessment went on reading EXPIRED for good — a
+       * paid assessment recorded as one that lapsed unpaid. Issuing a bill
+       * again puts it back to INVOICED (`reissueInvoice`); so does paying it.
+       */
+      await client.query(
+        `UPDATE assessments SET status = 'INVOICED'
+          WHERE status = 'EXPIRED'
+            AND id = (SELECT assessment_id FROM invoices WHERE id = $1)`,
+        [payment.invoice_id],
+      );
+
+      /*
        * ---- What the taxpayer gets now, and what they get later -------------
        *
        * Not a receipt. The gateway confirming means the gateway holds the
@@ -1164,6 +1250,15 @@ export async function getTransactionStatus(db: Db, transactionReference: string)
     `SELECT t.id, t.transaction_reference, t.status, t.amount_kobo, t.service_charge_kobo,
             t.total_amount_kobo, t.created_at, t.verified_at, t.settled_at, t.agent_id,
             i.id AS invoice_id, i.invoice_number, i.status AS invoice_status, i.expires_at,
+            i.reissued_as AS invoice_reissued_as,
+            /*
+             * The closed month this charge was raised in, if it is closed and
+             * the charge is still waiting for a payment. The agent's screen
+             * offers to issue the bill again rather than a start button the
+             * payment path refuses with INVOICE_PERIOD_CLOSED.
+             */
+            CASE WHEN t.status IN ('INVOICE_GENERATED', 'FAILED') THEN ${CHARGE_PERIOD_SHUT_SQL} END
+              AS period_closed,
             ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
             rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
             tp.first_name, tp.last_name, tp.business_name, tp.tin,
@@ -1178,6 +1273,13 @@ export async function getTransactionStatus(db: Db, transactionReference: string)
             p.paid_at, p.verified_at AS payment_verified_at, p.failure_reason,
             r.id AS receipt_id, r.receipt_number, r.verification_code AS receipt_code,
             r.document_id,
+            /*
+             * Whether the receipt still stands. A reversal marks it REVERSED
+             * and keeps the row, as it must; the agent's screen read the
+             * number alone as "paid", and showed a payment whose money had
+             * gone back as successful, with the receipt offered for sharing.
+             */
+            r.status AS receipt_status,
             ack.id AS acknowledgement_id, ack.document_number AS acknowledgement_number,
             ack.verification_code AS acknowledgement_code
        FROM transactions t

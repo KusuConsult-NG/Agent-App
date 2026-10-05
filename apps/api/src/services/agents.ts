@@ -28,13 +28,14 @@ import {
   type ApplicationState,
 } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { pool, query, queryOne, withTransaction } from '../db/pool';
+import { advisoryLock, LOCK_NAMESPACE, pool, query, queryOne, withTransaction } from '../db/pool';
 import { config } from '../config';
 import { hashIdentityNumber, hashPassword, maskIdentityNumber } from '../lib/crypto';
 import { AppError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { nextAgentCode, nextApplicationNumber } from '../lib/references';
 import { bankVerification, kycProvider, type BankVerificationOutcome } from '../integrations';
 import { recordAudit } from './audit';
+import { expireLapsedRefereeRequests } from './referees';
 import { queueNotification } from './notifications';
 
 // ---------------------------------------------------------------------------
@@ -100,6 +101,11 @@ async function loadAxes(db: Db, agentId: string): Promise<AgentStatusAxes> {
 
 /** The applicant-facing progress view (Addendum §25, §27). */
 export async function getApplicationStatus(db: Db, agentId: string) {
+  // Before anything is read: a referee request that lapsed unanswered has to
+  // read as expired here, or this screen tells the applicant to keep waiting
+  // and hides the form for naming somebody else. See
+  // `expireLapsedRefereeRequests`.
+  await withTransaction((client) => expireLapsedRefereeRequests(client, agentId));
   const axes = await loadAxes(db, agentId);
   const applicationState = deriveApplicationState(axes);
 
@@ -341,6 +347,19 @@ export async function submitApplication(params: {
   const { input } = params;
 
   return withTransaction(async (client) => {
+    /*
+     * One application against this phone number at a time.
+     *
+     * The read below takes no lock and the user it looks for does not exist
+     * yet, so two taps on Apply both found nothing, both inserted, and the
+     * second was refused by `users_phone_key`. The remedy the person needs is
+     * the same either way — sign in rather than apply again — but they were
+     * told it by the generic duplicate sentence rather than by
+     * `PHONE_ALREADY_REGISTERED`, which is the one of the two the agent
+     * application can say in Hausa.
+     */
+    await advisoryLock(client, LOCK_NAMESPACE.APPLICATION_PHONE, input.phone);
+
     const existing = await queryOne<{ id: string }>(client, 'SELECT id FROM users WHERE phone = $1', [
       input.phone,
     ]);
@@ -528,9 +547,56 @@ export async function submitKyc(params: {
   }
 
   return withTransaction(async (client) => {
+    /*
+     * One identity check for this agent at a time.
+     *
+     * The comment that was here said the numbering was safe because it happens
+     * "in the same transaction that supersedes, so two submissions racing
+     * cannot claim one attempt number". One transaction is not one lock. Under
+     * READ COMMITTED the second submission's UPDATE blocks on the row the
+     * first locked, and when the first commits the predicate is re-evaluated
+     * against a row that is now superseded — so it matches nothing, updates
+     * nothing, and the insert that follows puts a second row with
+     * `superseded_at IS NULL` against one agent. `idx_agent_kyc_current`
+     * refuses it, and the agent is told to supersede the current check before
+     * recording another, which is an instruction about a table.
+     *
+     * Measured both ways in `concurrency/agent-kyc-race.test.ts`.
+     */
+    await advisoryLock(client, LOCK_NAMESPACE.AGENT_KYC, params.agentId);
+
+    /*
+     * And ask again, now that nobody else can be mid-submission.
+     *
+     * The CLEARED check above runs on the pool before this lock exists, so it
+     * is a read of a value another submission is about to change. Two
+     * submissions that both passed it both proceeded, and the second
+     * superseded the first — including when the first had come back CLEARED.
+     * An identity verification that had succeeded was replaced by one that had
+     * not, and `kyc_status` went back with it, so an agent who was verified
+     * became an agent who was not. `activationBlockers` reads that column.
+     *
+     * The mock provider decides by the last digit of the identity number, so
+     * `concurrency/agent-kyc-race.test.ts` was submitting six clearing numbers
+     * out of eight and asserting only that one check survived — never which.
+     * Whether any of the eight was refused depended on how many had read the
+     * column before the first commit landed, which is why that test failed
+     * about one run in ten and passed on its own every time.
+     *
+     * The read above stays. It answers the ordinary sequential case without
+     * opening a transaction, and it is the one that saves a provider call.
+     */
+    const current = await queryOne<{ kyc_status: string }>(
+      client,
+      'SELECT kyc_status FROM agents WHERE id = $1 FOR UPDATE',
+      [params.agentId],
+    );
+    if (current?.kyc_status === 'CLEARED') {
+      throw conflict('KYC_ALREADY_CLEARED', 'Your identity verification has already been completed.');
+    }
+
     // Resubmission supersedes rather than overwrites, so a failed attempt stays
-    // in the record (Addendum §28). Numbered in the same transaction that
-    // supersedes, so two submissions racing cannot claim one attempt number.
+    // in the record (Addendum §28).
     await client.query(
       `UPDATE agent_kyc SET superseded_at = now() WHERE agent_id = $1 AND superseded_at IS NULL`,
       [params.agentId],
@@ -1046,12 +1112,46 @@ export async function registerDevice(params: {
      */
     const approveNow = isFirst || (params.autoApprove ?? config.security.deviceAutoApprove);
 
-    const device = await queryOne<{ id: string; status: string }>(
+    /*
+     * Registering the same handset twice, which a button on a bad connection
+     * does by itself.
+     *
+     * This was a bare INSERT after the count above, and `agent_devices` carries
+     * `UNIQUE (agent_id, device_identifier)`. Two taps, or one tap and the
+     * app's retry, give two requests that both count zero prior devices and
+     * both insert. One wins; the other gets a 23505, and the agent is shown a
+     * failure for something that in fact succeeded -- on the screen that
+     * decides whether they can collect at all.
+     *
+     * ONLY the concurrent case changes. A handset that is already registered
+     * has always been handled, and handled well: the `if (existing)` branch
+     * above returns its row untouched, writing no journal line, and refuses a
+     * REVOKED one outright. Two requests arriving together are the one case
+     * that branch cannot see, because neither has committed when the other
+     * looks.
+     *
+     * `DO NOTHING` rather than `DO UPDATE`, because the loser is not making a
+     * change and must not be recorded as one. On a conflict the row is read
+     * back and returned exactly as the branch above would have returned it,
+     * and the journal and audit entries below are skipped: one registration,
+     * one DEVICE_REGISTERED line, whatever the network did to the request. A
+     * second line against the same handset would be a record of something
+     * that never happened, in the journal somebody reads to decide whether to
+     * trust the device.
+     *
+     * The REVOKED refusal is repeated here so the two paths cannot disagree.
+     * Reaching it needs a revocation to land between this transaction's SELECT
+     * and its INSERT, which is as narrow as it sounds — but a conflict handler
+     * that returned a revoked handset as usable, while the branch above
+     * refused it, is the kind of disagreement that only shows up once.
+     */
+    const inserted = await queryOne<{ id: string; status: string }>(
       client,
       `INSERT INTO agent_devices
          (agent_id, device_identifier, device_name, browser, operating_system, pwa_version,
           status, approved_at, approved_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (agent_id, device_identifier) DO NOTHING
        RETURNING id, status`,
       [
         params.agentId,
@@ -1065,6 +1165,34 @@ export async function registerDevice(params: {
         approveNow ? params.actorId : null,
       ],
     );
+
+    if (!inserted) {
+      const already = await queryOne<{ id: string; status: string }>(
+        client,
+        'SELECT id, status FROM agent_devices WHERE agent_id = $1 AND device_identifier = $2',
+        [params.agentId, params.deviceIdentifier],
+      );
+      if (already?.status === 'REVOKED') {
+        throw new AppError({
+          statusCode: 403,
+          code: 'DEVICE_REVOKED_CANNOT_REREGISTER',
+          message:
+            'This device has been revoked and cannot be registered again. Use a different device.',
+        });
+      }
+      if (!already) {
+        // The conflict says a row exists; not finding it means the unique
+        // index and this lookup disagree, which is worth saying out loud
+        // rather than returning a shrug.
+        throw new Error(
+          'agent_devices reported a conflict on (agent_id, device_identifier) and then ' +
+            'had no such row; the unique index and this lookup disagree.',
+        );
+      }
+      return { deviceId: already.id, status: already.status };
+    }
+
+    const device = inserted;
 
     await refreshClearance(client, params.agentId);
     await journal(client, {
@@ -1648,6 +1776,10 @@ export async function suspend(params: {
 
 /** Government KYC dashboard (Addendum §45). */
 export async function kycDashboard(db: Db, filters: { lgaId?: string; reviewerId?: string } = {}) {
+  // The referee figures below read the derived status on each agent, which
+  // only moves when a lapsed request is expired. See
+  // `expireLapsedRefereeRequests`.
+  await withTransaction((client) => expireLapsedRefereeRequests(client, null));
   const counts = await queryOne(
     db,
     `SELECT

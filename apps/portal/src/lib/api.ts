@@ -22,6 +22,8 @@
 import { getTranslation, type StepUpAction } from '@psirs/shared';
 import { getPortalLanguage } from './i18n';
 
+import { getDeviceIdentifier } from './device';
+
 const API_BASE = '/api/v1';
 
 export interface ApiError {
@@ -230,6 +232,22 @@ async function raw<T>(
   if (options.authenticated !== false && accessToken) {
     headers.authorization = `Bearer ${accessToken}`;
   }
+
+  /*
+   * Which computer this is, so the platform can tell an officer's two apart.
+   *
+   * Sent here rather than in `fetchFile` and `uploadFile` as well, because
+   * here is where it is read: an officer's device row is resolved once, during
+   * sign-in, and `login()` goes through this function. (The per-request device
+   * checks in `middleware/auth.ts` are `requireActiveAgent`, which officers do
+   * not pass through.) One place that matters beats three that can drift.
+   *
+   * Omitted when empty: `getDeviceIdentifier` returns '' where there is no
+   * storage to keep one, and the server then falls back to the user-agent
+   * handle it used before rather than minting a row per request.
+   */
+  const deviceId = getDeviceIdentifier();
+  if (deviceId) headers['x-device-id'] = deviceId;
 
   const response = await fetch(`${API_BASE}${path}`, {
     method: options.method ?? 'GET',

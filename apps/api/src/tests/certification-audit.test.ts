@@ -918,13 +918,33 @@ describe('AUDIT 8 — public receipt verification discloses only what it should'
       verification.status === 200 || verification.status === 404,
       `unknown code should answer cleanly, got ${verification.status}`,
     );
-    const serialised = JSON.stringify(verification.body).toLowerCase();
-    assert.ok(
-      serialised.includes('invalid') ||
-        serialised.includes('not') ||
-        verification.status === 404,
-      'an unknown receipt must be reported as not valid',
-    );
+    /*
+     * THE CONTRACT, not a substring search.
+     *
+     * This used to accept the body if it contained "invalid" OR "not" OR the
+     * status was 404. `'not'` as a substring of a lowercased JSON blob is very
+     * nearly unfalsifiable, and it is false in the one direction that matters:
+     * `RECEIPT_GENUINE_UNCHECKED` reads "This is a genuine government receipt
+     * issued by PSIRS. The stored copy could not be checked just now, so its
+     * fingerprint has not been confirmed" — two "not"s in a sentence that
+     * calls the receipt genuine. An unknown code answered with that would have
+     * passed a test whose whole subject is that an unknown code is reported as
+     * invalid.
+     *
+     * `verifyPublicly` has a named outcome for this, so the test asks for it.
+     */
+    if (verification.status === 200) {
+      assert.equal(
+        verification.body.status,
+        'NOT_FOUND',
+        `an unknown receipt must be reported as not valid: ${JSON.stringify(verification.body)}`,
+      );
+      assert.match(
+        String(verification.body.message),
+        /no government document matches/i,
+        'and the sentence has to say so to whoever is holding the paper',
+      );
+    }
   });
 });
 

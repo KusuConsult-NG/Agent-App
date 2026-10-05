@@ -239,12 +239,44 @@ describe('SHARED_PHONE_NUMBER fraud rule', () => {
   });
 });
 
+/**
+ * An applicant who has applied and nothing more — which is who nominates a
+ * referee.
+ *
+ * The three tests below used the seeded demonstration agent, which has been
+ * taken through the clearance pipeline and therefore already has a CLEARED
+ * referee on file. Inserting an INVITED one beside it builds a state
+ * `nominateReferee` refuses outright — "A cleared referee is already on file
+ * for this application" — and which 087's index now refuses at the database.
+ *
+ * The rule under test fires when a referee is nominated, so the applicant it
+ * needs is one who has not got one. Each test gets its own, because the rule
+ * compares a referee against that applicant's own two numbers.
+ */
+async function applicantWithoutAReferee(suffix: string): Promise<string> {
+  const lga = await queryOne<{ id: string }>(pool, 'SELECT id FROM lgas LIMIT 1');
+  const application = await post('/agents/apply', {
+    fullName: `Referee Rule Applicant ${suffix}`,
+    phone: `+23480312${suffix}`,
+    password: 'FieldAgent2026',
+    address: '14 Yakubu Gowon Way, Jos',
+    lgaId: lga!.id,
+    bankName: 'Access Bank',
+    bankCode: '044',
+    accountName: `Referee Rule Applicant ${suffix}`,
+    accountNumber: `03234567${suffix.slice(-2)}`,
+  });
+  assert.equal(application.status, 201, JSON.stringify(application.body));
+  return application.body.agentId as string;
+}
+
 describe('REFEREE_SHARES_APPLICANT_CONTACT fraud rule', () => {
   it('raises CRITICAL flag when referee uses the same phone as the applicant agent', async () => {
+    const applicantId = await applicantWithoutAReferee('00101');
     const agentPhone = await queryOne<{ phone: string }>(
       pool,
       `SELECT u.phone FROM agents a JOIN users u ON u.id = a.user_id WHERE a.id = $1`,
-      [agentId],
+      [applicantId],
     );
 
     const refCode = `REF-FRAUD-${Date.now()}`;
@@ -253,7 +285,7 @@ describe('REFEREE_SHARES_APPLICANT_CONTACT fraud rule', () => {
       `INSERT INTO referees (agent_id, reference_code, full_name, phone, email, relationship, category, status)
        VALUES ($1, $2, 'Same Phone Ref', $3, 'ref@test.com', 'Friend', 'COMMUNITY_LEADER', 'INVITED')
        RETURNING id`,
-      [agentId, refCode, agentPhone!.phone],
+      [applicantId, refCode, agentPhone!.phone],
     );
 
     await withTransaction((client) =>
@@ -277,15 +309,19 @@ describe('REFEREE_SHARES_APPLICANT_CONTACT fraud rule', () => {
      * columns — this case used to pass the rule silently, and `nominateReferee`
      * let the nomination through with it.
      */
+    const applicantId = await applicantWithoutAReferee('00102');
     const alternate = '+2348031000888';
-    await pool.query(`UPDATE agents SET alternate_phone = $2 WHERE id = $1`, [agentId, alternate]);
+    await pool.query(`UPDATE agents SET alternate_phone = $2 WHERE id = $1`, [
+      applicantId,
+      alternate,
+    ]);
 
     const refRow = await queryOne<{ id: string }>(
       pool,
       `INSERT INTO referees (agent_id, reference_code, full_name, phone, email, relationship, category, status)
        VALUES ($1, $2, 'Alternate Phone Ref', $3, 'alt@test.com', 'Friend', 'COMMUNITY_LEADER', 'INVITED')
        RETURNING id`,
-      [agentId, `REF-FRAUD-ALT-${Date.now()}`, alternate],
+      [applicantId, `REF-FRAUD-ALT-${Date.now()}`, alternate],
     );
 
     await withTransaction((client) =>
@@ -306,8 +342,9 @@ describe('REFEREE_SHARES_APPLICANT_CONTACT fraud rule', () => {
   });
 
   it('does not flag a referee whose phone matches neither applicant number', async () => {
+    const applicantId = await applicantWithoutAReferee('00103');
     await pool.query(`UPDATE agents SET alternate_phone = $2 WHERE id = $1`, [
-      agentId,
+      applicantId,
       '+2348031000888',
     ]);
 
@@ -316,7 +353,7 @@ describe('REFEREE_SHARES_APPLICANT_CONTACT fraud rule', () => {
       `INSERT INTO referees (agent_id, reference_code, full_name, phone, email, relationship, category, status)
        VALUES ($1, $2, 'Unrelated Ref', '+2348031000111', 'other@test.com', 'Friend', 'COMMUNITY_LEADER', 'INVITED')
        RETURNING id`,
-      [agentId, `REF-FRAUD-OK-${Date.now()}`],
+      [applicantId, `REF-FRAUD-OK-${Date.now()}`],
     );
 
     await withTransaction((client) =>

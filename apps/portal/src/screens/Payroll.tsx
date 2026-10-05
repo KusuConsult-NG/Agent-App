@@ -26,7 +26,7 @@ import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api
 import { Alert, ErrorAlert, Loading, Money, ReferenceListFailure, Stat, Table, formatDate } from '../ui';
 import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
-import { enumLabel } from '@psirs/shared';
+import { enumLabel, formatNaira } from '@psirs/shared';
 
 interface Lga {
   id: string;
@@ -119,6 +119,9 @@ export function PayrollScreen() {
    * this is where the officer writes it.
    */
   const [withdrawReason, setWithdrawReason] = useState('');
+  const [refundsAsked, setRefundsAsked] = useState<
+    { approvalId: string; transactionReference: string; amountKobo: string }[]
+  >([]);
 
   useEffect(() => {
   }, []);
@@ -151,6 +154,7 @@ export function PayrollScreen() {
     setOpenName(lead.name);
     setFiled(null);
     setFilingError(null);
+    setRefundsAsked([]);
     setRows([blankRow()]);
     setHistory(null);
     setHistoryError(null);
@@ -168,10 +172,18 @@ export function PayrollScreen() {
     if (!withdrawReason.trim() || !openId) return;
     setBusy(true);
     setFilingError(null);
+    setRefundsAsked([]);
     try {
-      await api.post(`/government/paye/returns/${scheduleId}/cancel`, {
-        reason: withdrawReason.trim(),
-      });
+      /*
+       * Withdrawing a return already paid asks for the payment back, so the
+       * employer is not left owing the refiled figure on top of it. Said to
+       * the officer who withdrew it, who is the one the employer will ask.
+       */
+      const withdrawn = await api.post<{ refundsRequested: typeof refundsAsked }>(
+        `/government/paye/returns/${scheduleId}/cancel`,
+        { reason: withdrawReason.trim() },
+      );
+      setRefundsAsked(withdrawn?.refundsRequested ?? []);
       setWithdrawReason('');
       const refreshed = await api.get<Return_[]>(
         `/government/paye/employers/${openId}/returns`,
@@ -404,6 +416,13 @@ export function PayrollScreen() {
                   />
                 </div>
               ) : null}
+              {refundsAsked.map((refund) => (
+                <Alert kind="success" key={refund.approvalId}>
+                  {t.ofcRefundAsked
+                    .replace('{{amount}}', formatNaira(BigInt(refund.amountKobo)))
+                    .replace('{{reference}}', refund.transactionReference)}
+                </Alert>
+              ))}
             </>
           )}
 

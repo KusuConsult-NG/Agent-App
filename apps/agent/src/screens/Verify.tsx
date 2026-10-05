@@ -221,11 +221,23 @@ function VerificationOutcome({ result }: { result: VerificationResult }) {
   return (
     <div className="card">
       <h2 className="card__title">
+        {/*
+          * "Genuine receipt" only for a receipt. Every valid document that was
+          * not an acknowledgement was headed that way — a vehicle certificate,
+          * and, once invoices were answered by their bill, an unpaid invoice,
+          * read aloud to the person who had not paid it.
+          */}
         {genuine
           ? acknowledgement
             ? t.pubVerdictAcknowledgement
-            : t.genuineReceipt
-          : t.receiptNotValid}
+            : result.documentType === 'INVOICE'
+              ? t.pubVerdictInvoice
+              : result.receiptNumber
+                ? t.genuineReceipt
+                : t.pubVerdictValid
+          : result.receiptNumber
+            ? t.receiptNotValid
+            : t.pubVerdictInvalid}
       </h2>
       <Alert kind={genuine ? 'success' : 'error'}>
         {/*
@@ -262,7 +274,12 @@ function VerificationOutcome({ result }: { result: VerificationResult }) {
              * sentence above is translated: VEHICLE_CERTIFICATE is not a thing
              * to read out to anybody.
              */
-            [t.receiptNumber, result.receiptNumber ?? result.documentNumber ?? '—'],
+            // "Receipt number" only for a receipt: an invoice under a green tick
+            // labelled that way reads as paid.
+            [
+              result.receiptNumber ? t.receiptNumber : t.pubVerifyDocumentNumber,
+              result.receiptNumber ?? result.documentNumber ?? '—',
+            ],
             [
               t.verifyRevenueItem,
               result.revenueType ?? (result.documentType ? enumLabel(result.documentType, t) : '—'),

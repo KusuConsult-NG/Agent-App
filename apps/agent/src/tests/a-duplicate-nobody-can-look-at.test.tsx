@@ -179,3 +179,136 @@ describe('a registration the register thinks it already has', () => {
     expect(screen.queryByText(ha.tpDupCouldNotList!)).toBeNull();
   });
 });
+
+/*
+ * EVERY REFUSAL THIS SCREEN CAN SHOW, IN THE LANGUAGE ITS AGENT READS.
+ *
+ * Registering somebody is the first thing an agent does for anybody and the
+ * gate everything else is behind — nothing can be assessed, collected or
+ * receipted against a person who is not on the register. All four refusals
+ * were the server's English.
+ *
+ * Two of them had their next step in Hausa already and their headline in
+ * English. `nsTinServiceUnavailable` and `nsTinNotFound` were written when the
+ * advice on those two branches was corrected — the advice that used to tell an
+ * agent to register a second TIN for somebody who already had one — and the
+ * sentence they are advice about was left behind. The agent read what to do in
+ * their own language and what had happened in somebody else's.
+ *
+ * Driven through the real wizard rather than through `errorText`, because
+ * every one of these would pass a unit test on the dictionary while the screen
+ * printed `error.message`, which is the gap that let this live.
+ */
+const refusal = (
+  code: string,
+  message: string,
+  nextStep: string,
+  details?: { field?: string; issue: string }[],
+) =>
+  new ApiRequestError(
+    409,
+    { code, message, moneyStatus: 'NOT_APPLICABLE', nextStep, ...(details ? { details } : {}) },
+    null,
+  );
+
+/** The alert the screen put up, headline and next step together. */
+function alertText(): string {
+  return document.querySelector('.alert')?.textContent ?? '';
+}
+
+describe('a registration PSIRS refuses, in Hausa', () => {
+  it('names who the person is already registered as', async () => {
+    const subject = 'Rahila Provisions Store (TIN 274034597)';
+    vi.spyOn(api, 'post').mockImplementation((async () => {
+      throw refusal(
+        'TAXPAYER_ALREADY_EXISTS',
+        `This person is already registered as ${subject}. A second record would be a duplicate.`,
+        'Open the existing taxpayer record and continue from there.',
+        [{ field: 'subject', issue: subject }],
+      );
+    }) as never);
+
+    await registerSomebody();
+
+    await waitFor(() => expect(alertText()).toContain('An riga an yi rajistar'));
+    const said = alertText();
+    expect(said, 'the name is the whole of what the agent needs').toContain(subject);
+    expect(said).not.toMatch(/\{\{\w+\}\}/);
+    expect(said).toContain(ha.nsTaxpayerAlreadyExists!);
+    expect(said).not.toContain('is already registered as');
+  });
+
+  it('names the TIN the register could not find', async () => {
+    vi.spyOn(api, 'post').mockImplementation((async () => {
+      throw refusal(
+        'TIN_NOT_FOUND',
+        'TIN 1234-5678-90 could not be found in the PSIRS TIN service.',
+        'Check the number against the taxpayer’s own document first.',
+        [
+          { field: 'existingTin', issue: 'Not found in the authoritative TIN register' },
+          { field: 'tin', issue: '1234-5678-90' },
+        ],
+      );
+    }) as never);
+
+    await registerSomebody();
+
+    await waitFor(() => expect(alertText()).toContain('Ba a sami TIN'));
+    const said = alertText();
+    // The number read back is how an agent finds the digit they mistyped,
+    // which is the likeliest cause by a distance.
+    expect(said).toContain('1234-5678-90');
+    expect(said).not.toMatch(/\{\{\w+\}\}/);
+    expect(said, 'the next step was already Hausa; now the sentence above it is').toContain(
+      ha.nsTinNotFound!,
+    );
+    expect(said).not.toContain('could not be found in the PSIRS');
+  });
+
+  it('says the TIN service could not be reached, above the warning that was already Hausa', async () => {
+    vi.spyOn(api, 'post').mockImplementation((async () => {
+      throw refusal(
+        'TIN_SERVICE_UNAVAILABLE',
+        'The PSIRS TIN service could not be reached, so this TIN cannot be confirmed.',
+        'Try again in a few minutes.',
+      );
+    }) as never);
+
+    await registerSomebody();
+
+    await waitFor(() => expect(alertText()).toContain(ha.errTinServiceUnavailable!));
+    const said = alertText();
+    expect(said).toContain(ha.nsTinServiceUnavailable!);
+    // The reassurance an agent has to give the person in front of them.
+    expect(ha.errTinServiceUnavailable!).toMatch(/ba a yi rajistar kowa ba/i);
+    expect(said).not.toContain('could not be reached');
+  });
+
+  it('does not tell an agent to set an API flag', async () => {
+    vi.spyOn(api, 'post').mockImplementation((async (path: string) => {
+      if (path === '/taxpayers/duplicate-check') return { possibleDuplicates: [MATCH] };
+      throw refusal(
+        'POSSIBLE_DUPLICATE_TAXPAYER',
+        'Possible existing taxpayer found. Review before creating a new record.',
+        'Check the suggested matches. If none is the same person, resubmit with ' +
+          'acknowledgeDuplicates set to true.',
+      );
+    }) as never);
+
+    await registerSomebody();
+
+    await waitFor(() => expect(alertText()).toContain(ha.errPossibleDuplicateTaxpayer!));
+    const said = alertText();
+    expect(said).toContain(ha.nsPossibleDuplicateTaxpayer!);
+    /*
+     * The API's own next step is correct for a client and useless to a person:
+     * `acknowledgeDuplicates` is a field in a request body and the agent has a
+     * button. It was reaching them, in English, on the screen where they
+     * decide whether two records are the same human being.
+     */
+    expect(said).not.toContain('acknowledgeDuplicates');
+    expect(said).not.toContain('Possible existing taxpayer found');
+    // And the button that actually does it is still the way through.
+    expect(screen.getByRole('button', { name: ha.tpNoneOfThese! })).toBeTruthy();
+  });
+});

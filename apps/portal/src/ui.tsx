@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import {
+  ENUM_LABELS,
   enumLabel,
   formatDateIn,
   formatDateTimeIn,
@@ -190,13 +191,81 @@ function fieldLabel(field: string): string {
  * That the *server's* codes are still rendered in English is a real gap and a
  * larger one. It is recorded rather than guessed at here.
  */
+/**
+ * The errors whose meaning is fixed, and can therefore be translated.
+ *
+ * Everything here is raised by the api client rather than by the server: a
+ * request that never arrived, an upload that failed, a step-up the officer
+ * walked away from. So every refusal PSIRS itself raises reaches a
+ * Hausa-reading officer in English, in a portal whose three thousand interface
+ * strings are translated and whose language toggle sits in the sidebar of
+ * every signed-in page.
+ *
+ * `STEP_UP_REQUIRED` is the first of the server's own, and the one every
+ * officer meets: it guards each consequential money action in this portal. Its
+ * next step was already translated in the map below while its message was not,
+ * so a Hausa reader got the instruction in Hausa under an English heading —
+ * the same failure that map was written to end, the other way round.
+ *
+ * The rest are measured and not translated. Twenty-six refusals an officer can
+ * receive carry a code of their own — a period already closed, a report
+ * already signed, a role already retired — and each means one fixed thing,
+ * which is the test this map sets. Translating them is a reviewed decision
+ * about which refusals cost an officer something when unread, in the way
+ * `hausa-safety-strings` records that decision for the agent, and
+ * `docs/HAUSA-REVIEW-QUESTIONS.md` is where it is now asked.
+ */
 const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   UNKNOWN: 'errRequestFailed',
+  STEP_UP_REQUIRED: 'ofcStepUpNeeded',
   // Raised by the api client, not the server: a request that never arrived.
   NETWORK: 'ofcLgCouldNotReachThe',
   UPLOAD_FAILED: 'errUploadFailed',
   DOCUMENT_FAILED: 'errUploadFailed',
   STEP_UP_ABANDONED: 'stepUpCodeRequired',
+
+  /*
+   * THE FIRST SERVER REFUSALS THIS MAP HOLDS THAT NAME A SUBJECT.
+   *
+   * Everything above it either names nothing or is raised by the browser
+   * rather than by PSIRS — a request that never arrived, an upload that
+   * failed, a step-up the officer walked away from. `STEP_UP_REQUIRED` was the
+   * one the platform composed, and `HAUSA-REVIEW-QUESTIONS.md` §7 counts it as
+   * one refusal of the platform's 172.
+   *
+   * These three are the row that document calls the tier. Closing a revenue
+   * month is an act an officer's name goes on, and "already closed" read as
+   * "closed now" is an officer believing they have done something they have
+   * not. They are also what required `errorText` above to substitute at all:
+   * each names the month, and the portal had no mechanism for putting it in.
+   */
+  PERIOD_CLOSED: 'ofcErrPeriodClosed',
+  PERIOD_OPEN: 'ofcErrPeriodOpen',
+  PERIOD_NOT_OPEN: 'ofcErrPeriodNotOpen',
+
+  /*
+   * The second half of that tier: the audit workbench.
+   *
+   * Both name the report, and both were reaching an officer as the DATABASE's
+   * English until the read above them took a lock — two officers signing one
+   * report both passed the pre-check, the trigger refused the second, and the
+   * handler turned a P0001 into FINANCIAL_CONTROL_BLOCKED carrying "who signed
+   * an audit report, and when, cannot be rewritten". A sentence about
+   * rewriting, for an officer who signed a report that was unsigned when they
+   * looked, in a code this map does not hold.
+   *
+   * The third row was one code with two sentences, and the note here used to
+   * say they wanted consolidating. They did not: they are two refusals about
+   * one state, told apart by what the auditor was trying to do — examine a
+   * transaction in a closed sample, where "draw a new sample" is the answer,
+   * or close a sample that is already closed, where it is not. Split, each
+   * means one fixed thing, which is this map's own test for what may be
+   * translated at all.
+   */
+  ALREADY_SIGNED: 'ofcErrAlreadySigned',
+  ALREADY_WITHDRAWN: 'ofcErrAlreadyWithdrawn',
+  SAMPLE_COMPLETED: 'ofcErrSampleCompleted',
+  SAMPLE_ALREADY_COMPLETE: 'ofcErrSampleAlreadyComplete',
 };
 
 /**
@@ -209,24 +278,38 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
  * instruction in English.
  *
  * Keyed by the error's own code, which has always travelled beside it, so
- * nothing new is sent. Only codes specific enough to imply one next step are
- * here: `VALIDATION_FAILED`, and anything a caller passed to `forbidden()` or
- * `conflict()`, means something different every time it is raised and keeps
- * the server's words.
+ * nothing new is sent. `VALIDATION_FAILED` and `FORBIDDEN` mean something
+ * different every time they are raised and keep the server's words.
+ *
+ * ELEVEN ENTRIES WERE FOR REFUSALS AN OFFICER CANNOT RECEIVE.
+ *
+ * This map was a copy of the agent application's, and all but one of its
+ * entries named a refusal that only the agent guard can raise. The version
+ * gate opens with `if (req.auth?.role !== 'agent') return next()`, so
+ * UPDATE_REQUIRED and UPDATE_REQUIRED_TO_ENUMERATE can only reach a user whose
+ * role is agent. DEVICE_NOT_REGISTERED, DEVICE_REVOKED, DEVICE_SUSPENDED and
+ * AGENT_NOT_CLEARED are raised inside `requireActiveAgent`, and this portal
+ * calls no route behind it. TIN_SERVICE_UNAVAILABLE and TIN_NOT_FOUND come out
+ * of `registerTaxpayer`, which is one of those routes.
+ * KYC_PROVIDER_UNAVAILABLE comes from `POST /agents/me/kyc`, the applicant's
+ * own submission, and is worded for them — "nothing has been recorded against
+ * your application". PAYMENT_UNCONFIRMED and PAYMENT_FAILED come from the
+ * payment confirmation path, which this portal does not call at all.
+ *
+ * None of that cost an officer anything directly. What it cost was this map's
+ * only other use: it is the record of which refusals the portal expects, and
+ * eleven wrong entries made it useless as that record — which is why the
+ * twenty-six it does receive went unnoticed for as long as they did.
  */
 const TRANSLATED_NEXT_STEPS: Record<string, keyof TranslationDictionary> = {
   STEP_UP_REQUIRED: 'nsStepUpRequired',
-  DEVICE_NOT_REGISTERED: 'nsDeviceNotRegistered',
-  DEVICE_REVOKED: 'nsDeviceRevoked',
-  DEVICE_SUSPENDED: 'nsDeviceSuspended',
-  UPDATE_REQUIRED: 'nsUpdateRequired',
-  UPDATE_REQUIRED_TO_ENUMERATE: 'nsUpdateRequiredToEnumerate',
-  TIN_SERVICE_UNAVAILABLE: 'nsTinServiceUnavailable',
-  TIN_NOT_FOUND: 'nsTinNotFound',
-  KYC_PROVIDER_UNAVAILABLE: 'nsKycProviderUnavailable',
-  PAYMENT_UNCONFIRMED: 'nsPaymentUnconfirmed',
-  PAYMENT_FAILED: 'nsPaymentFailed',
-  AGENT_NOT_CLEARED: 'nsAgentNotCleared',
+  /*
+   * The one audit-workbench refusal whose advice is the point of it: the
+   * findings are final, and looking again means a new sample.
+   * SAMPLE_ALREADY_COMPLETE deliberately has none — there is nothing left for
+   * that auditor to do, and inventing a step would be worse than silence.
+   */
+  SAMPLE_COMPLETED: 'ofcNsSampleCompleted',
 };
 
 /** The next step for an error, or the server's own words when it has none. */
@@ -239,12 +322,67 @@ export function nextStepText(
   return error.nextStep ?? null;
 }
 
+/**
+ * What a detail puts into the hole.
+ *
+ * A state travels as the value the schema holds — CLOSING, not "closing" — so
+ * that it can be looked up in the shared enum table and read in the officer's
+ * own language. Anything else is passed through as the server composed it: a
+ * month's label is already a label.
+ *
+ * Only `code === 'STATE'`, and only when the table has a name for the value.
+ * An unknown state printed raw is a state somebody can report; one quietly
+ * turned into prose by this function would be a state nobody could trace.
+ */
+function substituted(
+  detail: { field?: string; issue: string; code?: string },
+  t: TranslationDictionary,
+): string {
+  if (detail.code !== 'STATE') return detail.issue;
+  return detail.issue in ENUM_LABELS ? enumLabel(detail.issue, t) : detail.issue;
+}
+
+/**
+ * What a refusal says, in the officer's language.
+ *
+ * THE PORTAL HAD NO SUBSTITUTION AT ALL. `ErrorAlert` read `t[translated]` and
+ * rendered it as-is, so a translation naming its subject — the month that is
+ * already closed, the report already signed — would have printed
+ * `{{period}}` to the officer. The agent application has had this since its
+ * refusals started carrying figures; this side simply never needed it, because
+ * the only server-raised code it translated named nothing.
+ *
+ * It is needed now, and writing the three period refusals without it would
+ * have put the hole on the screen that closes a financial month. Same rule as
+ * the agent's: figures come out of `details`, never out of parsing the
+ * server's prose, which would break the moment somebody improved an English
+ * sentence — silently, in the language nobody testing it reads.
+ *
+ * A placeholder the server did not send is left alone rather than blanked.
+ * `ErrorAlert` lists `details` underneath, so the value is on the screen even
+ * when the sentence has a gap in it; a sentence silently missing the month an
+ * officer came for reads as finished and is not reportable.
+ */
+export function errorText(
+  error: { code: string; message: string; details?: { field?: string; issue: string; code?: string }[] },
+  t: TranslationDictionary,
+): string {
+  const translated = TRANSLATED_ERRORS[error.code];
+  if (!translated) return error.message;
+  const sentence = t[translated] as string;
+  if (!error.details?.length || !sentence.includes('{{')) return sentence;
+  return error.details.reduce(
+    (text, detail) =>
+      detail.field ? text.replace(`{{${detail.field}}}`, substituted(detail, t)) : text,
+    sentence,
+  );
+}
+
 export function ErrorAlert({ error }: { error: ApiError | null }) {
   const { t } = usePortalI18n();
   if (!error) return null;
-  const translated = TRANSLATED_ERRORS[error.code];
   return (
-    <Alert kind="error" title={{ text: translated ? t[translated] : error.message }}>
+    <Alert kind="error" title={{ text: errorText(error, t) }}>
       {nextStepText(error, t) && (
         <p style={{ margin: '4px 0 0' }}>{nextStepText(error, t)}</p>
       )}
@@ -735,18 +873,29 @@ export function crestUrl(): string {
 }
 
 /**
- * Whether the agent app is reachable from here.
+ * Where the agent app is, or null when this build has no way to know.
  *
- * A function rather than a constant so a test can vary the base. A
+ * A function rather than a constant so a test can vary the environment. A
  * module-level const is evaluated once at import and would pin whichever base
  * the runner uses, leaving the branch that matters unexercised.
  *
- * Only when this portal is mounted under a subpath, which happens in exactly
- * one arrangement: the combined image, where the agent PWA is served at the
- * root of the same origin. Deployed on its own hostname the portal has no idea
- * where the agent app is, and must not guess — an officer sent to a dead link
+ * Two ways to know, in order:
+ *
+ *   1. `VITE_AGENT_APP_URL`, set at build time. The standalone portal has its
+ *      own hostname and cannot infer anything, so inference alone left every
+ *      such deployment with a signpost and no direction on it — which is the
+ *      arrangement most of them run. Whoever builds the image knows the
+ *      address; this is where they say it.
+ *   2. The base path. In the combined image the portal is mounted at
+ *      `/portal/` and the agent PWA is served at the root of the same origin,
+ *      so `/` is right without anyone configuring it.
+ *
+ * Null when neither applies, and that still matters: under a base of `/` a
+ * link to `/` is a link back to this same page, and an agent sent in a circle
  * is worse off than one simply told which application they want.
  */
 export function agentAppUrl(): string | null {
+  const configured = import.meta.env.VITE_AGENT_APP_URL?.trim();
+  if (configured) return configured;
   return import.meta.env.BASE_URL === '/' ? null : '/';
 }

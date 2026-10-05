@@ -147,7 +147,7 @@ describe('an officer holding an invoice number', () => {
     openInvoice();
 
     await waitFor(() => expect(screen.getByText(/deadline has passed/i)).toBeTruthy());
-    expect(screen.getByText(/raising a fresh assessment first/i)).toBeTruthy();
+    expect(screen.getByText(/has to be issued again/i)).toBeTruthy();
   });
 });
 

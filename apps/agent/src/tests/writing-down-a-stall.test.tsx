@@ -76,13 +76,20 @@ beforeEach(async () => {
   }
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => ({
-      ok: true,
-      json: async () => [
+    /*
+     * `text()` as well as `json()`: `request()` reads the body as text. With
+     * only `json()` the sector list failed on every run of this file — it
+     * never asserted on sectors, so the fixture was quietly describing a
+     * screen whose list had not loaded. Found by a neighbouring test that did
+     * assert on it.
+     */
+    vi.fn(async () => {
+      const sectors = [
         { code: 'ARTISAN_CRAFT', label: 'Craft and trade work' },
         { code: 'RETAIL_TRADE', label: 'Retail trade' },
-      ],
-    })),
+      ];
+      return { ok: true, status: 200, json: async () => sectors, text: async () => JSON.stringify(sectors) };
+    }),
   );
   stub();
 });

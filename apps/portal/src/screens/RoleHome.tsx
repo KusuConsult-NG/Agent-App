@@ -184,7 +184,9 @@ const REVENUE_QUEUES: Queue[] = [
     key: 'corrections_awaiting_review',
     label: 'ofcRhCorrectionsAwaiting',
     hint: 'ofcRhSomeoneAskedChange',
-    path: '/approvals',
+    // The requests themselves, which are cases. This opened the approvals
+    // queue, where no correction has ever been, for a count that was always 0.
+    path: '/cases?category=DATA_CORRECTION',
     attentionWhen: nonZero,
   },
   { key: 'invoices_unpaid', label: 'ofcRhInvoicesUnpaid', hint: 'ofcRhRaisedStillOpen', path: '/outstanding' },

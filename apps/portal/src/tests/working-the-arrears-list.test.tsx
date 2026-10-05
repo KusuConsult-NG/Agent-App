@@ -13,7 +13,7 @@
  * mention it.
  *
  * That lapsed debt is counted but not listed. It cannot be paid as it stands,
- * so it needs a fresh assessment rather than a phone call. A figure with no
+ * so it needs issuing again rather than only a phone call. A figure with no
  * explanation would have officers hunting the table for names deliberately
  * not in it.
  */
@@ -33,6 +33,13 @@ const WORKLIST = {
     lapsedInvoices: 3,
     inFlightInvoices: 2,
   },
+  /*
+   * The two fields the API always sends, so the fixture sends them too. A
+   * stub missing them would exercise a response shape the service cannot
+   * produce, and the screen would be written to tolerate it.
+   */
+  filtered: { taxpayers: 2, totalKobo: '4500000' },
+  truncated: false,
   rows: [
     {
       taxpayerId: 'tp-1',
@@ -115,7 +122,9 @@ describe('what the officer is told before they start ringing', () => {
     expect(
       note.textContent,
       'an officer told only that money is missing will go looking for it on this page',
-    ).toMatch(/fresh assessment/i);
+    ).toMatch(/issuing the bill again/i);
+    // Not the old advice, which billed the taxpayer a second time beside the first.
+    expect(note.textContent).not.toMatch(/fresh assessment/i);
   });
 
   it('says nothing about lapsed debt when there is none', async () => {
@@ -270,5 +279,69 @@ describe('how long the debt has been running', () => {
     const row = screen.getByText('Amina Danladi').closest('tr')!;
     expect(within(row).getByText('6')).toBeTruthy();
     expect(within(row).getByText('24 day(s)')).toBeTruthy();
+  });
+});
+
+/*
+ * Three filters sit directly above these figures. One of them moved them.
+ *
+ * The amount floor and the deadline window live in the list query; the LGA
+ * filter was passed to the figures as well. So an officer who narrows by LGA
+ * watches the totals follow, and then sets a floor of ₦50,000 and reads a
+ * total of ₦45m over a list of twelve names as though the two described the
+ * same people.
+ *
+ * This card already explains two reasons its figures are wider than its list —
+ * money in flight, and money that has lapsed. These are the two it did not
+ * explain, and they are the ones the officer created themselves.
+ */
+describe('the figures above the list, and the filters between them', () => {
+  it('says what the filters the officer set left on the list', async () => {
+    stubApi({
+      ...WORKLIST,
+      filtered: { taxpayers: 1, totalKobo: '3000000' },
+    });
+    render(<ArrearsScreen />);
+    await waitFor(() => expect(screen.getByText(/Who to call/i)).toBeTruthy());
+
+    const note = screen.getByText(/cover everyone in this scope/i);
+    expect(note.textContent).toMatch(/1 taxpayer/);
+    // The figure the officer would otherwise have to add up by hand, out of a
+    // list that may itself be capped.
+    expect(note.textContent).toMatch(/₦30,000\.00/);
+  });
+
+  it('says nothing when the list is the whole scope', async () => {
+    // The guard: a note on every load would pass the check above and would
+    // teach the officer to discount the figures whenever they are right.
+    render(<ArrearsScreen />);
+    await waitFor(() => expect(screen.getByText(/Who to call/i)).toBeTruthy());
+
+    expect(screen.queryByText(/cover everyone in this scope/i)).toBeNull();
+  });
+
+  it('says how many debts the list was cut down from', async () => {
+    stubApi({ ...WORKLIST, truncated: true, filtered: { taxpayers: 140, totalKobo: '90000000' } });
+    render(<ArrearsScreen />);
+    await waitFor(() => expect(screen.getByText(/Who to call/i)).toBeTruthy());
+
+    const note = screen.getByText(/largest of the 140 debts/i);
+    expect(note.textContent).toMatch(/Showing the 2 largest/);
+    expect(note.textContent).toMatch(/Narrow by LGA or amount/i);
+  });
+
+  it('does not tell an officer to narrow a list that holds everything', async () => {
+    /*
+     * This is what the screen got wrong before: it compared `rows.length`
+     * against a hardcoded hundred, which is both coupled to a default this
+     * screen does not send and wrong at exactly the cap. A hundred debts out
+     * of a hundred were reported as cut short, and the officer was sent to
+     * narrow a filter with nothing left to find.
+     */
+    stubApi({ ...WORKLIST, truncated: false, filtered: { taxpayers: 2, totalKobo: '4500000' } });
+    render(<ArrearsScreen />);
+    await waitFor(() => expect(screen.getByText(/Who to call/i)).toBeTruthy());
+
+    expect(screen.queryByText(/largest of the/i)).toBeNull();
   });
 });

@@ -113,6 +113,23 @@ export function unauthorised(message = 'You need to sign in to continue.'): AppE
   return new AppError({ statusCode: 401, code: 'UNAUTHENTICATED', message });
 }
 
+/**
+ * A refusal of a well-formed request, named.
+ *
+ * `badRequest` is 400 INVALID_REQUEST and nothing else, which is right for a
+ * schema failure: the client sent a shape the endpoint does not accept, and
+ * the detail list says which field. It is wrong for a refusal that means one
+ * fixed thing every time it is raised — "this levy does not apply to an
+ * individual" — because the agent application translates by code, and a
+ * sentence nobody can name is a sentence nobody can translate.
+ *
+ * Same status, so nothing branching on 400 changes. Only the code becomes
+ * specific enough to key a Hausa sentence on.
+ */
+export function refused(code: string, message: string, nextStep?: string): AppError {
+  return new AppError({ statusCode: 400, code, message, nextStep });
+}
+
 export function forbidden(message: string, nextStep?: string): AppError {
   return new AppError({ statusCode: 403, code: 'FORBIDDEN', message, nextStep });
 }
@@ -159,6 +176,47 @@ export function paymentPendingReconciliation(reference: string): AppError {
     moneyStatus: 'RECEIVED',
     reference,
   });
+}
+
+/**
+ * A refusal on the payment path, with the money state it implies.
+ *
+ * Every refusal in this file states a `moneyStatus`, and the agent's
+ * `ErrorAlert` turns it into one of three sentences that are always in the
+ * agent's language — "no money has been taken", "the payment has NOT been
+ * confirmed", "the money has been received". Its own comment calls that "the
+ * sentence that decides whether a citizen is asked to pay twice".
+ *
+ * Five refusals on that path were raised through `conflict()`, which has no
+ * money parameter, so they arrived as NOT_APPLICABLE and the sentence was
+ * omitted. Two of them say "Do not collect payment again" in their English
+ * message, and those two were the ones with no money line under it — the only
+ * money-path refusals where the one sentence guaranteed to be readable was the
+ * one left out.
+ *
+ * So the money state is named at the point of refusal rather than defaulted.
+ * RECEIVED where the bill is already settled; NOT_DEBITED where the payment
+ * was never started, which is also the reassurance the agent needs in order to
+ * tell the citizen nothing was taken.
+ */
+export function paymentRefused(params: {
+  code: string;
+  message: string;
+  moneyStatus: 'RECEIVED' | 'NOT_DEBITED';
+  nextStep?: string;
+  /**
+   * Fields the message names, sent separately so a client can say the same
+   * thing in the reader's language.
+   *
+   * Two of these refusals name a state — "This invoice is cancelled" — and the
+   * agent application translates by code, so the translated sentence needs the
+   * state as a value it can substitute. Parsing it back out of the English
+   * would break the moment somebody improved the wording, silently, in the
+   * language nobody testing it reads.
+   */
+  details?: ErrorDetail[];
+}): AppError {
+  return new AppError({ statusCode: 409, ...params });
 }
 
 export function paymentFailed(reference: string, reason: string): AppError {

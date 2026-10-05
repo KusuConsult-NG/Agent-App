@@ -46,8 +46,10 @@
 
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
-import { createAssessmentIn } from './revenue';
+import { createAssessmentIn, withdrawUnpaidBill } from './revenue';
 import { recordAudit } from './audit';
+import { queueNotification } from './notifications';
+import { askForRefundsOfWithdrawnBill, type RefundRequested } from './approval-requests';
 import { scopeParams, type ReportScope } from './report-scope';
 import {
   bandFor,
@@ -680,9 +682,28 @@ export async function raiseObjection(
       );
     }
     /*
-     * One open objection at a time. The unique index refuses the second, but a
-     * constraint violation reaches an officer as a failure rather than as the
-     * fact that somebody already raised this.
+     * One open objection at a time. Two things make that true, and this comment
+     * used to name a third that did not exist.
+     *
+     * It said "the unique index refuses the second". There was no unique index:
+     * migration 071 created `idx_objections_open` as a plain partial index. The
+     * conclusion was right anyway, and for a reason the comment did not give —
+     * the `SELECT ... FOR UPDATE` on the assessment, three statements above,
+     * orders two callers before either reaches the read below. So the service
+     * was safe and said so for the wrong reason, which is the kind of comment
+     * that survives until somebody moves the statement it silently depends on.
+     *
+     * Migration 084 makes the index unique, so the claim is now true as
+     * written and the rule holds against a caller that never comes through
+     * here at all — a script, a console, a future path that forgets the
+     * `FOR UPDATE`. That is this repository's own standard, from migration
+     * 080's header: a rule the service enforces and the database does not is
+     * one UPDATE away from being undone.
+     *
+     * Measured, not assumed. An advisory lock was added here first and removed
+     * again when removing it failed nothing: two concurrent `raiseObjection`
+     * calls are already ordered, and a lock no test can justify is a lock the
+     * next reader deletes while wondering what it was for.
      */
     const open = await queryOne<{ id: string }>(
       client,
@@ -721,6 +742,30 @@ export async function raiseObjection(
       reason: params.statement.trim(),
     });
 
+    /*
+     * And the trader is told it was received, in the same transaction.
+     *
+     * Often it was raised for them — by an agent at the stall, an officer at
+     * a desk — and they left with nothing to show for it. The reminder sweep
+     * stops chasing the bill from here on, on the strength of exactly this
+     * message, which nothing used to send.
+     */
+    const subject = await queryOne<{ taxpayer_id: string; assessment_number: string | null }>(
+      client,
+      `SELECT pa.taxpayer_id, a.assessment_number
+         FROM presumptive_assessments pa
+         LEFT JOIN assessments a ON a.id = pa.assessment_id
+        WHERE pa.id = $1`,
+      [params.presumptiveAssessmentId],
+    );
+    await queueNotification(client, {
+      event: 'OBJECTION_RECEIVED',
+      taxpayerId: subject!.taxpayer_id,
+      entityType: 'assessment_objection',
+      entityId: inserted!.id,
+      variables: { reference: subject!.assessment_number ?? '' },
+    });
+
     return { id: inserted!.id };
   });
 }
@@ -732,6 +777,8 @@ export async function raiseObjection(
  * figure computed from facts the taxpayer has just successfully contested
  * would be a second estimate resting on the first, and the honest route is a
  * fresh observation and a fresh assessment they can contest in turn.
+ *
+ * Answers with the refunds it asked for — see `askForRefundsOfWithdrawnBill`.
  */
 export async function decideObjection(
   db: Db,
@@ -742,13 +789,14 @@ export async function decideObjection(
     actorId: string;
     actorRole: string;
   },
-): Promise<void> {
+): Promise<{ refundsRequested: RefundRequested[] }> {
   // As above: the database requires this too, and holds it when this does not.
   if (!params.reason.trim()) {
     throw badRequest('Give a reason the taxpayer can read.');
   }
 
-  await withTransaction(async (client) => {
+  return withTransaction(async (client) => {
+    let refundsRequested: RefundRequested[] = [];
     const objection = await queryOne<{
       id: string;
       status: string;
@@ -800,14 +848,21 @@ export async function decideObjection(
        * And the invoice goes with it. An upheld objection that left the bill
        * standing would be a decision in the taxpayer's favour that cost them
        * exactly nothing — and the arrears worklist would go on chasing them
-       * for it.
+       * for it. Including a bill that lapsed while the objection was open,
+       * which this used to leave standing: see `withdrawUnpaidBill`.
        */
       if (assessment!.assessment_id) {
-        await client.query(
-          `UPDATE invoices SET status = 'CANCELLED'
-            WHERE assessment_id = $1 AND status IN ('UNPAID', 'PARTIALLY_PAID')`,
-          [assessment!.assessment_id],
-        );
+        await withdrawUnpaidBill(client, assessment!.assessment_id, {
+          actorId: params.actorId,
+          reason: `objection upheld (${params.reason.trim()})`,
+        });
+        refundsRequested = await askForRefundsOfWithdrawnBill(client, assessment!.assessment_id, {
+          actorId: params.actorId,
+          actorRole: params.actorRole,
+          headline: 'Objection upheld',
+          because: 'The objection to this presumptive assessment was upheld',
+          reason: params.reason.trim(),
+        });
       }
     } else {
       await client.query(
@@ -826,6 +881,45 @@ export async function decideObjection(
       newValue: { status: params.uphold ? 'UPHELD' : 'REJECTED' },
       reason: params.reason.trim(),
     });
+
+    /*
+     * And the trader is told, in the same transaction as the decision.
+     *
+     * The reason is required to be one "the taxpayer can read", and nothing
+     * sent it to them: upheld, they went on believing they owed the money;
+     * rejected, that collection was still suspended. Queued here rather than
+     * after, so a decision and the message about it cannot come apart.
+     */
+    const subject = await queryOne<{
+      taxpayer_id: string;
+      assessment_number: string | null;
+      annual_tax_kobo: string;
+    }>(
+      client,
+      `SELECT pa.taxpayer_id, a.assessment_number, pa.annual_tax_kobo::text AS annual_tax_kobo
+         FROM presumptive_assessments pa
+         LEFT JOIN assessments a ON a.id = pa.assessment_id
+        WHERE pa.id = $1`,
+      [objection.presumptive_assessment_id],
+    );
+    const refunded = refundsRequested.reduce((total, refund) => total + BigInt(refund.amountKobo), 0n);
+    await queueNotification(client, {
+      event: !params.uphold
+        ? 'OBJECTION_REJECTED'
+        : refundsRequested.length > 0
+          ? 'OBJECTION_UPHELD_REFUND_REQUESTED'
+          : 'OBJECTION_UPHELD',
+      taxpayerId: subject!.taxpayer_id,
+      entityType: 'assessment_objection',
+      entityId: params.objectionId,
+      variables: {
+        reference: subject!.assessment_number ?? '',
+        reason: params.reason.trim(),
+        amount: (refundsRequested.length > 0 ? refunded : BigInt(subject!.annual_tax_kobo)).toString(),
+      },
+    });
+
+    return { refundsRequested };
   });
 }
 
@@ -1069,6 +1163,15 @@ export async function openObjections(
     annualTaxKobo: string;
     /** The officer who raised the assessment, and so may not decide this. */
     assessedBy: string;
+    /**
+     * Where the bill stands, which changes what deciding does. Upholding an
+     * objection to a PAID bill asks for a refund; one with a payment in
+     * progress is refused until the payment settles. The queue said neither,
+     * so an officer learnt the first from nothing and the second from a
+     * refusal.
+     */
+    bill: 'OWED' | 'PAID' | 'PAYMENT_IN_PROGRESS';
+    paidKobo: string;
   }[]
 > {
   const { statewide, lgaIds } = scopeParams(scope);
@@ -1082,12 +1185,31 @@ export async function openObjections(
     raised_at: Date;
     annual_tax_kobo: string;
     created_by: string;
+    bill: 'OWED' | 'PAID' | 'PAYMENT_IN_PROGRESS';
+    paid_kobo: string;
   }>(
     db,
     `SELECT o.id, o.presumptive_assessment_id, a.taxpayer_id,
             COALESCE(NULLIF(trim(t.business_name), ''),
                      trim(coalesce(t.first_name,'') || ' ' || coalesce(t.last_name,''))) AS taxpayer_name,
-            o.ground, o.statement, o.raised_at, a.annual_tax_kobo, a.created_by
+            o.ground, o.statement, o.raised_at, a.annual_tax_kobo, a.created_by,
+            -- The same two questions withdrawUnpaidBill and the refund ask.
+            CASE
+              WHEN EXISTS (
+                SELECT 1 FROM invoices i
+                  JOIN transactions tx ON tx.invoice_id = i.id
+                  JOIN payments p ON p.transaction_id = tx.id
+                 WHERE i.assessment_id = a.assessment_id
+                   AND i.status IN ('UNPAID', 'PARTIALLY_PAID', 'EXPIRED')
+                   AND p.status IN ('INITIATED', 'PENDING', 'SUCCESSFUL', 'VERIFIED'))
+                THEN 'PAYMENT_IN_PROGRESS'
+              WHEN EXISTS (
+                SELECT 1 FROM invoices i WHERE i.assessment_id = a.assessment_id AND i.status = 'PAID')
+                THEN 'PAID'
+              ELSE 'OWED'
+            END AS bill,
+            COALESCE((SELECT SUM(i.amount_paid_kobo) FROM invoices i
+                       WHERE i.assessment_id = a.assessment_id AND i.status = 'PAID'), 0)::text AS paid_kobo
        FROM assessment_objections o
        JOIN presumptive_assessments a ON a.id = o.presumptive_assessment_id
        JOIN taxpayers t ON t.id = a.taxpayer_id
@@ -1107,5 +1229,7 @@ export async function openObjections(
     raisedAt: row.raised_at,
     annualTaxKobo: row.annual_tax_kobo,
     assessedBy: row.created_by,
+    bill: row.bill,
+    paidKobo: row.paid_kobo,
   }));
 }

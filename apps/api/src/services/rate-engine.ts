@@ -188,8 +188,16 @@ function computeTiered(base: Kobo, tiers: Tier[]): { amount: Kobo; trace: Comput
 // the caller supplied: a revenue formula is configuration written by a
 // government officer, and configuration must not be able to execute code.
 //
-// Arithmetic is integer (kobo) throughout. Division rounds half-up on the final
-// value only, so a formula stays reproducible.
+// Arithmetic is exact throughout, and the result is rounded half-up to the kobo
+// once, at the end, so a formula stays reproducible.
+//
+// That was the promise and not the practice: each division rounded on the
+// spot, and whatever came after multiplied the rounding. Measured: "₦500 per
+// ten square metres" written `area / 10 * 50000` charged a 15 m² shop
+// ₦1,000, and the same rate written `area * 50000 / 10` charged it ₦750 — a
+// third more for where the officer happened to put the division. And
+// `(rooms / 3) * 3` came to 3 for four rooms. Values are now carried as exact
+// fractions, so two ways of writing one rate give one bill.
 // ---------------------------------------------------------------------------
 
 type Token = { type: 'number'; value: bigint } | { type: 'ident'; value: string } | { type: 'op'; value: string };
@@ -240,11 +248,111 @@ function tokenise(formula: string): Token[] {
   return tokens;
 }
 
+/**
+ * The values a rate has to be given before it can be computed, by name.
+ *
+ * The field app asked for one thing — a base amount, for PERCENTAGE and TIERED
+ * items — and nothing for a FORMULA item, whatever the formula named. So a
+ * formula rate an officer could create and the catalogue would list could not
+ * be collected in the field at all: every quote came back "needs a value for
+ * area". The app now asks for exactly these, so what it collects and what the
+ * engine reads come from one place.
+ *
+ * Names appear once, in the order the formula first uses them, which is the
+ * order an officer wrote them in and the order a form should ask for them.
+ */
+export function inputsFor(rate: Pick<RateVersion, 'rate_type' | 'formula'>): string[] {
+  switch (rate.rate_type) {
+    case 'PERCENTAGE':
+    case 'TIERED':
+      return ['baseAmountKobo'];
+    case 'FORMULA': {
+      const names: string[] = [];
+      for (const token of tokenise(rate.formula ?? '')) {
+        if (token.type === 'ident' && !names.includes(token.value)) names.push(token.value);
+      }
+      return names;
+    }
+    default:
+      return [];
+  }
+}
+
 const PRECEDENCE: Record<string, number> = { '+': 1, '-': 1, '*': 2, '/': 2 };
+
+/**
+ * One value a formula reads, checked the way every other rate type checks its
+ * own, and read exactly.
+ *
+ * The other rate types read their base through `requireNumericInput`, which
+ * names the field and refuses a negative. A formula read its inputs with the
+ * bare money parser instead. Measured: "15.5" or "abc" came back 422 —
+ * "Amount must be a whole number of kobo" — naming no field and calling an
+ * area money; and "-3" was accepted, so `area * 5` came to -15, and a
+ * negative input under a minimum, or beside a flat charge, quietly lowered
+ * the bill instead of being refused.
+ *
+ * A formula's inputs are counts and measurements — square metres, rooms,
+ * months — and a measurement is often not whole: a shop is 15.5 m². Now that
+ * the arithmetic is exact and rounds once, at the end, a decimal is read as
+ * the exact fraction it writes (15.5 is 31/2) rather than refused or rounded
+ * on the way in. What is refused is what is not a number, and a negative.
+ */
+function readFormulaInput(inputs: ComputationInputs, name: string): Fraction {
+  const raw = readInput(inputs, name);
+  if (raw === undefined || raw === null || raw === '') {
+    throw badRequest(`This revenue item needs a value for "${name}".`, [
+      { field: name, issue: 'Required input is missing' },
+    ]);
+  }
+  if (typeof raw === 'boolean') return { n: raw ? 1n : 0n, d: 1n };
+
+  const text = typeof raw === 'number' ? (Number.isFinite(raw) ? String(raw) : '') : String(raw).trim();
+  const written = /^(-?)(\d+)(?:\.(\d+))?$/.exec(text);
+  if (!written) {
+    throw badRequest(`"${name}" must be a number.`, [{ field: name, issue: 'Not a number' }]);
+  }
+  const decimals = written[3] ?? '';
+  const value = fraction(BigInt(written[2]! + decimals), 10n ** BigInt(decimals.length));
+  if (written[1] === '-' && value.n !== 0n) {
+    throw badRequest(`"${name}" cannot be negative.`, [
+      { field: name, issue: 'Must be zero or more' },
+    ]);
+  }
+  return value;
+}
+
+/** An exact value: numerator over a positive denominator, kept in lowest terms. */
+interface Fraction {
+  n: bigint;
+  d: bigint;
+}
+
+function gcd(a: bigint, b: bigint): bigint {
+  let x = a < 0n ? -a : a;
+  let y = b;
+  while (y !== 0n) [x, y] = [y, x % y];
+  return x;
+}
+
+function fraction(n: bigint, d: bigint): Fraction {
+  if (d < 0n) [n, d] = [-n, -d];
+  const divisor = gcd(n, d) || 1n;
+  return { n: n / divisor, d: d / divisor };
+}
+
+/** Half-up on the absolute value, so a result is symmetric about zero. */
+function roundHalfUp(value: Fraction): bigint {
+  const negative = value.n < 0n;
+  const absolute = negative ? -value.n : value.n;
+  const quotient = absolute / value.d;
+  const rounded = (absolute % value.d) * 2n >= value.d ? quotient + 1n : quotient;
+  return negative ? -rounded : rounded;
+}
 
 function evaluateFormula(formula: string, inputs: ComputationInputs): Kobo {
   const tokens = tokenise(formula);
-  const values: bigint[] = [];
+  const values: Fraction[] = [];
   const operators: string[] = [];
 
   const applyOperator = () => {
@@ -256,24 +364,17 @@ function evaluateFormula(formula: string, inputs: ComputationInputs): Kobo {
     }
     switch (operator) {
       case '+':
-        values.push(left + right);
+        values.push(fraction(left.n * right.d + right.n * left.d, left.d * right.d));
         break;
       case '-':
-        values.push(left - right);
+        values.push(fraction(left.n * right.d - right.n * left.d, left.d * right.d));
         break;
       case '*':
-        values.push(left * right);
+        values.push(fraction(left.n * right.n, left.d * right.d));
         break;
       case '/': {
-        if (right === 0n) throw badRequest("This revenue item's formula divides by zero.");
-        // Round half-up on the absolute value to keep results symmetric.
-        const negative = left < 0n !== right < 0n;
-        const absLeft = left < 0n ? -left : left;
-        const absRight = right < 0n ? -right : right;
-        const quotient = absLeft / absRight;
-        const remainder = absLeft % absRight;
-        const rounded = remainder * 2n >= absRight ? quotient + 1n : quotient;
-        values.push(negative ? -rounded : rounded);
+        if (right.n === 0n) throw badRequest("This revenue item's formula divides by zero.");
+        values.push(fraction(left.n * right.d, left.d * right.n));
         break;
       }
       default:
@@ -283,15 +384,9 @@ function evaluateFormula(formula: string, inputs: ComputationInputs): Kobo {
 
   for (const token of tokens) {
     if (token.type === 'number') {
-      values.push(token.value);
+      values.push({ n: token.value, d: 1n });
     } else if (token.type === 'ident') {
-      const raw = readInput(inputs, token.value);
-      if (raw === undefined || raw === null || raw === '') {
-        throw badRequest(`This revenue item needs a value for "${token.value}".`, [
-          { field: token.value, issue: 'Required input is missing' },
-        ]);
-      }
-      values.push(parseKobo(typeof raw === 'boolean' ? Number(raw) : raw));
+      values.push(readFormulaInput(inputs, token.value));
     } else if (token.value === '(') {
       operators.push(token.value);
     } else if (token.value === ')') {
@@ -320,7 +415,7 @@ function evaluateFormula(formula: string, inputs: ComputationInputs): Kobo {
   if (result === undefined || values.length > 0) {
     throw badRequest("This revenue item's formula is malformed.");
   }
-  return result;
+  return roundHalfUp(result);
 }
 
 /**

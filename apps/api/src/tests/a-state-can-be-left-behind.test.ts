@@ -45,6 +45,7 @@ import {
   revenueItemByCode,
   startTestServer,
   stopTestServer,
+  leaderAttestationToken,
 } from './helpers';
 import { queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
@@ -275,7 +276,8 @@ describe('a member leaving a group', () => {
     const invited = await post(`/groups/${groupId}/attestation-request`, undefined, {
       token: officerToken,
     });
-    const attestToken = String(invited.body.invitationUrl).split('/group-attestation/')[1];
+    assert.equal(invited.status, 201, JSON.stringify(invited.body));
+    const attestToken = await leaderAttestationToken(groupId);
     const list = await get(`/group-attestation/${attestToken}`);
     const membershipId = list.body.members[0].id;
 
@@ -360,7 +362,8 @@ describe('a member leaving a group', () => {
     const invited = await post(`/groups/${groupId}/attestation-request`, undefined, {
       token: officerToken,
     });
-    const attestToken = String(invited.body.invitationUrl).split('/group-attestation/')[1];
+    assert.equal(invited.status, 201, JSON.stringify(invited.body));
+    const attestToken = await leaderAttestationToken(groupId);
     const list = await get(`/group-attestation/${attestToken}`);
     const membershipId = list.body.members[0].id;
     await post(`/group-attestation/${attestToken}/confirm`, {

@@ -216,7 +216,7 @@ describe('the record itself', () => {
   it('shows what they owe and which part cannot be paid as it stands', async () => {
     await openRecord();
     expect(screen.getByText('INV-2026-0001')).toBeTruthy();
-    expect(screen.getByText(/needs a fresh assessment/i)).toBeTruthy();
+    expect(screen.getByText(/has to be issued again/i)).toBeTruthy();
   });
 
   it('records a dispute against the claim, with the reason', async () => {

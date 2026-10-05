@@ -79,6 +79,31 @@ export function EnumerateScreen({
   const { t } = useI18n();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [groups, setGroups] = useState<Group[] | null>(null);
+  /*
+   * Kept apart from `groups`, because the two answers say opposite things.
+   *
+   * The catch below used to be `setGroups([])`, and an empty list renders the
+   * sentence "None of your groups has been given a part in enumeration yet.
+   * Record it anyway — an officer can ask the leader later." So a dropped
+   * connection at a market stall — and this screen queues captures for
+   * exactly that case — told the agent no association had standing, and
+   * told them to record the count without one.
+   *
+   * Recording through the association is the check the header of this file
+   * calls the thing that makes enumeration survivable: the leader can confirm
+   * or contradict the count. A failed read must not be able to remove that
+   * check by asserting it was never available. The sector list twenty lines
+   * below already says when it could not load; this says it too.
+   */
+  const [groupsFailed, setGroupsFailed] = useState(false);
+  const loadGroups = () => {
+    setGroupsFailed(false);
+    setGroups(null);
+    api
+      .get<{ groups: Group[] }>('/groups?status=ACTIVE')
+      .then((result) => setGroups(result.groups.filter((group) => group.tax_role !== 'NONE')))
+      .catch(() => setGroupsFailed(true));
+  };
   const sectorList = useReferenceList<{ code: string; label: string }>('/taxpayers/sectors');
   const sectors = sectorList.items;
   const [form, setForm] = useState({
@@ -121,10 +146,7 @@ export function EnumerateScreen({
         setError(asApiError(caught));
       });
 
-    api
-      .get<{ groups: Group[] }>('/groups?status=ACTIVE')
-      .then((result) => setGroups(result.groups.filter((group) => group.tax_role !== 'NONE')))
-      .catch(() => setGroups([]));
+    loadGroups();
 
   }, [taxpayerId]);
 
@@ -350,7 +372,13 @@ export function EnumerateScreen({
         </button>
       )}
 
-      {groups === null ? null : groups.length === 0 ? (
+      {groupsFailed ? (
+        <Alert kind="warning" title={t.tpListCouldNotLoad}>
+          <button type="button" className="secondary" onClick={loadGroups}>
+            {t.actionTryAgain}
+          </button>
+        </Alert>
+      ) : groups === null ? null : groups.length === 0 ? (
         <Alert kind="info" title={t.agEnNoGroupsTitle}>
           {t.agEnNoGroups}
         </Alert>

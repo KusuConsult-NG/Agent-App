@@ -48,7 +48,7 @@ import {
 import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
-import { assessFromObservation, recordObservation } from '../services/enumeration';
+import { assessFromObservation, raiseObjection, recordObservation } from '../services/enumeration';
 import { adoptNanoPolicy, classifyLga, publishScheduleEntry } from '../services/presumptive';
 
 const SUPERVISOR = '+2348077400001';
@@ -219,6 +219,119 @@ describe('an objection raised at the stall', () => {
     const raised = await objectTo(assessmentId, agentAuth);
     assert.equal(raised.status, 201, JSON.stringify(raised.body));
     assert.ok(raised.body.id, 'the objection has an id to decide later');
+  });
+
+  /*
+   * TWO OBJECTIONS TO ONE ESTIMATE, RAISED AT THE SAME MOMENT.
+   *
+   * `raiseObjection` reads for an open objection, refuses with
+   * `OBJECTION_ALREADY_OPEN` if it finds one, and inserts if it does not. The
+   * comment above that read claimed "the unique index refuses the second".
+   * There was no unique index — migration 071 created `idx_objections_open` as
+   * a plain partial index — so the only thing refusing a second was a
+   * non-locking read, which two simultaneous submissions both pass.
+   *
+   * An open objection suspends enforcement and takes the taxpayer out of
+   * arrears. Two against one estimate means two officers can each decide a
+   * dispute the other is also deciding, and whichever decision lands second
+   * overwrites the assessment status the first set.
+   *
+   * It turned out the service was already safe, by a mechanism the comment did
+   * not mention: the `SELECT ... FOR UPDATE` on the assessment, three
+   * statements above the check, orders two callers before either reaches it. An
+   * advisory lock was added and then removed again when removing it failed
+   * nothing — the measurement these tests exist to make.
+   *
+   * What was missing was the database half. Migration 084 makes the index
+   * unique, so the rule holds against a caller that never comes through the
+   * service: a script, a console, a future path that forgets the `FOR UPDATE`.
+   *
+   * Held here rather than in `tests/concurrency/` because the fixture for a
+   * presumptive assessment is a hundred and fifty lines of this file, and a
+   * reader asking what happens when two objections race will look where the
+   * objections are.
+   */
+  it('accepts one and refuses the other by name when both arrive at once', async () => {
+    const { assessmentId } = await assessedTraderIn(homeLga);
+
+    /*
+     * The service directly, not two HTTP requests.
+     *
+     * The first version of this posted twice through the route with
+     * `Promise.all`: two round trips to a local server do not reliably overlap,
+     * so what it observed was the first request finishing before the second
+     * began. Calling `raiseObjection` twice gives each call its own connection
+     * and its own transaction, which is real contention — and it is what
+     * established that the `FOR UPDATE` above already handles it.
+     *
+     * The same agent twice is also the realistic way in. Not the agent and the
+     * supervisor: the route is behind `assessment:create` or `paye:file` and a
+     * supervisor holds neither, so that pairing answered 403 and tested the
+     * permission instead.
+     */
+    const both = await Promise.allSettled([
+      raiseObjection(pool, {
+        presumptiveAssessmentId: assessmentId,
+        ground: 'FACTS_WRONG',
+        statement: 'The second machine belongs to my brother.',
+        actorId: officerId,
+        actorRole: 'admin',
+      }),
+      raiseObjection(pool, {
+        presumptiveAssessmentId: assessmentId,
+        ground: 'NOT_TRADING',
+        statement: 'The stall has been closed since March.',
+        actorId: officerId,
+        actorRole: 'admin',
+      }),
+    ]);
+
+    const accepted = both.filter((r) => r.status === 'fulfilled');
+    const refused = both.filter((r) => r.status === 'rejected');
+    assert.equal(accepted.length, 1, 'one of the two is accepted');
+    assert.equal(refused.length, 1, 'and one is refused');
+
+    const reason = (refused[0] as PromiseRejectedResult).reason as { code?: string };
+    assert.equal(
+      reason?.code,
+      'OBJECTION_ALREADY_OPEN',
+      `the loser was refused with ${reason?.code}. Anything else means the pre-check lost ` +
+        'to the index, and the officer is told a record exists rather than that somebody ' +
+        'has already objected to this estimate',
+    );
+
+    const open = await query<{ id: string }>(
+      pool,
+      `SELECT id FROM assessment_objections
+        WHERE presumptive_assessment_id = $1 AND status = 'OPEN'`,
+      [assessmentId],
+    );
+    assert.equal(open.length, 1, 'one estimate, one live dispute');
+  });
+
+  /*
+   * And the database refuses it even with the service out of the way.
+   *
+   * This is the half the comment claimed and the schema did not have. Inserting
+   * directly is the "one UPDATE away" case migration 080's header describes: a
+   * rule that lives only in a service is a rule a script, a console or a future
+   * code path walks straight past.
+   */
+  it('cannot be written twice even past the service', async () => {
+    const { assessmentId } = await assessedTraderIn(homeLga);
+    const raised = await objectTo(assessmentId, agentAuth);
+    assert.equal(raised.status, 201, JSON.stringify(raised.body));
+
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO assessment_objections
+           (presumptive_assessment_id, ground, statement, raised_by)
+         VALUES ($1, 'FACTS_WRONG', 'A second dispute, straight into the table.', $2)`,
+        [assessmentId, officerId],
+      ),
+      /duplicate key|idx_objections_open/i,
+      'the index has to refuse this, or the rule is only ever as good as the service',
+    );
   });
 
   it('reaches the worklist of the supervisor whose territory it is in', async () => {

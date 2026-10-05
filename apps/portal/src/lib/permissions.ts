@@ -459,6 +459,17 @@ const SCREEN: Record<string, NavItem> = {
    * look. `permission` is optional on a `NavItem` for exactly this: a screen
    * every authenticated officer may open.
    */
+  /*
+   * An agent's first screen here, and the only one written for them.
+   *
+   * No permission: it grants nothing and fetches nothing. It exists because
+   * an agent who signs in now stays signed in, and the two screens they can
+   * open — the catalogue and the presumptive schedules — are reference
+   * tables. Landing on a rate table with no explanation is how a portal
+   * looks broken; this says what the portal is, what it holds for them, and
+   * where their actual tools are.
+   */
+  fieldWork: { path: '/field-work', label: 'ofcNavFieldWork' },
   myAccess: { path: '/my-access', label: 'ofcNavMyAccess' },
   // Same reasoning: reading what you were told is not a privilege.
   inbox: { path: '/inbox', label: 'ofcNavInbox' },
@@ -548,6 +559,28 @@ type NavGroup = { group: keyof TranslationDictionary; items: readonly NavItem[] 
  * a screen the API would refuse.
  */
 const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
+  /*
+   * The field agent, who is no longer turned away at the door.
+   *
+   * Three screens, and that is the honest total: the portal administers
+   * revenue and an agent collects it. Without an arrangement here the
+   * fallback menu would offer them the catalogue and the presumptive
+   * schedules under "Everything" — two reference tables, no explanation, and
+   * a landing page on whichever came first. `fieldWork` is what makes the
+   * other two make sense, so it leads.
+   *
+   * Adding officer screens to this list would not give an agent access to
+   * anything: every one of them is gated on a permission the agent role does
+   * not hold, and the API checks it again whichever application asks. It
+   * would only give them a menu full of doors that open onto refusals.
+   */
+  agent: [
+    {
+      group: 'ofcGroupYourDesk',
+      items: [SCREEN.fieldWork!, SCREEN.catalogue!, SCREEN.presumptive!],
+    },
+  ],
+
   admin: [
     {
       group: 'ofcGroupYourDesk',
@@ -719,6 +752,28 @@ export function navFor(role: string | undefined): readonly NavGroup[] {
 /** Kept for anything that wants the flat catalogue rather than an arrangement. */
 export const NAV: readonly NavGroup[] = NAV_FALLBACK;
 
+/**
+ * Whether this officer's own menu offers a screen.
+ *
+ * `/field-work` is the screen that tells the reader who they are — "You are
+ * signed in as a field agent" — and it was reachable by anybody who arrived at
+ * its path. A super administrator signed in while the address bar still read
+ * `#/field-work` from an earlier session, and the portal told them they were a
+ * field agent, with the administration menu sitting beside it saying otherwise.
+ *
+ * A screen that asserts something about the person reading it has to check,
+ * and the menu is already the authority on what a role may open — the landing
+ * redirect above says so in as many words. This is that same filter, asked
+ * about one path.
+ *
+ * Detail routes like `/agents/:id` are deliberately NOT covered: they are not
+ * menu items, they are where a menu item leads, and a blanket rule would take
+ * every one of them away.
+ */
+export function menuOffers(user: Principal | null, path: string): boolean {
+  return availableItems(user).some((item) => item.path === path);
+}
+
 export function availableItems(user: Principal | null): NavItem[] {
   if (!user) return [];
   return navFor(user?.role).flatMap((group) => group.items).filter(
@@ -768,17 +823,21 @@ export function landingPath(user: Principal | null): string | null {
 }
 
 /**
- * Roles that belong in this portal at all.
+ * Roles this portal is arranged around.
  *
- * A field agent holds `catalogue:read` and almost nothing else a government
- * screen is gated on, so signing in here gave them a shell with one item in it
- * — the revenue catalogue — and no way to do their job. Their tools are the
- * agent PWA: offline capture, assessment, collection, their own commission.
+ * Descriptive, not a gate. It used to be one: a field agent who signed in was
+ * logged straight back out and shown "your account belongs to the agent app",
+ * because the menu they would have got held the revenue catalogue and nothing
+ * else, which reads as broken software rather than as the wrong door.
  *
- * Turning them away at the door with somewhere to go is kinder than a working
- * session that contains nothing, and it is not a security boundary: every
- * screen behind it is permission-gated on the API regardless of which
- * application the request came from.
+ * Refusing them was never a security measure — the comment that introduced it
+ * said so, and it was true: every screen is gated on a permission the API
+ * checks again whichever application asks. So the fix for an empty menu is a
+ * menu, not a locked door. `NAV_BY_ROLE.agent` is that menu, and an agent now
+ * signs in, stays signed in, and lands on a screen written for them.
+ *
+ * What this list is still good for is knowing which roles have an arrangement
+ * designed for them rather than the fallback — which is what `navFor` asks.
  */
 export const PORTAL_ROLES = [
   'supervisor',
@@ -787,7 +846,3 @@ export const PORTAL_ROLES = [
   'auditor',
   'admin',
 ] as const;
-
-export function belongsInPortal(role: string): boolean {
-  return (PORTAL_ROLES as readonly string[]).includes(role);
-}

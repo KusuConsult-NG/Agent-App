@@ -341,6 +341,13 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'catalogue:read',
     'catalogue:configure',
     'assessment:read:all',
+    /*
+     * Issuing a lapsed bill again, from the arrears list. Not raising one:
+     * a revenue officer still holds no `assessment:create`, and a reissue
+     * carries the amount the assessment already fixed — migration 091
+     * refuses anything else.
+     */
+    'invoice:create',
     'invoice:read:all',
     'payment:read:all',
     'payment:reverse:request',

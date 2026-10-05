@@ -20,6 +20,7 @@ import { UNDER_OPEN_OBJECTION_SQL } from '../lib/enforcement-suspended';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, notFound } from '../lib/errors';
 import { endOfDay } from '../lib/calendar-day';
+import { OWED_INVOICE_SQL } from '../lib/payable-invoice';
 import { recordAudit } from './audit';
 
 export interface ComplianceBreakdown {
@@ -52,13 +53,42 @@ export async function computeComplianceScore(
     client,
     `SELECT
        (SELECT tin IS NOT NULL FROM taxpayers WHERE id = $1) AS has_tin,
-       count(*)::text AS raised_count,
+       /*
+        * What the State asked for and still asks for. A bill it withdrew —
+        * an objection upheld, a PAYE return taken back — is not one, and was
+        * counted as one: a trader with one levy paid scored 100, won an
+        * objection to a presumptive estimate, and scored 90, "1 of 2
+        * assessment period(s) settled". The decision in their favour cost
+        * them ten points and nothing they could do would earn them back.
+        * Paid statuses are untouched by this, because a paid bill is never
+        * withdrawn — it comes back through a refund instead.
+        */
+       count(*) FILTER (WHERE i.status <> 'CANCELLED')::text AS raised_count,
        count(*) FILTER (WHERE t.status IN ('SETTLED','RECEIPT_GENERATED','RECONCILIATION_PENDING'))::text
          AS paid_count,
-       count(*) FILTER (WHERE i.expires_at IS NOT NULL AND t.verified_at > i.expires_at)::text
-         AS late_count,
-       COALESCE((SELECT SUM(total_amount_kobo - amount_paid_kobo) FROM invoices
-                  WHERE taxpayer_id = $1 AND status IN ('UNPAID','PARTIALLY_PAID')), 0)::text
+       /*
+        * Late against the first deadline the citizen was given.
+        *
+        * A bill issued again carries a fresh window, and measuring against
+        * that window would make letting a bill lapse and having it reissued
+        * the way to pay late without it showing. The earliest deadline on the
+        * assessment is the one that was missed; a reissue renews the demand,
+        * not the date it was due.
+        */
+       count(*) FILTER (
+         WHERE t.verified_at > (SELECT min(d.expires_at) FROM invoices d
+                                 WHERE d.assessment_id = i.assessment_id)
+       )::text AS late_count,
+       -- Owed, lapsed or not.
+       --
+       -- This counted only what was still payable, because a lapsed bill could
+       -- never be cleared and counting it would have cost a citizen these
+       -- twenty-five points for good. A lapsed bill is now issued again and
+       -- paid, and one raised in error is withdrawn, so both clear; and
+       -- leaving it out meant letting a bill lapse raised the score by
+       -- twenty-five points at the deadline. lib/payable-invoice.ts has both.
+       COALESCE((SELECT SUM(i.total_amount_kobo - i.amount_paid_kobo) FROM invoices i
+                  WHERE i.taxpayer_id = $1 AND ${OWED_INVOICE_SQL}), 0)::text
          AS outstanding_kobo,
        /*
         * And how much of that is suspended, because it is under objection.
@@ -72,7 +102,7 @@ export async function computeComplianceScore(
         * decides the objection — see migration 078.
         */
        COALESCE((SELECT SUM(i.total_amount_kobo - i.amount_paid_kobo) FROM invoices i
-                  WHERE i.taxpayer_id = $1 AND i.status IN ('UNPAID','PARTIALLY_PAID')
+                  WHERE i.taxpayer_id = $1 AND ${OWED_INVOICE_SQL}
                     AND ${UNDER_OPEN_OBJECTION_SQL}), 0)::text
          AS disputed_kobo,
        /*
@@ -92,7 +122,8 @@ export async function computeComplianceScore(
        count(DISTINCT COALESCE(a.period_label, a.id::text)) FILTER (
          WHERE t.status IN ('SETTLED','RECEIPT_GENERATED','RECONCILIATION_PENDING')
        )::text AS distinct_periods,
-       count(DISTINCT COALESCE(a.period_label, a.id::text))::text AS assessed_periods,
+       count(DISTINCT COALESCE(a.period_label, a.id::text))
+         FILTER (WHERE i.status <> 'CANCELLED')::text AS assessed_periods,
        max(t.verified_at) AS last_payment_at,
        /*
         * Only reversals the taxpayer is answerable for.
@@ -171,7 +202,7 @@ export async function computeComplianceScore(
     components.push({
       factor: 'Late payments',
       points: -penalty,
-      detail: `${late} payment(s) made after the invoice expiry date`,
+      detail: `${late} payment(s) made after the bill's first payment deadline`,
     });
   }
 

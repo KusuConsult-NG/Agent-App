@@ -28,7 +28,9 @@ import { AppError, badRequest, conflict, notFound } from '../lib/errors';
 import { nextGroupCode } from '../lib/references';
 import { generateVerificationCode, maskPhone, sha256 } from '../lib/crypto';
 import { recordAudit } from './audit';
+import { queueNotification } from './notifications';
 import { groupAttestationUrl } from '../lib/public-urls';
+import { canonicalPhoneOrRaw } from '../lib/phone';
 
 const ATTESTATION_TTL_DAYS = 14;
 
@@ -52,6 +54,31 @@ export async function registerGroup(params: {
   actorRole: string;
 }): Promise<{ groupId: string; code: string }> {
   return withTransaction(async (client) => {
+    /*
+     * Not the person registering it.
+     *
+     * The leader's phone is where the attestation link goes, and the leader's
+     * confirmation is what checks the members the registering agent claims. A
+     * group registered with the agent's own number as the leader's would send
+     * the agent their own confirmation. The officer approving the group sees
+     * the number, but has no reason to know whose it is; this does.
+     */
+    const registrar = await queryOne<{ phone: string }>(
+      client,
+      'SELECT phone FROM users WHERE id = $1',
+      [params.actorId],
+    );
+    if (
+      registrar &&
+      canonicalPhoneOrRaw(registrar.phone) === canonicalPhoneOrRaw(params.input.leaderPhone)
+    ) {
+      throw badRequest(
+        'The leader’s phone is your own number. The leader confirms the members you record, ' +
+          'so it has to be their phone, not yours.',
+        [{ field: 'leaderPhone', issue: 'Enter the group leader’s own phone number.' }],
+      );
+    }
+
     const ward = params.input.wardId;
     if (ward) {
       // A ward that is not in the stated LGA would put the group on a map in
@@ -284,16 +311,41 @@ export async function addMember(params: {
  * One link for the group rather than one per member: a chairman with three
  * hundred farmers is not going to follow three hundred links, and a design
  * nobody can complete is a control that does not exist.
+ *
+ * SENT TO THE LEADER, AND RETURNED TO NOBODY.
+ *
+ * This returned the link to whoever asked, and agents may ask: they hold
+ * `group:register`, and the field screen showed the link under "send this to
+ * the group leader". Nothing sent it to the leader. So an agent could record
+ * members, open the link and confirm them, and the record named the leader as
+ * the person who had. Measured end to end before this change: the claimed
+ * member went to ATTESTED, attested by the leader's name, with no message to
+ * the leader's phone. ATTESTED is what allocations award on.
+ *
+ * Now it goes by SMS to the leader's phone as the group was registered and
+ * approved, and the caller is told the number it went to, masked. If no
+ * message can be queued the request is refused and nothing is recorded: with
+ * the link held by nobody, an invitation without a message is one nobody can
+ * ever answer.
  */
 export async function inviteLeaderToAttest(params: {
   groupId: string;
   actorId: string;
   actorRole: string;
-}): Promise<{ invitationUrl: string; expiresAt: Date }> {
+}): Promise<{ sentTo: string; expiresAt: Date }> {
   return withTransaction(async (client) => {
-    const group = await queryOne<{ id: string; status: string; leader_phone: string }>(
+    const group = await queryOne<{
+      id: string;
+      status: string;
+      name: string;
+      code: string;
+      leader_name: string;
+      leader_phone: string;
+      leader_taxpayer_id: string | null;
+    }>(
       client,
-      'SELECT id, status, leader_phone FROM taxpayer_groups WHERE id = $1',
+      `SELECT id, status, name, code, leader_name, leader_phone, leader_taxpayer_id
+         FROM taxpayer_groups WHERE id = $1`,
       [params.groupId],
     );
     if (!group) throw notFound('That group');
@@ -311,6 +363,38 @@ export async function inviteLeaderToAttest(params: {
       [params.groupId, sha256(token), expiresAt],
     );
 
+    const leaderPhone = canonicalPhoneOrRaw(group.leader_phone);
+    const queued = await queueNotification(client, {
+      event: 'GROUP_ATTESTATION_INVITATION',
+      recipientOverride: leaderPhone,
+      // For the language they read, when the leader is a registered taxpayer.
+      // The number is still the group's: the override wins over theirs.
+      taxpayerId: group.leader_taxpayer_id,
+      channels: ['SMS'],
+      variables: {
+        name: group.leader_name,
+        group: group.name,
+        code: group.code,
+        link: groupAttestationUrl(token),
+        expiry: expiresAt.toISOString().slice(0, 10),
+      },
+      // The link is the credential, as a referee's is: kept only until the
+      // gateway takes it, and masked in the copy the platform keeps.
+      secretVariables: ['link'],
+      entityType: 'taxpayer_group',
+      entityId: params.groupId,
+    });
+    if (queued === 0) {
+      throw new AppError({
+        statusCode: 503,
+        code: 'ATTESTATION_NOT_SENT',
+        message:
+          'The confirmation link could not be sent to the group leader, so no request was made. ' +
+          'Try again later.',
+        nextStep: 'If this keeps happening, tell PSIRS support: the leader’s message is not being sent.',
+      });
+    }
+
     await recordAudit(client, {
       actorId: params.actorId,
       actorRole: params.actorRole,
@@ -319,10 +403,7 @@ export async function inviteLeaderToAttest(params: {
       entityId: params.groupId,
     });
 
-    return {
-      invitationUrl: groupAttestationUrl(token),
-      expiresAt,
-    };
+    return { sentTo: maskPhone(leaderPhone), expiresAt };
   });
 }
 

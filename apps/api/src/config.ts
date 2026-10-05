@@ -165,6 +165,32 @@ export const config = {
     statementTimeoutMs: int('DB_STATEMENT_TIMEOUT_MS', 15_000),
 
     /**
+     * How long a request may wait for a connection before giving up.
+     *
+     * `pg` waits for ever by default, and for ever is the worst answer
+     * available. When the pool is exhausted — several instances against a
+     * hosted pooler with a client limit of its own, plus the scheduled jobs —
+     * a request simply stops. Nothing is logged, because nothing has failed
+     * yet. What a person sees is a sign-in that spins until the proxy gives up
+     * and answers 504, and the only clue is in the proxy's log rather than the
+     * platform's:
+     *
+     *     upstream timed out (110: Operation timed out) while reading
+     *     response header from upstream, request: "POST /api/v1/auth/login"
+     *
+     * Observed on a deployment where two instances of this API, each with a
+     * pool of 10, met a pooler limited to 15 clients in session mode. The API
+     * logged the exhaustion only from its background jobs; the web requests
+     * were still waiting.
+     *
+     * Bounded, the same situation answers in seconds with a sentence that
+     * names the database, which is the difference between a diagnosable
+     * outage and a silent one. It is long enough that a healthy pool under
+     * load never reaches it.
+     */
+    connectionTimeoutMs: int('DB_CONNECTION_TIMEOUT_MS', 10_000),
+
+    /**
      * How long a transaction may sit open with nothing running.
      *
      * `statement_timeout` bounds a slow query. It does nothing about a
@@ -215,6 +241,41 @@ export const config = {
 
   payments: {
     gateway: process.env.PAYMENT_GATEWAY ?? 'mock',
+
+    /**
+     * The mock gateway permitted on a deployment, by name, for a demonstration.
+     *
+     * The production boot check refuses `PAYMENT_GATEWAY=mock`, and it is
+     * right to: a mock gateway in production accepts payments nobody ever
+     * made, and this is tax. But a demonstration deployment is a real
+     * deployment, built from the production image with
+     * `NODE_ENV=production`, and on it a field agent can start a collection
+     * and never see one complete — there is no gateway to pay through and
+     * `POST /payments/simulate` is refused. The app the presenter is showing
+     * is dead at the one screen it exists for.
+     *
+     * The alternative offered was taking `NODE_ENV` off production, which
+     * also turns off the published-secret refusal, the minimum secret length
+     * and the replica warning. Weakening four controls to get one is a bad
+     * trade,
+     * so this names the one — exactly as `DEMO_RELAX_DEVICE_BINDING` does for
+     * device binding, and deliberately in the same shape.
+     *
+     * WHAT IT DOES NOT TURN OFF. Every other production refusal stands: a
+     * mock TIN service, local storage and a per-process rate limiter still
+     * refuse to boot. The webhook signature check is untouched, and so is
+     * every rule about which gateway status codes may mark money received —
+     * this permits the *development* gateway, it does not loosen a real one.
+     *
+     * Independent of `isProduction` on purpose. Written as
+     * `isProduction ? … : …` it would be inert in exactly the place a
+     * demonstration runs, which is the trap `DEVICE_AUTO_APPROVE` fell into
+     * and the reason that flag needed a second one beside it.
+     *
+     * NEVER SET THIS ON A DEPLOYMENT COLLECTING REAL MONEY. A receipt issued
+     * with this flag on is not evidence that anybody paid.
+     */
+    demoAllowMockGateway: bool('DEMO_ALLOW_MOCK_GATEWAY', false),
     webhookSecret: secret('PAYMENT_WEBHOOK_SECRET'),
     publicKey: process.env.PAYMENT_PUBLIC_KEY ?? '',
     secretKey: process.env.PAYMENT_SECRET_KEY ?? '',
@@ -574,7 +635,7 @@ export const config = {
      * `NODE_ENV=production`, so that flag is inert exactly where a demo
      * actually runs — and the alternative offered was to take `NODE_ENV` off
      * production on that service, which would also turn off the
-     * published-secret refusal, the cookie hardening and the replica
+     * published-secret refusal, the minimum secret length and the replica
      * warnings. Weakening four things to get one is a bad trade.
      *
      * So this names the one thing. Set it and an agent may collect from a
@@ -626,7 +687,17 @@ if (isProduction) {
   // Fail fast rather than run a government payment platform in a half-configured
   // state: a mock gateway in production would accept payments nobody ever made.
   const problems: string[] = [];
-  if (config.payments.gateway === 'mock') problems.push('PAYMENT_GATEWAY is still "mock"');
+  /*
+   * Unless the deployment named itself a demonstration.
+   *
+   * Read from `config`, not the environment, because unlike
+   * `DEVICE_AUTO_APPROVE` this flag is not forced off anywhere — what it says
+   * is what is in effect. A deployment that sets it is saying the money here
+   * is not real, and `server.ts` says so in the log at every boot.
+   */
+  if (config.payments.gateway === 'mock' && !config.payments.demoAllowMockGateway) {
+    problems.push('PAYMENT_GATEWAY is still "mock"');
+  }
 
   /*
    * Read from the environment rather than from `config`, which has already

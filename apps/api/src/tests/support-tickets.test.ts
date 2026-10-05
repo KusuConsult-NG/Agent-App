@@ -179,7 +179,16 @@ describe('A ticket is only visible to the person who raised it, and to support',
     assert.equal(peek.status, 404, 'and 404, not 403 — its existence is not disclosed either');
 
     const theirList = await get('/support/tickets', { token: outsider });
-    assert.equal(theirList.body.length, 0, 'their own list shows only their own');
+    /*
+     * `.tickets`, not the body. This endpoint answered with a bare array until
+     * the conduct-complaint figure moved onto the server — it had been counted
+     * in the browser over a page capped at fifty — so the list now travels
+     * beside its own totals. `matched` is asserted too: it is every ticket the
+     * viewer may see, and nought is the whole point of this case.
+     */
+    const theirs = theirList.body as { tickets: unknown[]; matched: number };
+    assert.equal(theirs.tickets.length, 0, 'their own list shows only their own');
+    assert.equal(theirs.matched, 0, 'and the figure beside it must not leak the count either');
   });
 
   it('shows it to support staff', async () => {
@@ -332,8 +341,10 @@ describe('The categories PRD §78 lists are all usable', () => {
 
       const filtered = await get(`/support/tickets?category=${category}`, { token: officer });
       assert.equal(filtered.status, 200, JSON.stringify(filtered.body));
-      assert.equal(filtered.body.length, 1, `the desk's ${category} filter returned nothing`);
-      assert.equal(filtered.body[0].subject, subject);
+      const page = filtered.body as { tickets: unknown[]; matched: number };
+      assert.equal(page.tickets.length, 1, `the desk's ${category} filter returned nothing`);
+      assert.equal(page.matched, 1, `the ${category} figure disagrees with its own table`);
+      assert.equal((filtered.body as { tickets: { subject: string }[] }).tickets[0]!.subject, subject);
     }
   });
 
@@ -374,7 +385,7 @@ describe('The desk sees the urgent ones first', () => {
     const queue = await get('/support/tickets', { token: officer });
     assert.equal(queue.status, 200, JSON.stringify(queue.body));
     assert.deepEqual(
-      queue.body.map((row: { priority: string }) => row.priority),
+      (queue.body as { tickets: { priority: string }[] }).tickets.map((row) => row.priority),
       ['URGENT', 'NORMAL', 'LOW'],
       'newest-first ordering would have given NORMAL, LOW, URGENT',
     );
@@ -420,9 +431,10 @@ describe('A ticket can be put on somebody’s desk', () => {
 
     const mine = await get('/support/tickets?assignedToMe=true', { token: officer });
     assert.equal(mine.status, 200, JSON.stringify(mine.body));
-    assert.equal(mine.body.length, 1);
-    assert.equal(mine.body[0].id, raised.body.id);
-    assert.equal(mine.body[0].assigned_to_name, 'Desk Officer');
+    assert.equal((mine.body as { tickets: unknown[] }).tickets.length, 1);
+    const onMyDesk = (mine.body as { tickets: { id: string; assigned_to_name: string }[] }).tickets;
+    assert.equal(onMyDesk[0]!.id, raised.body.id);
+    assert.equal(onMyDesk[0]!.assigned_to_name, 'Desk Officer');
 
     // And the assignment joins the conversation, so the agent who raised it
     // can see it has been picked up rather than watching a silent queue.
@@ -432,5 +444,76 @@ describe('A ticket can be put on somebody’s desk', () => {
       detail.body.messages.some((m: { body: string }) => /assigned/i.test(m.body)),
       `the thread should say it was assigned: ${JSON.stringify(detail.body.messages)}`,
     );
+  });
+});
+
+/*
+ * The notice about a reply is best-effort. The reply is not.
+ *
+ * `notifyRaiser` caught a failure to queue the notice so that it "must not roll
+ * back the reply it was announcing". But it ran inside the reply's transaction,
+ * and PostgreSQL abandons a transaction at its first failed statement: catching
+ * the error in TypeScript does not un-fail it, and the COMMIT that followed was
+ * quietly turned into a ROLLBACK. The route answered 201, and the reply, the
+ * status change and the audit entry were all gone.
+ *
+ * Made to happen here by refusing the notice's insert, which stands for any
+ * failure inside it: a lock timeout, a constraint a later migration adds.
+ */
+describe('A reply survives a notice about it that cannot be queued', () => {
+  async function refuseTicketNotices(): Promise<void> {
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION refuse_ticket_notice() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.event = 'SUPPORT_TICKET_UPDATED' THEN
+          RAISE EXCEPTION 'notice refused for this test';
+        END IF;
+        RETURN NEW;
+      END $$ LANGUAGE plpgsql`);
+    await pool.query(`
+      CREATE TRIGGER refuse_ticket_notice BEFORE INSERT ON notifications
+        FOR EACH ROW EXECUTE FUNCTION refuse_ticket_notice()`);
+  }
+  async function allowTicketNotices(): Promise<void> {
+    await pool.query('DROP TRIGGER IF EXISTS refuse_ticket_notice ON notifications');
+    await pool.query('DROP FUNCTION IF EXISTS refuse_ticket_notice()');
+  }
+
+  it('keeps a reply from the desk, and moves the ticket into progress', async () => {
+    const created = await raise(agentToken);
+    await refuseTicketNotices();
+    try {
+      const reply = await post(
+        `/support/tickets/${created.body.id}/messages`,
+        { body: 'We can see the payment at the gateway. Issuing the receipt now.' },
+        { token: officer },
+      );
+      assert.equal(reply.status, 201, JSON.stringify(reply.body));
+    } finally {
+      await allowTicketNotices();
+    }
+
+    const detail = await get(`/support/tickets/${created.body.id}`, { token: agentToken });
+    assert.equal(detail.body.messages.length, 1, 'the route said the reply was saved; it was not');
+    assert.equal(detail.body.status, 'IN_PROGRESS');
+  });
+
+  it('keeps a resolution, with what was done about it', async () => {
+    const created = await raise(agentToken);
+    await refuseTicketNotices();
+    try {
+      const resolved = await post(
+        `/support/tickets/${created.body.id}/update`,
+        { status: 'RESOLVED', resolution: 'Receipt issued against the gateway record.' },
+        { token: officer },
+      );
+      assert.equal(resolved.status, 200, JSON.stringify(resolved.body));
+    } finally {
+      await allowTicketNotices();
+    }
+
+    const detail = await get(`/support/tickets/${created.body.id}`, { token: agentToken });
+    assert.equal(detail.body.status, 'RESOLVED', 'the route said the ticket was resolved; it was not');
+    assert.match(detail.body.resolution ?? '', /Receipt issued/);
   });
 });

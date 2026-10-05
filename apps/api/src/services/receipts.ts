@@ -25,6 +25,7 @@ import { queryOne, query } from '../db/pool';
 import { generateVerificationCode, hashIdentityNumber, normaliseVerificationCode } from '../lib/crypto';
 import { nextReceiptNumber } from '../lib/references';
 import { notFound } from '../lib/errors';
+import { CHARGE_PERIOD_SHUT_SQL } from '../lib/payable-invoice';
 import {
   registerDocument,
   renderAcknowledgementPdf,
@@ -332,7 +333,7 @@ export interface PublicVerificationResult {
   lga?: string;
   integrityConfirmed?: boolean;
   /**
-   * Which of the eleven answers this is.
+   * Which of the answers this is.
    *
    * `message` is the same answer in English. Both travel: a browser reads the
    * code and says it in the reader's language, and anything else still gets a
@@ -359,6 +360,91 @@ export interface PublicVerificationResult {
  * that a future issuing path which forgets to revoke cannot resurrect a
  * reversed receipt by its document number.
  */
+interface InvoiceForVerification {
+  invoice_number: string;
+  status: string;
+  expires_at: Date | null;
+  issued_at: Date;
+  reissued_as: string | null;
+  total_amount_kobo: string;
+  revenue_item: string;
+  revenue_item_ha: string | null;
+  lga_name: string | null;
+  /** In date, but its charge cannot take a payment as it stands. */
+  needs_reissue: boolean;
+}
+
+/** One invoice, by its id, or by the number or code a citizen typed. */
+function invoiceByHandle(
+  db: Db,
+  handle: { id: string } | { typed: string; normalised: string },
+): Promise<InvoiceForVerification | null> {
+  const byId = 'id' in handle;
+  return queryOne<InvoiceForVerification>(
+    db,
+    `SELECT i.invoice_number, i.status, i.expires_at, i.issued_at, i.reissued_as,
+            i.total_amount_kobo::text, ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+            l.name AS lga_name,
+            -- Ended by a reversal, or raised in a month since closed: either
+            -- way an agent has to issue it again before it can be paid.
+            EXISTS (
+              SELECT 1 FROM transactions t
+               WHERE t.invoice_id = i.id
+                 AND (t.status IN ('REVERSED', 'REFUNDED')
+                      OR (t.status IN ('INVOICE_GENERATED', 'FAILED') AND ${CHARGE_PERIOD_SHUT_SQL} IS NOT NULL))
+            ) AS needs_reissue
+       FROM invoices i
+       JOIN assessments a ON a.id = i.assessment_id
+       JOIN revenue_items ri ON ri.id = a.revenue_item_id
+       LEFT JOIN lgas l ON l.id = a.lga_id
+      WHERE ${
+        byId
+          ? 'i.id = $1'
+          : "upper(i.invoice_number) = $1 OR replace(upper(i.verification_code), '-', '') = $2"
+      }`,
+    byId ? [handle.id] : [handle.typed, handle.normalised],
+  );
+}
+
+/**
+ * What a citizen holding an invoice needs told: whether it can be paid.
+ *
+ * The amount and the levy come with it, as they do for a receipt, so a
+ * trader asked for more than the bill — or for a bill already settled —
+ * can see so; no name, no phone, no TIN.
+ */
+function answerForInvoice(
+  invoice: InvoiceForVerification,
+  extra: Partial<PublicVerificationResult>,
+): PublicVerificationResult {
+  const pastDeadline = invoice.expires_at !== null && invoice.expires_at.getTime() <= Date.now();
+  const reason: VerificationReason =
+    invoice.status === 'PAID'
+      ? 'INVOICE_PAID'
+      : invoice.status === 'CANCELLED'
+        ? invoice.reissued_as
+          ? 'INVOICE_REPLACED'
+          : 'INVOICE_WITHDRAWN'
+        : invoice.status === 'EXPIRED' || pastDeadline
+          ? 'INVOICE_LAPSED'
+          : invoice.needs_reissue
+            ? 'INVOICE_REISSUE_NEEDED'
+            : 'INVOICE_PAYABLE';
+  return {
+    status: reason === 'INVOICE_PAID' || reason === 'INVOICE_PAYABLE' ? 'VALID' : 'INVALID',
+    documentNumber: invoice.invoice_number,
+    documentType: 'INVOICE',
+    revenueType: invoice.revenue_item,
+    revenueTypeHa: invoice.revenue_item_ha,
+    amountKobo: invoice.total_amount_kobo,
+    issuedAt: invoice.issued_at.toISOString(),
+    lga: invoice.lga_name ?? undefined,
+    ...extra,
+    reason,
+    message: verificationSentence(reason),
+  };
+}
+
 export async function verifyPublicly(
   db: Db,
   input: string,
@@ -465,6 +551,7 @@ export async function verifyPublicly(
     storage_reference: string;
     checksum: string;
     transaction_status: string | null;
+    invoice_id: string | null;
   }>(
     db,
     /*
@@ -478,7 +565,8 @@ export async function verifyPublicly(
      * and only one of them means they are square with the government.
      */
     `SELECT d.document_number, d.document_type, d.issued_at, d.expires_at, d.status,
-            d.storage_reference, d.checksum, t.status AS transaction_status
+            d.storage_reference, d.checksum, t.status AS transaction_status,
+            CASE WHEN d.entity_type = 'invoice' THEN d.entity_id END AS invoice_id
        FROM documents d
        LEFT JOIN transactions t ON d.entity_type = 'transaction' AND t.id = d.entity_id
       WHERE d.document_number = $1
@@ -487,6 +575,13 @@ export async function verifyPublicly(
   );
 
   if (!document) {
+    /*
+     * An invoice whose PDF was never made has no document row, and its code
+     * is printed on the officer's invoice screen. Answering NOT_FOUND told a
+     * citizen holding a genuine bill that it "was not issued by PSIRS".
+     */
+    const invoice = await invoiceByHandle(db, { typed, normalised });
+    if (invoice) return answerForInvoice(invoice, {});
     return {
       status: 'NOT_FOUND',
       reason: 'NOT_FOUND',
@@ -524,6 +619,18 @@ export async function verifyPublicly(
       reason: 'DOCUMENT_FINGERPRINT_MISMATCH',
       message: verificationSentence('DOCUMENT_FINGERPRINT_MISMATCH'),
     };
+  }
+
+  // An invoice is answered by the bill, not by its paper: see INVOICE_PAYABLE.
+  if (document.document_type === 'INVOICE' && document.invoice_id) {
+    const invoice = await invoiceByHandle(db, { id: document.invoice_id });
+    if (invoice) {
+      return answerForInvoice(invoice, {
+        documentNumber: document.document_number,
+        documentType: document.document_type,
+        integrityConfirmed: integrity === 'MATCHED' ? true : undefined,
+      });
+    }
   }
 
   /*

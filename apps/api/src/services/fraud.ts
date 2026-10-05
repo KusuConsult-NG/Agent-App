@@ -16,6 +16,8 @@ import type { FraudRule, FraudSeverity } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { query, queryOne } from '../db/pool';
 import { log } from '../lib/logger';
+import { MONEY_TAKEN_STATES_SQL, RETURNED_STATES_SQL } from '../lib/revenue-states';
+import { CURRENT_FINDINGS_SQL } from '../lib/reconciliation-findings';
 
 interface FlagInput {
   rule: FraudRule | 'AMOUNT_MISMATCH';
@@ -474,13 +476,47 @@ export async function evaluateRefereeRisk(
 export async function runFraudSweep(client: PoolClient): Promise<{ flagsRaised: number }> {
   let raised = 0;
 
+  /*
+   * OVER THE COLLECTIONS, NOT OVER EVERYTHING THE AGENT TOUCHED.
+   *
+   * This divided the reversals by `count(*)` of every transaction the agent
+   * had in thirty days. A transaction row exists from INITIATED onward, so
+   * that count is dominated by assessments nobody paid — which cannot be
+   * reversed, and which an agent raises as many of as they like.
+   *
+   * Measured before it was changed. Eight settled collections and two
+   * reversed is a twenty per cent rate and raises the flag with
+   * `sample: 10`. The same eight, the same two, plus twenty assessments
+   * nobody paid is two in thirty — six point seven per cent — and raises
+   * nothing at all. The reversals were identical; the flag disappeared
+   * because the agent had also done more of the ordinary part of their job.
+   *
+   * That is the wrong direction for a HIGH-severity rule on the pattern it
+   * watches. Collecting cash, reversing the electronic record and keeping the
+   * difference is the fraud this rule is named for, and the agent doing it
+   * controls the denominator that hid them.
+   *
+   * `reversalMinimumSample` rides on the same fix. "At least ten" has to mean
+   * ten collections; on the old count it meant ten transactions, so an agent
+   * with nine collections and eight unpaid assessments cleared the minimum
+   * without having a tenth collection to reverse.
+   *
+   * A LIMIT THIS DOES NOT FIX, SAID RATHER THAN LEFT QUIET
+   *
+   * The window is on `created_at`. A collection taken forty days ago and
+   * reversed yesterday is in neither count, so reversing old work is still
+   * invisible to this rule. Fixing that needs the moment of reversal, which
+   * no column on `transactions` records — it is in the audit trail, and
+   * reading it is a different query and its own change.
+   */
   const reversalHeavy = await query<{ agent_id: string; total: string; reversed: string }>(
     client,
     `SELECT agent_id,
             count(*)::text AS total,
-            count(*) FILTER (WHERE status IN ('REVERSED','REFUNDED'))::text AS reversed
+            count(*) FILTER (WHERE status IN ${RETURNED_STATES_SQL})::text AS reversed
        FROM transactions
       WHERE agent_id IS NOT NULL AND created_at > now() - interval '30 days'
+        AND status IN ${MONEY_TAKEN_STATES_SQL}
       GROUP BY agent_id
      HAVING count(*) >= $1`,
     [THRESHOLDS.reversalMinimumSample],
@@ -497,7 +533,19 @@ export async function runFraudSweep(client: PoolClient): Promise<{ flagsRaised: 
         entityType: 'AGENT',
         entityId: row.agent_id,
         agentId: row.agent_id,
-        detail: { reversalRatePercent: Number(rate.toFixed(2)), sample: total },
+        /*
+         * `sample` keeps its name and changes its meaning, which is the
+         * correction: it is the number of collections the rate was taken
+         * over, and on the old query it was the agent's whole month.
+         * `returned` is added because a rate an officer cannot decompose is a
+         * rate they have to take on trust — two of eight and fifty of two
+         * hundred are both twenty-five per cent and are not the same morning.
+         */
+        detail: {
+          reversalRatePercent: Number(rate.toFixed(2)),
+          sample: total,
+          returned: reversed,
+        },
       });
       raised += 1;
     }
@@ -781,7 +829,7 @@ async function sweepManualIntervention(client: PoolClient): Promise<number> {
        FROM approvals
       WHERE approval_type IN (
               'MANUAL_CORRECTION', 'TAXPAYER_ADJUSTMENT', 'PAYMENT_REVERSAL',
-              'REFUND', 'COMMISSION_ADJUSTMENT')
+              'REFUND', 'COMMISSION_ADJUSTMENT', 'INVOICE_WITHDRAWAL')
         AND status IN ('APPROVED', 'EXECUTED')
         AND requested_at > now() - interval '30 days'
       GROUP BY requested_by
@@ -825,7 +873,14 @@ export async function leakageDashboard(db: Db) {
       ),
       queryOne(
         db,
-        `SELECT count(*)::text AS count FROM reconciliation_records WHERE status = 'DUPLICATE_PAYMENT'`,
+        /*
+         * Over the current finding per item, not every run's row. A duplicate
+         * payment is recorded afresh by each of the roughly eight sweeps whose
+         * window covers it, so this read eight for one — and resolving it
+         * marks only the newest row, so the older ones went on counting.
+         */
+        `SELECT count(*)::text AS count FROM (${CURRENT_FINDINGS_SQL}) current_findings
+          WHERE status = 'DUPLICATE_PAYMENT'`,
       ),
       query(
         db,

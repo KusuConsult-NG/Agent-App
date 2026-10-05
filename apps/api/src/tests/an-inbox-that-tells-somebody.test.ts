@@ -35,7 +35,7 @@ import {
   stopTestServer,
 } from './helpers';
 import { query, queryOne, withTransaction } from '../db/pool';
-import { forget } from '../services/rbac-store';
+import { createRole, forget } from '../services/rbac-store';
 import { seedReferenceData } from '../db/seed';
 import { raiseSystemAlerts } from '../services/officer-inbox';
 import { jobHealth } from '../services/jobs';
@@ -190,6 +190,68 @@ describe('an officer is told, and it is recorded that they were', () => {
   });
 
   /*
+   * Who may be named was a list of five role names. An administrator can
+   * create a role, so a colleague in one — able to open every case — was
+   * dropped from the comment without a word, and never told. The test the
+   * list was standing in for is whether the person can open the case.
+   */
+  it('tells an officer in a role an administrator created, when that role can open cases', async () => {
+    await createRole(
+      { userId: ids.admin!, role: 'admin' },
+      { name: 'compliance_officer', label: 'Compliance officer', isPortal: true, copyFrom: 'revenue_officer' },
+    );
+    forget();
+    const colleague = await createGovernmentUser({
+      fullName: 'Compliance Officer',
+      phone: '+2348086000901',
+      role: 'compliance_officer',
+    });
+    const theirToken = (await loginAs('+2348086000901')).accessToken;
+
+    const caseId = await openCaseFor(ids.admin!);
+    const commented = await post(
+      `/government/cases/${caseId}/comments`,
+      { body: 'Can you check this against the compliance file?', mentions: [colleague] },
+      auth('admin'),
+    );
+    assert.ok(commented.status < 300, JSON.stringify(commented.body));
+
+    const theirs = await get('/government/inbox?unreadOnly=true', { token: theirToken });
+    assert.equal(theirs.status, 200, JSON.stringify(theirs.body));
+    const rows = (theirs.body as { notifications: { kind: string }[] }).notifications;
+    assert.equal(rows.length, 1, 'the colleague was named in the comment and never told');
+    assert.equal(rows[0]!.kind, 'CASE_MENTION');
+  });
+
+  it('does not name somebody whose role cannot open the case', async () => {
+    // A portal role with nothing granted: naming them would put their name in
+    // a queue they cannot open, which is what the list was there to prevent.
+    await createRole(
+      { userId: ids.admin!, role: 'admin' },
+      { name: 'front_desk', label: 'Front desk', isPortal: true },
+    );
+    forget();
+    const clerk = await createGovernmentUser({
+      fullName: 'Front Desk Clerk',
+      phone: '+2348086000902',
+      role: 'front_desk',
+    });
+
+    const caseId = await openCaseFor(ids.admin!);
+    await post(
+      `/government/cases/${caseId}/comments`,
+      { body: 'Please file this.', mentions: [clerk] },
+      auth('admin'),
+    );
+    const told = await queryOne<{ n: string }>(
+      pool,
+      `SELECT count(*)::text AS n FROM officer_notifications WHERE user_id = $1`,
+      [clerk],
+    );
+    assert.equal(Number(told!.n), 0);
+  });
+
+  /*
    * The property the whole table exists for: an officer can say they have seen
    * something, and it stays said.
    */
@@ -275,10 +337,10 @@ describe('an officer is told, and it is recorded that they were', () => {
       {
         // A kind the administrator may request: `PAYMENT_REVERSAL` needs
         // `payment:reverse:request`, which they deliberately do not hold.
-        approvalType: 'COMMISSION_ADJUSTMENT',
-        entityType: 'commission',
-        entityId: 'CMS-2026-000001',
-        reason: 'The commission was accrued at the wrong rate for this ward.',
+        approvalType: 'AGENT_OVERRIDE_ACTIVATION',
+        entityType: 'agent',
+        entityId: 'AGT-2026-000001',
+        reason: 'The referee has been unreachable for six weeks.',
       },
       auth('admin'),
     );
@@ -331,6 +393,21 @@ describe('an officer is told, and it is recorded that they were', () => {
     assert.equal(admin.status, 403, JSON.stringify(admin.body));
     assert.match(JSON.stringify(admin.body), /payment:reverse:request/);
 
+    // Nor by calling it a refund: the same money goes back by the same
+    // function, and this was the way round the permission.
+    const refund = await post(
+      '/government/approvals',
+      {
+        approvalType: 'REFUND',
+        entityType: 'transaction',
+        entityId: 'TXN-2026-000002',
+        reason: 'The same request, under the other name.',
+      },
+      auth('admin'),
+    );
+    assert.equal(refund.status, 403, JSON.stringify(refund.body));
+    assert.match(JSON.stringify(refund.body), /payment:reverse:request/);
+
     // And the roles that hold it are unaffected.
     const officer = await post(
       '/government/approvals',
@@ -348,10 +425,10 @@ describe('an officer is told, and it is recorded that they were', () => {
     const ordinary = await post(
       '/government/approvals',
       {
-        approvalType: 'COMMISSION_ADJUSTMENT',
-        entityType: 'commission',
-        entityId: 'CMS-1',
-        reason: 'The commission was accrued at the wrong rate.',
+        approvalType: 'AGENT_OVERRIDE_ACTIVATION',
+        entityType: 'agent',
+        entityId: 'AGT-1',
+        reason: 'The referee has been unreachable for six weeks.',
       },
       auth('admin'),
     );

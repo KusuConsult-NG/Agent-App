@@ -17,13 +17,24 @@
 import type { Db } from '../db/pool';
 import { query, queryOne } from '../db/pool';
 import { REVENUE_STATES_SQL } from '../lib/revenue-states';
+import {
+  PLATEAU_TODAY_SQL,
+  plateauDateSql,
+  plateauMidnightSql,
+  plateauWallClockSql,
+} from '../lib/calendar-day';
 import { outstandingExceptionSql } from './reconciliation';
+import { CURRENT_FINDINGS_SQL } from '../lib/reconciliation-findings';
+import { OWED_INVOICE_SQL, PAYABLE_INVOICE_SQL } from '../lib/payable-invoice';
 import {
   lgaScopeSql,
   scopeParams,
   transactionScopeSql,
   type ReportScope,
 } from './report-scope';
+
+/** The first day of this month on Plateau's calendar, as a SQL `date`. */
+const PLATEAU_MONTH_START_SQL = `date_trunc('month', ${PLATEAU_TODAY_SQL})::date`;
 
 
 /**
@@ -84,41 +95,41 @@ export async function executiveDashboard(
        */
       `WITH windows AS (
          SELECT
-           CURRENT_DATE                                   AS today,
-           CURRENT_DATE - 1                               AS yesterday,
-           date_trunc('week', CURRENT_DATE)::date         AS week_start,
-           (date_trunc('week', CURRENT_DATE) - interval '7 days')::date  AS prev_week_start,
-           date_trunc('month', CURRENT_DATE)::date        AS month_start,
-           (date_trunc('month', CURRENT_DATE) - interval '1 month')::date AS prev_month_start,
-           (date_trunc('month', CURRENT_DATE) - interval '1 day')::date   AS prev_month_end,
-           date_trunc('year', CURRENT_DATE)::date         AS year_start,
-           (date_trunc('year', CURRENT_DATE) - interval '1 year')::date   AS prev_year_start,
-           (CURRENT_DATE - date_trunc('week', CURRENT_DATE)::date)  AS days_into_week,
-           (CURRENT_DATE - date_trunc('month', CURRENT_DATE)::date) AS days_into_month
+           ${PLATEAU_TODAY_SQL}                                   AS today,
+           ${PLATEAU_TODAY_SQL} - 1                               AS yesterday,
+           date_trunc('week', ${PLATEAU_TODAY_SQL})::date         AS week_start,
+           (date_trunc('week', ${PLATEAU_TODAY_SQL}) - interval '7 days')::date  AS prev_week_start,
+           date_trunc('month', ${PLATEAU_TODAY_SQL})::date        AS month_start,
+           (date_trunc('month', ${PLATEAU_TODAY_SQL}) - interval '1 month')::date AS prev_month_start,
+           (date_trunc('month', ${PLATEAU_TODAY_SQL}) - interval '1 day')::date   AS prev_month_end,
+           date_trunc('year', ${PLATEAU_TODAY_SQL})::date         AS year_start,
+           (date_trunc('year', ${PLATEAU_TODAY_SQL}) - interval '1 year')::date   AS prev_year_start,
+           (${PLATEAU_TODAY_SQL} - date_trunc('week', ${PLATEAU_TODAY_SQL})::date)  AS days_into_week,
+           (${PLATEAU_TODAY_SQL} - date_trunc('month', ${PLATEAU_TODAY_SQL})::date) AS days_into_month
        ),
        sums AS (
          SELECT
-           COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.created_at::date = w.today),0) AS today,
-           COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.created_at::date = w.yesterday),0) AS yesterday,
+           COALESCE(SUM(t.amount_kobo) FILTER (WHERE ${plateauDateSql('t.created_at')} = w.today),0) AS today,
+           COALESCE(SUM(t.amount_kobo) FILTER (WHERE ${plateauDateSql('t.created_at')} = w.yesterday),0) AS yesterday,
 
-           COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.created_at::date >= w.week_start),0) AS week,
+           COALESCE(SUM(t.amount_kobo) FILTER (WHERE ${plateauDateSql('t.created_at')} >= w.week_start),0) AS week,
            COALESCE(SUM(t.amount_kobo) FILTER (
-             WHERE t.created_at::date >= w.prev_week_start
-               AND t.created_at::date <= w.prev_week_start + w.days_into_week),0) AS prev_week,
+             WHERE ${plateauDateSql('t.created_at')} >= w.prev_week_start
+               AND ${plateauDateSql('t.created_at')} <= w.prev_week_start + w.days_into_week),0) AS prev_week,
 
-           COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.created_at::date >= w.month_start),0) AS month,
+           COALESCE(SUM(t.amount_kobo) FILTER (WHERE ${plateauDateSql('t.created_at')} >= w.month_start),0) AS month,
            COALESCE(SUM(t.amount_kobo) FILTER (
-             WHERE t.created_at::date >= w.prev_month_start
-               AND t.created_at::date <= LEAST(
+             WHERE ${plateauDateSql('t.created_at')} >= w.prev_month_start
+               AND ${plateauDateSql('t.created_at')} <= LEAST(
                      w.prev_month_start + w.days_into_month, w.prev_month_end)),0) AS prev_month,
            COALESCE(SUM(t.amount_kobo) FILTER (
-             WHERE t.created_at::date BETWEEN w.prev_month_start AND w.prev_month_end),0)
+             WHERE ${plateauDateSql('t.created_at')} BETWEEN w.prev_month_start AND w.prev_month_end),0)
              AS prev_month_whole,
 
-           COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.created_at::date >= w.year_start),0) AS ytd,
+           COALESCE(SUM(t.amount_kobo) FILTER (WHERE ${plateauDateSql('t.created_at')} >= w.year_start),0) AS ytd,
            COALESCE(SUM(t.amount_kobo) FILTER (
-             WHERE t.created_at::date >= w.prev_year_start
-               AND t.created_at::date <= (w.today - interval '1 year')::date),0) AS prev_ytd,
+             WHERE ${plateauDateSql('t.created_at')} >= w.prev_year_start
+               AND ${plateauDateSql('t.created_at')} <= (w.today - interval '1 year')::date),0) AS prev_ytd,
 
            COALESCE(SUM(t.amount_kobo),0) AS total
          FROM transactions t CROSS JOIN windows w
@@ -153,7 +164,7 @@ export async function executiveDashboard(
          (SELECT count(*)::text FROM taxpayers tp
            WHERE tp.status = 'ACTIVE' AND ($1 OR tp.lga_id = ANY($3::uuid[]))) AS taxpayers,
          (SELECT count(*)::text FROM taxpayers tp
-           WHERE tp.status = 'ACTIVE' AND tp.created_at >= date_trunc('month', CURRENT_DATE)
+           WHERE tp.status = 'ACTIVE' AND tp.created_at >= ${plateauMidnightSql(PLATEAU_MONTH_START_SQL)}
              AND ($1 OR tp.lga_id = ANY($3::uuid[]))) AS new_taxpayers_this_month,
          (SELECT count(*)::text FROM agents a
            WHERE a.operational_status = 'ACTIVE'
@@ -168,9 +179,19 @@ export async function executiveDashboard(
            WHERE t.status IN ('FAILED','CANCELLED','EXPIRED') AND ${tx}) AS failed_transactions,
          (SELECT count(*)::text FROM transactions t
            WHERE t.status = 'RECONCILIATION_PENDING' AND ${tx}) AS pending_reconciliation,
+         -- ON_HOLD included, and it was not. The tile this feeds is labelled
+         -- "Commission liability" over the hint "Accrued and not yet paid",
+         -- and a held commission is both: a hold moves PENDING and ELIGIBLE
+         -- rows to ON_HOLD and a release moves them back to PENDING, so what
+         -- changes when an investigation opens is whether the money may be
+         -- paid yet, not whether it is owed. Confirming a fraud flag used to
+         -- reduce the State's stated liability by the amount under
+         -- investigation. A commission that proves fraudulent is REVERSED,
+         -- and leaves this figure then.
          (SELECT COALESCE(SUM(c.amount_kobo),0)::text FROM commissions c
            LEFT JOIN transactions t ON t.id = c.transaction_id
-           WHERE c.status IN ('PENDING','ELIGIBLE','APPROVED') AND ${tx}) AS commission_liability_kobo,
+           WHERE c.status IN ('PENDING','ELIGIBLE','ON_HOLD','APPROVED') AND ${tx})
+           AS commission_liability_kobo,
          (SELECT COALESCE(SUM(c.amount_kobo),0)::text FROM commissions c
            LEFT JOIN transactions t ON t.id = c.transaction_id
            WHERE c.status = 'PAID' AND ${tx}) AS commission_paid_kobo,
@@ -226,10 +247,16 @@ export async function executiveDashboard(
           * invoiced and owed, which is a fact, and the forecast is a separate
           * figure that says out loud that it is arithmetic.
           */
+         -- Invoiced and owed, lapsed or not. The floor once fell an hour after
+         -- each deadline, when the expiry sweep wrote EXPIRED; then it fell at
+         -- the deadline itself, because a lapsed bill could not be collected.
+         -- It can now — issued again — so money invoiced and not paid stays in
+         -- the floor until it is paid, replaced or withdrawn.
+         -- lib/payable-invoice.ts has the history.
          (SELECT COALESCE(SUM(i.total_amount_kobo - i.amount_paid_kobo),0)::text
             FROM invoices i
             JOIN taxpayers tp ON tp.id = i.taxpayer_id
-           WHERE i.status IN ('UNPAID','PARTIALLY_PAID')
+           WHERE ${OWED_INVOICE_SQL}
              AND ($1 OR tp.lga_id = ANY($3::uuid[]))) AS expected_revenue_kobo`,
       [statewide, territoryIds, lgaIds],
     ),
@@ -247,20 +274,20 @@ export async function executiveDashboard(
        * it, and the monthly pair is added beside it rather than replacing it.
        */
       `WITH bounds AS (
-         SELECT date_trunc('month', CURRENT_DATE)::date AS month_start,
-                (date_trunc('month', CURRENT_DATE) - interval '1 month')::date AS prev_start,
-                (date_trunc('month', CURRENT_DATE) - interval '1 day')::date AS prev_end,
-                (CURRENT_DATE - date_trunc('month', CURRENT_DATE)::date) AS days_in
+         SELECT date_trunc('month', ${PLATEAU_TODAY_SQL})::date AS month_start,
+                (date_trunc('month', ${PLATEAU_TODAY_SQL}) - interval '1 month')::date AS prev_start,
+                (date_trunc('month', ${PLATEAU_TODAY_SQL}) - interval '1 day')::date AS prev_end,
+                (${PLATEAU_TODAY_SQL} - date_trunc('month', ${PLATEAU_TODAY_SQL})::date) AS days_in
        ),
        rows AS (
          SELECT rc.name AS category, rc.name_ha AS category_ha,
                 count(t.id) AS transactions,
                 COALESCE(SUM(t.amount_kobo),0) AS amount,
                 COALESCE(SUM(t.amount_kobo) FILTER (
-                  WHERE t.created_at::date >= b.month_start),0) AS this_month,
+                  WHERE ${plateauDateSql('t.created_at')} >= b.month_start),0) AS this_month,
                 COALESCE(SUM(t.amount_kobo) FILTER (
-                  WHERE t.created_at::date >= b.prev_start
-                    AND t.created_at::date <= LEAST(b.prev_start + b.days_in, b.prev_end)),0)
+                  WHERE ${plateauDateSql('t.created_at')} >= b.prev_start
+                    AND ${plateauDateSql('t.created_at')} <= LEAST(b.prev_start + b.days_in, b.prev_end)),0)
                   AS prev_month
            FROM transactions t
            JOIN revenue_items ri ON ri.id = t.revenue_item_id
@@ -383,9 +410,9 @@ export async function executiveDashboard(
       `SELECT to_char(day, 'YYYY-MM-DD') AS day,
               COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo,
               count(t.id)::text AS transactions
-         FROM generate_series(CURRENT_DATE - interval '29 days', CURRENT_DATE, interval '1 day') AS day
+         FROM generate_series(${PLATEAU_TODAY_SQL} - interval '29 days', ${PLATEAU_TODAY_SQL}, interval '1 day') AS day
          LEFT JOIN transactions t
-                ON t.created_at::date = day::date AND t.status IN ${REVENUE_STATES_SQL}
+                ON ${plateauDateSql('t.created_at')} = day::date AND t.status IN ${REVENUE_STATES_SQL}
                AND ${tx}
         GROUP BY day ORDER BY day`,
       scoped,
@@ -407,7 +434,7 @@ export async function executiveDashboard(
          -- The two counts below are deliberately not scoped: a supervisor
          -- holds approval:review and support:read:all, so the approval queue
          -- and the ticket queue really are theirs to see whole.
-         (SELECT count(*)::text FROM reconciliation_records rr
+         (SELECT count(*)::text FROM (${CURRENT_FINDINGS_SQL}) rr
            LEFT JOIN transactions t ON t.id = rr.transaction_id
            WHERE ${outstandingExceptionSql('rr')}
              AND ${tx})
@@ -616,7 +643,7 @@ export async function agentPerformance(
               WHERE c.agent_id = a.id AND c.status <> 'REVERSED') AS commission_earned_kobo,
             (SELECT count(*)::text FROM fraud_flags f
               WHERE f.agent_id = a.id AND f.status IN ('OPEN','UNDER_REVIEW')) AS open_fraud_flags,
-            count(DISTINCT t.created_at::date)::text AS active_days,
+            count(DISTINCT ${plateauDateSql('t.created_at')})::text AS active_days,
             /*
              * The two columns that turn a ranking into a management tool.
              *
@@ -637,15 +664,15 @@ export async function agentPerformance(
               AS categories_processed,
             COALESCE(SUM(t.amount_kobo) FILTER (
               WHERE t.status IN ${REVENUE_STATES_SQL}
-                AND t.created_at::date >= date_trunc('month', CURRENT_DATE)::date),0)::text
+                AND ${plateauDateSql('t.created_at')} >= date_trunc('month', ${PLATEAU_TODAY_SQL})::date),0)::text
               AS month_kobo,
             COALESCE(SUM(t.amount_kobo) FILTER (
               WHERE t.status IN ${REVENUE_STATES_SQL}
-                AND t.created_at::date >= (date_trunc('month', CURRENT_DATE) - interval '1 month')::date
-                AND t.created_at::date <= LEAST(
-                      (date_trunc('month', CURRENT_DATE) - interval '1 month')::date
-                        + (CURRENT_DATE - date_trunc('month', CURRENT_DATE)::date),
-                      (date_trunc('month', CURRENT_DATE) - interval '1 day')::date)),0)::text
+                AND ${plateauDateSql('t.created_at')} >= (date_trunc('month', ${PLATEAU_TODAY_SQL}) - interval '1 month')::date
+                AND ${plateauDateSql('t.created_at')} <= LEAST(
+                      (date_trunc('month', ${PLATEAU_TODAY_SQL}) - interval '1 month')::date
+                        + (${PLATEAU_TODAY_SQL} - date_trunc('month', ${PLATEAU_TODAY_SQL})::date),
+                      (date_trunc('month', ${PLATEAU_TODAY_SQL}) - interval '1 day')::date)),0)::text
               AS previous_month_kobo
        FROM agents a
        JOIN users u ON u.id = a.user_id
@@ -693,7 +720,7 @@ export async function agentToday(db: Db, agentId: string) {
          count(*)::text AS total,
          count(*) FILTER (WHERE status IN ('PAYMENT_PENDING','PAYMENT_INITIATED'))::text AS pending
        FROM transactions
-      WHERE agent_id = $1 AND created_at::date = CURRENT_DATE`,
+      WHERE agent_id = $1 AND ${plateauDateSql('created_at')} = ${PLATEAU_TODAY_SQL}`,
       [agentId],
     ),
     queryOne(
@@ -701,7 +728,7 @@ export async function agentToday(db: Db, agentId: string) {
       `SELECT COALESCE(SUM(amount_kobo) FILTER (WHERE status <> 'REVERSED'),0)::text AS lifetime_kobo,
               COALESCE(SUM(amount_kobo) FILTER (WHERE status = 'ELIGIBLE'),0)::text AS available_kobo,
               COALESCE(SUM(c.amount_kobo) FILTER (
-                WHERE c.status <> 'REVERSED' AND c.created_at::date = CURRENT_DATE),0)::text AS today_kobo
+                WHERE c.status <> 'REVERSED' AND ${plateauDateSql('c.created_at')} = ${PLATEAU_TODAY_SQL}),0)::text AS today_kobo
          FROM commissions c WHERE agent_id = $1`,
       [agentId],
     ),
@@ -724,7 +751,7 @@ export async function agentToday(db: Db, agentId: string) {
   const onboarded = await queryOne(
     db,
     `SELECT count(*)::text AS today, (SELECT count(*)::text FROM taxpayers WHERE registered_by_agent_id = $1) AS total
-       FROM taxpayers WHERE registered_by_agent_id = $1 AND created_at::date = CURRENT_DATE`,
+       FROM taxpayers WHERE registered_by_agent_id = $1 AND ${plateauDateSql('created_at')} = ${PLATEAU_TODAY_SQL}`,
     [agentId],
   );
 
@@ -800,24 +827,142 @@ export async function rateChangeHistory(db: Db, params: { revenueItemId?: string
   );
 }
 
-export async function taxpayerAccessLog(db: Db, taxpayerId: string) {
-  return query(
+/**
+ * Two caps, named rather than written into the SQL twice.
+ *
+ * Both answers are read from a screen and both were capped silently: 500
+ * entries of who has touched a taxpayer's record, 1000 receipts for a revenue
+ * item. The figure has to appear in the query, in the slice and in what the
+ * caller is told, and three copies of a number are how one of them drifts.
+ */
+const ACCESS_LOG_CAP = 500;
+const RECEIPTS_BY_ITEM_CAP = 1000;
+const SEARCH_LOG_CAP = 500;
+
+/*
+ * Both are a default argument rather than a constant read inside the query,
+ * and that is for the tests rather than for the callers — no route passes one.
+ *
+ * Reaching five hundred rows to prove that the five-hundred-and-first is
+ * reported would mean writing five hundred rows, which is slow and proves the
+ * fixture. Asserting only that a short answer reports `truncated: false` proves
+ * less than it looks: a mutation that makes `truncated` always false passes it,
+ * which is exactly what the mutation check found. Driving the cap down to two
+ * runs the same arithmetic on the same path and kills that mutation.
+ */
+
+/**
+ * An answer, and whether it is the whole answer.
+ *
+ * The queries read one row past the cap and never return it, which answers
+ * "was anything dropped" exactly. A second `count(*)` would have to repeat
+ * every filter to be right, and the audit queries have scope predicates that
+ * are easy to repeat and easy to repeat wrongly.
+ *
+ * The shape matches `deliver`'s JSON envelope, because an officer reading two
+ * capped answers on one screen should not have to learn two shapes for the same
+ * fact.
+ */
+function capped<T>(rows: T[], cap: number): { rows: T[]; truncated: boolean; cap: number | null } {
+  const truncated = rows.length > cap;
+  return { rows: truncated ? rows.slice(0, cap) : rows, truncated, cap: truncated ? cap : null };
+}
+
+/**
+ * Who has been searching the register, and for what.
+ *
+ * The reader for `taxpayer_search_logs`. It exists in the same commit as the
+ * table on purpose: a safeguard whose whole value is that somebody eventually
+ * looks at it, which nobody can look at, is a table that costs disk and
+ * protects nobody — which is what `a-log-nobody-could-read.test.tsx` found the
+ * connections access log to be.
+ *
+ * The officer's name and role, what they typed, how many people it returned,
+ * and from where. The count is the column that distinguishes a lookup of one
+ * known trader from a trawl, and ordering by it is how somebody asks the
+ * question this log is for.
+ */
+export async function registerSearches(db: Db, cap = SEARCH_LOG_CAP) {
+  const rows = await query(
     db,
-    `SELECT a.created_at, a.action, a.result, u.full_name, u.role, a.ip_address, a.device_id
-       FROM audit_logs a LEFT JOIN users u ON u.id = a.actor_id
-      WHERE a.entity_type = 'taxpayer' AND a.entity_id = $1
-      ORDER BY a.created_at DESC LIMIT 500`,
-    [taxpayerId],
+    `SELECT l.created_at, u.full_name, COALESCE(l.actor_role, u.role) AS role,
+            l.filters, l.matched, l.ip_address, l.device_id
+       FROM taxpayer_search_logs l
+       LEFT JOIN users u ON u.id = l.searched_by
+      ORDER BY l.created_at DESC
+      LIMIT $1`,
+    [cap + 1],
   );
+  return capped(rows, cap);
+}
+
+/**
+ * Who has looked at one taxpayer's record, and who has changed it.
+ *
+ * This is the endpoint behind the oversight screen's "Who has looked at one
+ * taxpayer's record" and API.md's "All users who accessed taxpayer record X".
+ * It used to read `audit_logs` alone — and every one of the nine writers of a
+ * row with `entity_type = 'taxpayer'` writes it when the record is CHANGED.
+ * A read wrote nothing anywhere, so the answer to "who looked" was a list of
+ * changes, and an officer who opened a record, read the whole of it and closed
+ * it appeared in it not at all.
+ *
+ * `taxpayer_record_access_logs` (migration 083) is the missing half. Both are
+ * returned, each row saying which it is, because an auditor's question is
+ * almost never one or the other: "who has touched this record" wants both, and
+ * separating them into two endpoints would mean two queries to answer it and a
+ * silent assumption about which one the asker meant.
+ *
+ * The `kind` column is first so it reads first — the oversight table takes its
+ * columns from the keys of the first row, in order.
+ */
+export async function taxpayerAccessLog(db: Db, taxpayerId: string, cap = ACCESS_LOG_CAP) {
+  const rows = await query(
+    db,
+    /*
+     * Two things about the SQL.
+     *
+     * UNION ALL rather than UNION, because there is nothing to deduplicate and
+     * asking for it would cost a sort over both halves. It is not what keeps
+     * two looks from becoming one row: `created_at` carries microseconds, so
+     * UNION would keep both anyway. What keeps them separate is that each read
+     * inserts.
+     *
+     * And `$1::text::uuid` on one side with `$1::text` on the other.
+     *
+     * `taxpayer_record_access_logs.taxpayer_id` is a UUID with a foreign key;
+     * `audit_logs.entity_id` is TEXT, because it holds the id of whatever kind
+     * of thing the entry is about and not all of them are UUIDs. One parameter
+     * cannot be both types, and leaving it to inference resolved it as uuid
+     * from whichever branch came first and then failed the other with
+     * "operator does not exist: text = uuid". Pinning it to text and casting
+     * where a uuid is wanted says which is which.
+     */
+    `SELECT 'READ' AS kind, l.created_at, l.surface AS action, 'SUCCESS' AS result,
+            u.full_name, COALESCE(l.actor_role, u.role) AS role, l.ip_address,
+            l.device_id
+       FROM taxpayer_record_access_logs l
+       LEFT JOIN users u ON u.id = l.accessed_by
+      WHERE l.taxpayer_id = $1::text::uuid
+     UNION ALL
+     SELECT 'CHANGE' AS kind, a.created_at, a.action, a.result,
+            u.full_name, u.role, a.ip_address, a.device_id
+       FROM audit_logs a LEFT JOIN users u ON u.id = a.actor_id
+      WHERE a.entity_type = 'taxpayer' AND a.entity_id = $1::text
+      ORDER BY created_at DESC LIMIT $2`,
+    [taxpayerId, cap + 1],
+  );
+  return capped(rows, cap);
 }
 
 export async function receiptsByRevenueItem(
   db: Db,
   params: { revenueItemCode: string },
   scope: ReportScope = { kind: 'STATEWIDE' },
+  cap = RECEIPTS_BY_ITEM_CAP,
 ) {
   const { statewide, territoryIds } = scopeParams(scope);
-  return query(
+  const rows = await query(
     db,
     `SELECT r.receipt_number, r.amount_kobo, r.issued_at, r.status,
             t.transaction_reference, l.name AS lga, ag.agent_code
@@ -828,9 +973,10 @@ export async function receiptsByRevenueItem(
        LEFT JOIN agents ag ON ag.id = t.agent_id
       WHERE ri.code = $1
         AND ${transactionScopeSql('t', 2, 3)}
-      ORDER BY r.issued_at DESC LIMIT 1000`,
-    [params.revenueItemCode, statewide, territoryIds],
+      ORDER BY r.issued_at DESC LIMIT $4`,
+    [params.revenueItemCode, statewide, territoryIds, cap + 1],
   );
+  return capped(rows, cap);
 }
 
 /**
@@ -851,7 +997,7 @@ export async function kpis(db: Db) {
     `SELECT
        (SELECT COALESCE(SUM(amount_kobo),0)::text FROM transactions WHERE status IN ${REVENUE_STATES_SQL})
          AS total_collection_kobo,
-       (SELECT count(*)::text FROM taxpayers WHERE created_at >= date_trunc('month', CURRENT_DATE))
+       (SELECT count(*)::text FROM taxpayers WHERE created_at >= ${plateauMidnightSql(PLATEAU_MONTH_START_SQL)})
          AS new_taxpayers_this_month,
        (SELECT count(*)::text FROM taxpayers WHERE tin_status IN ('ASSIGNED','EXISTING'))
          AS taxpayers_with_tin,
@@ -859,9 +1005,12 @@ export async function kpis(db: Db) {
        (SELECT CASE WHEN count(*) = 0 THEN '0'
                ELSE ROUND(100.0 * count(*) FILTER (WHERE status = 'VERIFIED') / count(*), 2)::text END
           FROM payments) AS payment_success_rate_percent,
+       -- Over the current finding per item. Over every row ever written it
+       -- measured how many sweeps each collection waited through before the
+       -- bank settled it: ten that each reconciled perfectly read 37.5%.
        (SELECT CASE WHEN count(*) = 0 THEN '0'
                ELSE ROUND(100.0 * count(*) FILTER (WHERE status = 'MATCHED') / count(*), 2)::text END
-          FROM reconciliation_records) AS reconciliation_rate_percent,
+          FROM (${CURRENT_FINDINGS_SQL}) current_findings) AS reconciliation_rate_percent,
        /*
         * A FILTER over the same rows as the denominator, like the two above.
         *
@@ -1259,20 +1408,48 @@ export async function revenueOfficerHome(db: Db) {
     `SELECT
        (SELECT count(*)::text FROM taxpayers WHERE status = 'ACTIVE') AS taxpayers,
        (SELECT count(*)::text FROM taxpayers
-         WHERE status = 'ACTIVE' AND created_at >= date_trunc('week', CURRENT_DATE))
+         WHERE status = 'ACTIVE' AND created_at >= ${plateauMidnightSql(`date_trunc('week', ${PLATEAU_TODAY_SQL})::date`)})
          AS registered_this_week,
        -- A taxpayer without a TIN cannot be tracked across years, so this is
        -- the queue that matters most here.
        (SELECT count(*)::text FROM taxpayers WHERE tin_status IN ('PENDING','FAILED'))
          AS tins_outstanding,
        (SELECT count(*)::text FROM taxpayers WHERE tin_status = 'FAILED') AS tins_failed,
-       (SELECT count(*)::text FROM approvals
-         WHERE status IN ('REQUESTED','REVIEWED') AND approval_type = 'TAXPAYER_CORRECTION')
+       -- Requests to change somebody's record, which arrive as cases.
+       --
+       -- This counted approvals of type TAXPAYER_CORRECTION, which the
+       -- approvals table's own CHECK refuses, so no such row could ever exist
+       -- and the tile read 0 on every deployment however many people had
+       -- asked. Measured: a DATA_CORRECTION case opened, the tile unmoved.
+       -- A record is corrected directly, by taxpayer:correct with step-up;
+       -- what waits is the request, and the request is a case.
+       (SELECT count(*)::text FROM cases
+         WHERE category = 'DATA_CORRECTION' AND status NOT IN ('RESOLVED','CLOSED'))
          AS corrections_awaiting_review,
-       (SELECT count(*)::text FROM invoices WHERE status = 'UNPAID' AND
-         (expires_at IS NULL OR expires_at > now())) AS invoices_unpaid,
+       (SELECT count(*)::text FROM invoices i WHERE ${PAYABLE_INVOICE_SQL}) AS invoices_unpaid,
        (SELECT count(*)::text FROM invoices WHERE status = 'EXPIRED') AS invoices_expired,
-       (SELECT COALESCE(SUM(total_amount_kobo),0)::text FROM invoices WHERE status = 'UNPAID')
+       -- The same deadline test as invoices_unpaid above, because these two
+       -- are one tile: the money is the figure and that count is its hint.
+       --
+       -- It was not here. The money filtered on the status alone and so
+       -- waited for the hourly expiry sweep to write EXPIRED, while the count
+       -- tested the deadline itself and dropped the invoice at once. For up
+       -- to an hour the tile showed money over a set of invoices its own hint
+       -- did not count -- and jobs.ts names that window for what it is: one
+       -- in which the platform "tells the State it is owed money nobody can
+       -- pay it."
+       --
+       -- Lapsed money is not lost from the officer's view by this. It is
+       -- counted, labelled, on the arrears screen this tile links to, whose
+       -- lapsed CTE keys on the deadline rather than the status and so is
+       -- also right immediately.
+       --
+       -- Both halves ask PAYABLE_INVOICE_SQL: this tile is what can be
+       -- collected today, with the expired count beside it as its own figure.
+       -- Readers of what is owed, lapsed or not, ask OWED_INVOICE_SQL;
+       -- lib/payable-invoice.ts says which is which.
+       (SELECT COALESCE(SUM(i.total_amount_kobo),0)::text FROM invoices i
+         WHERE ${PAYABLE_INVOICE_SQL})
          AS unpaid_kobo`,
   );
 }
@@ -1290,14 +1467,18 @@ export async function financeOfficerHome(db: Db) {
   return queryOne(
     db,
     `SELECT
-       (SELECT count(*)::text FROM reconciliation_records rr
+       (SELECT count(*)::text FROM (${CURRENT_FINDINGS_SQL}) rr
          WHERE ${outstandingExceptionSql('rr')})
          AS reconciliation_exceptions,
        (SELECT count(*)::text FROM settlements WHERE reconciled_at IS NULL) AS settlements_unreconciled,
        (SELECT COALESCE(SUM(expected_amount_kobo - received_amount_kobo),0)::text
           FROM settlements WHERE reconciled_at IS NULL) AS settlement_variance_kobo,
+       -- ON_HOLD included, for the reason written out in executiveDashboard:
+       -- money frozen by an investigation is accrued and unpaid, which is
+       -- what this tile says it counts.
        (SELECT COALESCE(SUM(amount_kobo),0)::text FROM commissions
-         WHERE status IN ('PENDING','ELIGIBLE','APPROVED')) AS commission_liability_kobo,
+         WHERE status IN ('PENDING','ELIGIBLE','ON_HOLD','APPROVED'))
+         AS commission_liability_kobo,
        (SELECT count(*)::text FROM commission_payouts WHERE status = 'REQUESTED')
          AS payouts_awaiting_approval,
        -- Every refund the taxpayer has not had. This read PENDING and
@@ -1337,17 +1518,17 @@ export async function auditorHome(db: Db) {
     db,
     `SELECT
        (SELECT count(*)::text FROM audit_logs) AS audit_entries,
-       (SELECT count(*)::text FROM audit_logs WHERE created_at >= CURRENT_DATE) AS entries_today,
+       (SELECT count(*)::text FROM audit_logs WHERE created_at >= ${plateauMidnightSql(PLATEAU_TODAY_SQL)}) AS entries_today,
        (SELECT count(*)::text FROM audit_logs WHERE result = 'DENIED'
-          AND created_at >= CURRENT_DATE - interval '7 days') AS refused_this_week,
+          AND created_at >= ${plateauMidnightSql(`${PLATEAU_TODAY_SQL} - 7`)}) AS refused_this_week,
        (SELECT count(*)::text FROM transactions WHERE status IN ('REVERSED','REFUNDED'))
          AS reversed_or_refunded,
        (SELECT count(*)::text FROM fraud_flags WHERE status IN ('OPEN','UNDER_REVIEW'))
          AS fraud_flags_open,
        (SELECT count(*)::text FROM revenue_item_rates
-         WHERE created_at >= CURRENT_DATE - interval '30 days') AS rate_changes_this_month,
+         WHERE created_at >= ${plateauMidnightSql(`${PLATEAU_TODAY_SQL} - 30`)}) AS rate_changes_this_month,
        (SELECT count(*)::text FROM verification_attempts
-          WHERE created_at >= CURRENT_DATE - interval '7 days') AS receipt_checks_this_week,
+          WHERE created_at >= ${plateauMidnightSql(`${PLATEAU_TODAY_SQL} - 7`)}) AS receipt_checks_this_week,
        (SELECT count(*)::text FROM taxpayers WHERE status = 'ACTIVE') AS taxpayers_on_record`,
   );
 }
@@ -1368,7 +1549,7 @@ export async function adminWorkItems(db: Db) {
     query(
       db,
       `SELECT a.id, a.agent_code, u.full_name, l.name AS lga, a.clearance_status,
-              to_char(a.updated_at, 'YYYY-MM-DD') AS waiting_since
+              to_char(${plateauDateSql('a.updated_at')}, 'YYYY-MM-DD') AS waiting_since
          FROM agents a JOIN users u ON u.id = a.user_id
          LEFT JOIN lgas l ON l.id = a.lga_id
         WHERE a.clearance_status = 'READY_FOR_REVIEW'
@@ -1377,7 +1558,7 @@ export async function adminWorkItems(db: Db) {
     query(
       db,
       `SELECT d.id, d.device_identifier, d.device_name, u.full_name, a.agent_code,
-              to_char(d.registered_at, 'YYYY-MM-DD') AS registered
+              to_char(${plateauDateSql('d.registered_at')}, 'YYYY-MM-DD') AS registered
          FROM agent_devices d
          JOIN agents a ON a.id = d.agent_id
          JOIN users u ON u.id = a.user_id
@@ -1417,7 +1598,7 @@ export async function revenueOfficerWorkItems(db: Db) {
     query(
       db,
       `SELECT i.id, i.invoice_number, i.total_amount_kobo::text AS amount_kobo,
-              to_char(i.expires_at, 'YYYY-MM-DD') AS expires_on,
+              to_char(${plateauDateSql('i.expires_at')}, 'YYYY-MM-DD') AS expires_on,
               coalesce(tp.business_name, tp.first_name || ' ' || tp.last_name) AS taxpayer
          FROM invoices i JOIN taxpayers tp ON tp.id = i.taxpayer_id
         WHERE i.status = 'UNPAID' AND i.expires_at IS NOT NULL
@@ -1437,8 +1618,8 @@ export async function financeOfficerWorkItems(db: Db) {
               r.expected_amount_kobo::text AS expected_kobo,
               r.received_amount_kobo::text AS received_kobo,
               r.variance_kobo::text AS variance_kobo,
-              to_char(r.created_at, 'YYYY-MM-DD') AS raised
-         FROM reconciliation_records r
+              to_char(${plateauDateSql('r.created_at')}, 'YYYY-MM-DD') AS raised
+         FROM (${CURRENT_FINDINGS_SQL}) r
         WHERE ${outstandingExceptionSql('r')}
         ORDER BY r.created_at LIMIT 5`,
     ),
@@ -1446,7 +1627,7 @@ export async function financeOfficerWorkItems(db: Db) {
       db,
       `SELECT p.id, p.payout_reference, p.amount_kobo::text AS amount_kobo,
               p.commission_count::text AS commissions, u.full_name AS agent,
-              to_char(p.requested_at, 'YYYY-MM-DD') AS requested
+              to_char(${plateauDateSql('p.requested_at')}, 'YYYY-MM-DD') AS requested
          FROM commission_payouts p
          JOIN agents a ON a.id = p.agent_id
          JOIN users u ON u.id = a.user_id
@@ -1469,8 +1650,10 @@ export async function auditorWorkItems(db: Db) {
   const [refusals, reversals] = await Promise.all([
     query(
       db,
+      // Plateau's wall clock. The portal prints this string under "When" as
+      // it arrives, and in UTC it read an hour behind for every refusal.
       `SELECT id, action, entity_type, actor_role, reason,
-              to_char(created_at, 'YYYY-MM-DD HH24:MI') AS at
+              to_char(${plateauWallClockSql('created_at')}, 'YYYY-MM-DD HH24:MI') AS at
          FROM audit_logs
         WHERE result = 'DENIED'
         ORDER BY created_at DESC LIMIT 5`,
@@ -1478,7 +1661,7 @@ export async function auditorWorkItems(db: Db) {
     query(
       db,
       `SELECT t.transaction_reference, t.status, t.amount_kobo::text AS amount_kobo,
-              to_char(t.updated_at, 'YYYY-MM-DD') AS at,
+              to_char(${plateauDateSql('t.updated_at')}, 'YYYY-MM-DD') AS at,
               coalesce(tp.business_name, tp.first_name || ' ' || tp.last_name) AS taxpayer
          FROM transactions t JOIN taxpayers tp ON tp.id = t.taxpayer_id
         WHERE t.status IN ('REVERSED','REFUNDED')
@@ -1655,7 +1838,12 @@ export async function defaultersByCategory(
 ) {
   const limit = Math.min(params.limit ?? 100, 500);
   const conditions: string[] = [
-    `i.status IN ('UNPAID','PARTIALLY_PAID')`,
+    // Owed, lapsed or not. This kept to what was payable, on the ground that a
+    // call about a lapsed invoice could not end in a payment; it can now, with
+    // the bill issued again at the stall. A report of who owes that loses
+    // them at their deadline is a report that rewards the deadline.
+    // See `lib/payable-invoice.ts`.
+    OWED_INVOICE_SQL,
     'i.total_amount_kobo > i.amount_paid_kobo',
   ];
   const values: unknown[] = [];
@@ -1779,10 +1967,10 @@ export async function taxpayerAnalytics(
          count(*)::text AS total,
          count(*) FILTER (WHERE taxpayer_type = 'INDIVIDUAL')::text AS individuals,
          count(*) FILTER (WHERE taxpayer_type = 'BUSINESS')::text AS businesses,
-         count(*) FILTER (WHERE created_at >= date_trunc('month', CURRENT_DATE))::text
+         count(*) FILTER (WHERE created_at >= ${plateauMidnightSql(PLATEAU_MONTH_START_SQL)})::text
            AS new_this_month,
-         count(*) FILTER (WHERE created_at >= date_trunc('month', CURRENT_DATE) - interval '1 month'
-                            AND created_at < date_trunc('month', CURRENT_DATE))::text
+         count(*) FILTER (WHERE created_at >= ${plateauMidnightSql(`(date_trunc('month', ${PLATEAU_TODAY_SQL}) - interval '1 month')::date`)}
+                            AND created_at < ${plateauMidnightSql(PLATEAU_MONTH_START_SQL)})::text
            AS new_last_month,
          -- Paying within the window, not merely on the register.
          count(*) FILTER (WHERE last_paid_at > now() - interval '90 days')::text AS active,
@@ -1800,7 +1988,7 @@ export async function taxpayerAnalytics(
       db,
       `SELECT l.name AS lga,
               count(tp.id)::text AS taxpayers,
-              count(tp.id) FILTER (WHERE tp.created_at >= date_trunc('month', CURRENT_DATE))::text
+              count(tp.id) FILTER (WHERE tp.created_at >= ${plateauMidnightSql(PLATEAU_MONTH_START_SQL)})::text
                 AS new_this_month,
               count(tp.id) FILTER (WHERE EXISTS (
                 SELECT 1 FROM transactions t
@@ -1934,8 +2122,13 @@ export async function commissionByPlaceAndPeriod(
               count(c.id)::text AS commissions,
               COALESCE(SUM(c.amount_kobo),0)::text AS accrued_kobo,
               COALESCE(SUM(c.amount_kobo) FILTER (WHERE c.status = 'PAID'),0)::text AS paid_kobo,
+              -- ON_HOLD included. Without it this row does not add up: a
+              -- Council reading accrued, paid, outstanding and reversed finds
+              -- a remainder with no column, and the remainder is exactly the
+              -- commission frozen by an open investigation.
               COALESCE(SUM(c.amount_kobo) FILTER (
-                WHERE c.status IN ('PENDING','ELIGIBLE','APPROVED')),0)::text AS outstanding_kobo,
+                WHERE c.status IN ('PENDING','ELIGIBLE','ON_HOLD','APPROVED')),0)::text
+                AS outstanding_kobo,
               COALESCE(SUM(c.amount_kobo) FILTER (WHERE c.status = 'REVERSED'),0)::text
                 AS reversed_kobo
          FROM commissions c
@@ -1947,17 +2140,21 @@ export async function commissionByPlaceAndPeriod(
     ),
     query(
       db,
-      `SELECT to_char(date_trunc('month', c.created_at), 'YYYY-MM') AS period,
+      // Plateau's months: commission accrued at 00:30 on the first belongs to
+      // the month that has begun, as it does in targets and the period close.
+      `SELECT to_char(date_trunc('month', ${plateauWallClockSql('c.created_at')}), 'YYYY-MM') AS period,
               count(c.id)::text AS commissions,
               COALESCE(SUM(c.amount_kobo),0)::text AS accrued_kobo,
               COALESCE(SUM(c.amount_kobo) FILTER (WHERE c.status = 'PAID'),0)::text AS paid_kobo,
+              -- ON_HOLD, for the reason on the by-LGA query above.
               COALESCE(SUM(c.amount_kobo) FILTER (
-                WHERE c.status IN ('PENDING','ELIGIBLE','APPROVED')),0)::text AS outstanding_kobo
+                WHERE c.status IN ('PENDING','ELIGIBLE','ON_HOLD','APPROVED')),0)::text
+                AS outstanding_kobo
          FROM commissions c
          JOIN transactions t ON t.id = c.transaction_id
         WHERE c.created_at BETWEEN $1 AND $2 AND ${transactionScopeSql('t', 3, 4)}
-        GROUP BY date_trunc('month', c.created_at)
-        ORDER BY date_trunc('month', c.created_at) DESC`,
+        GROUP BY date_trunc('month', ${plateauWallClockSql('c.created_at')})
+        ORDER BY date_trunc('month', ${plateauWallClockSql('c.created_at')}) DESC`,
       [from, to, statewide, territoryIds],
     ),
   ]);

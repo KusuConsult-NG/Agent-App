@@ -48,6 +48,18 @@ interface Harness {
   setOffline: (offline: boolean) => void;
   putInCache: (cacheName: string, key: string, body: string) => void;
   version: string;
+  /** The windows `clients.matchAll` will report, in the order given. */
+  setWindows: (urls: string[]) => void;
+  /** Tap a notification carrying this `data`, and wait for what it does. */
+  notificationClick: (data: Record<string, unknown>) => Promise<void>;
+  /** The URL of every client the worker focused, in order. */
+  focused: string[];
+  /** Every URL the worker asked the browser to open, in order. */
+  opened: string[];
+  /** Fire a background-sync event with this tag, and wait for what it does. */
+  backgroundSync: (tag: string) => Promise<void>;
+  /** Every message the worker posted to a client, in order. */
+  posted: unknown[];
 }
 
 /**
@@ -97,11 +109,37 @@ function loadServiceWorker(): Harness {
     delete: async (name: string) => stores.delete(name),
   };
 
+  /*
+   * Windows on this origin, which on a shared host is not only the agent's.
+   * `matchAll` reports them in the order given, because the order is the
+   * whole of what went wrong: Chrome returns most-recently-focused first, so
+   * an officer who had just used the portal put the portal at the front.
+   */
+  let windows: string[] = [];
+  const focused: string[] = [];
+  const opened: string[] = [];
+  const posted: unknown[] = [];
+
   const self = {
     location: { origin: 'https://psirs.example' },
     addEventListener: (type: string, fn: Listener) => listeners.set(type, fn),
     skipWaiting: () => undefined,
-    clients: { claim: () => undefined, matchAll: async () => [] },
+    clients: {
+      claim: () => undefined,
+      matchAll: async () =>
+        windows.map((url) => ({
+          url,
+          focus: async () => {
+            focused.push(url);
+            return undefined;
+          },
+          postMessage: (message: unknown) => void posted.push(message),
+        })),
+      openWindow: async (url: string) => {
+        opened.push(url);
+        return undefined;
+      },
+    },
     registration: { showNotification: async () => undefined },
   };
 
@@ -134,6 +172,31 @@ function loadServiceWorker(): Harness {
     setOffline: (value: boolean) => { offline = value; },
     putInCache: (cacheName, key, body) => cacheFor(cacheName).set(key, new Response(body)),
     version: /const VERSION = '([^']+)'/.exec(source)?.[1] ?? '',
+    setWindows: (urls) => {
+      windows = urls;
+    },
+    notificationClick: async (data) => {
+      const handler = listeners.get('notificationclick');
+      if (!handler) throw new Error('sw.js registered no notificationclick handler');
+      let held: Promise<unknown> | undefined;
+      let closed = false;
+      handler({
+        notification: { data, close: () => { closed = true; } },
+        waitUntil: (p: Promise<unknown>) => { held = p; },
+      });
+      if (!closed) throw new Error('sw.js no longer closes the notification it was given');
+      await held;
+    },
+    focused,
+    opened,
+    posted,
+    backgroundSync: async (tag) => {
+      const handler = listeners.get('sync');
+      if (!handler) throw new Error('sw.js registered no sync handler');
+      let held: Promise<unknown> | undefined;
+      handler({ tag, waitUntil: (p: Promise<unknown>) => { held = p; } });
+      await held;
+    },
   };
 }
 
@@ -309,11 +372,244 @@ describe('the officer portal sharing this origin', () => {
     expect(response).toBeUndefined();
   });
 
+  /*
+   * The half the prefix check does not reach: the portal's API traffic.
+   *
+   * `/portal/` covers the portal's documents and its assets. Its API reads go
+   * to `/api/v1/...` on this same origin, which is not under that prefix, so
+   * every one of them falls into the branches below the exclusion — and those
+   * branches are the ones that answer on the application's behalf.
+   *
+   * Attribution is by referrer, which is the only signal available before
+   * `respondWith` has to be decided. Measured against the nginx config
+   * rendered from Dockerfile.agent, which serves both documents with
+   * Referrer-Policy: strict-origin-when-cross-origin: a worker at scope '/'
+   * sees the full document URL for a same-origin fetch, so a read issued by
+   * /portal/ is attributable and one issued by / is not mistaken for it.
+   *
+   * When there is no referrer to read the request is treated as the agent's,
+   * which is what the worker did before any of this. An unattributable read
+   * is answered exactly as it is today rather than newly left alone.
+   */
+  const fromPortal = (url: string) => ({
+    url,
+    method: 'GET',
+    mode: 'cors',
+    destination: '',
+    referrer: 'https://psirs.example/portal/',
+  });
+
+  it('does not answer a portal reference read out of the agent cache', async () => {
+    sw.putInCache(
+      `${sw.version}-reference`,
+      'https://psirs.example/api/v1/reference/lgas',
+      'cached-lgas',
+    );
+    sw.setOffline(true);
+
+    const response = await sw.fetchEvent(fromPortal('https://psirs.example/api/v1/reference/lgas'));
+
+    // The portal declares no offline story. Left to the network, it gets its
+    // own error rather than data the worker cached for a handset.
+    expect(response).toBeUndefined();
+    expect(sw.networkCalls).toHaveLength(0);
+  });
+
+  it('does not tell an officer that no government money has moved', async () => {
+    /*
+     * The branch under the cacheable list answers any other failed /api/ GET
+     * with a synthesised 503 reading "You are offline. … Nothing has been
+     * sent and nothing has been paid", carrying moneyStatus NOT_DEBITED.
+     *
+     * That is a statement about government money, written for a handset in a
+     * field with no signal, manufactured by the agent's worker about a
+     * request the portal made. A failed fetch is not evidence of what reached
+     * the server, and an officer at a desk whose API is down is not offline.
+     */
+    sw.setOffline(true);
+
+    const response = await sw.fetchEvent(
+      fromPortal('https://psirs.example/api/v1/government/revenue/summary'),
+    );
+
+    expect(response).toBeUndefined();
+  });
+
+  it('does not put a portal response into the agent cache', async () => {
+    await sw.fetchEvent(fromPortal('https://psirs.example/api/v1/revenue/items?search=Vehicle'));
+
+    const reference = sw.cacheContents().get(`${sw.version}-reference`);
+    expect(reference?.size ?? 0).toBe(0);
+  });
+
+  it('still serves the agent its own reference data offline', async () => {
+    // The exclusion must not have been bought by breaking what the worker is
+    // for. A read issued by the agent document is still answered from cache.
+    sw.putInCache(
+      `${sw.version}-reference`,
+      'https://psirs.example/api/v1/reference/lgas',
+      'cached-lgas',
+    );
+    sw.setOffline(true);
+
+    const response = await sw.fetchEvent({
+      url: 'https://psirs.example/api/v1/reference/lgas',
+      method: 'GET',
+      mode: 'cors',
+      destination: '',
+      referrer: 'https://psirs.example/',
+    });
+
+    expect(await response!.text()).toBe('cached-lgas');
+  });
+
+  it('still answers a read it cannot attribute, as it always did', async () => {
+    // No referrer is the case a stricter policy, or a request the browser
+    // issues without one, would produce. It must degrade to today's
+    // behaviour, not to silently leaving the agent without its data.
+    sw.putInCache(
+      `${sw.version}-reference`,
+      'https://psirs.example/api/v1/reference/lgas',
+      'cached-lgas',
+    );
+    sw.setOffline(true);
+
+    const response = await sw.fetchEvent({
+      url: 'https://psirs.example/api/v1/reference/lgas',
+      method: 'GET',
+      mode: 'cors',
+      destination: '',
+      referrer: '',
+    });
+
+    expect(await response!.text()).toBe('cached-lgas');
+  });
+
+  it('is not switched off by a referrer from somebody else\'s site', async () => {
+    /*
+     * The attribution is "a document of ours, under /portal/", not "a URL with
+     * /portal/ in it". Matching on the path alone would let any page anywhere
+     * link to this origin and have the worker stand down, which on a handset
+     * means losing the offline reference data an agent collects with.
+     */
+    sw.putInCache(
+      `${sw.version}-reference`,
+      'https://psirs.example/api/v1/reference/lgas',
+      'cached-lgas',
+    );
+    sw.setOffline(true);
+
+    const response = await sw.fetchEvent({
+      url: 'https://psirs.example/api/v1/reference/lgas',
+      method: 'GET',
+      mode: 'cors',
+      destination: '',
+      referrer: 'https://not-psirs.example/portal/',
+    });
+
+    expect(await response!.text()).toBe('cached-lgas');
+  });
+
   it('still answers the agent shell it does own', async () => {
     // The exclusion must be the portal's prefix and nothing else. A path
     // merely starting with the same letters is the agent's.
     const response = await sw.fetchEvent(navigation('https://psirs.example/portals-of-jos'));
 
     expect(response).toBeDefined();
+  });
+});
+
+describe('tapping a notification on an origin with two applications on it', () => {
+  const AGENT_HOME = 'https://psirs.example/#/';
+  const AGENT_COLLECT = 'https://psirs.example/#/collect';
+  const PORTAL = 'https://psirs.example/portal/#/dashboard';
+
+  it('does not hand an agent the officer portal', async () => {
+    /*
+     * The portal first in the list is the realistic case rather than a
+     * contrived one: `matchAll` reports most-recently-focused first, and an
+     * officer who has just used the portal is exactly who has a portal
+     * window at the front of it.
+     */
+    sw.setWindows([PORTAL, AGENT_HOME]);
+
+    await sw.notificationClick({});
+
+    expect(sw.focused).toEqual([AGENT_HOME]);
+    expect(sw.opened).toEqual([]);
+  });
+
+  it('prefers a window already on the screen the notification names', async () => {
+    sw.setWindows([AGENT_HOME, AGENT_COLLECT]);
+
+    await sw.notificationClick({ url: '/#/collect' });
+
+    expect(sw.focused).toEqual([AGENT_COLLECT]);
+  });
+
+  it('opens the agent rather than focusing the portal', async () => {
+    sw.setWindows([PORTAL]);
+
+    await sw.notificationClick({});
+
+    expect(sw.focused).toEqual([]);
+    expect(sw.opened).toEqual(['https://psirs.example/']);
+  });
+
+  it('declines a notification that names the portal', async () => {
+    // Nothing sends one today. If anything ever does, a notification raised
+    // by the agent's worker is still the agent's.
+    sw.setWindows([]);
+
+    await sw.notificationClick({ url: '/portal/#/dashboard' });
+
+    expect(sw.opened).toEqual(['https://psirs.example/']);
+  });
+
+  it('still focuses the one agent window when no screen is named', async () => {
+    sw.setWindows(['https://psirs.example/#/receipts']);
+
+    await sw.notificationClick({});
+
+    expect(sw.focused).toEqual(['https://psirs.example/#/receipts']);
+    expect(sw.opened).toEqual([]);
+  });
+});
+
+describe('the browser reporting that the signal is back', () => {
+  /*
+   * The worker's half of a chain whose other half had no receiver at all.
+   * `App.tsx` now listens for this message; until it did, the worker posted
+   * into nothing and a queue waited for an agent to reopen the app.
+   *
+   * Pinned here as well as in the page's own test because that one dispatches
+   * the message directly: a mutation breaking this `postMessage` was invisible
+   * to it, which is how this gap was found.
+   */
+  it('tells every open window to send its queue', async () => {
+    sw.setWindows(['https://psirs.example/#/', 'https://psirs.example/#/collect']);
+
+    await sw.backgroundSync('psirs-sync-drafts');
+
+    expect(sw.posted).toEqual([{ type: 'SYNC_DRAFTS' }, { type: 'SYNC_DRAFTS' }]);
+  });
+
+  it('says nothing for a tag it did not register', async () => {
+    sw.setWindows(['https://psirs.example/#/']);
+
+    await sw.backgroundSync('some-other-tag');
+
+    expect(sw.posted).toEqual([]);
+  });
+
+  it('does not fail when no window is open to tell', async () => {
+    // A handset with the app fully closed. The event completes having done
+    // nothing, which is the honest limit of this design: the worker cannot
+    // send the drafts itself, because the access token lives in the page.
+    sw.setWindows([]);
+
+    await sw.backgroundSync('psirs-sync-drafts');
+
+    expect(sw.posted).toEqual([]);
   });
 });

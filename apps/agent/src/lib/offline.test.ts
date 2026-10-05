@@ -463,3 +463,131 @@ describe('staying signed in on a phone that gets closed', () => {
     expect(sessionStorage.getItem('psirs.user')).toBe(null);
   });
 });
+
+describe('two things asking for one sync', () => {
+  /*
+   * The connectivity effect in `App.tsx` asks for a sync when the connection
+   * comes back, and the service worker posts SYNC_DRAFTS when the browser
+   * reports the same thing — a message that until recently had no receiver, so
+   * a second caller was not something this function had to think about.
+   *
+   * With both, two syncs of one queue go up together and the server sorts out
+   * two requests carrying the same capture. It does: the draft-sync route
+   * takes the second as a duplicate rather than registering the taxpayer
+   * twice. What it cannot sort out is what the phone then tells the agent. The
+   * second flight is answered DUPLICATE for every capture, so it reports that
+   * none of them were sent — about work that had just been sent, by itself.
+   */
+  function serverLikePoster() {
+    const seen = new Set<string>();
+    const batches: string[][] = [];
+    let open: (() => void) | undefined;
+    // Every flight is held until released, so both are genuinely in the air at
+    // once rather than one finishing before the other starts.
+    const held = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+
+    const poster = async (
+      drafts: { clientReference: string }[],
+    ): Promise<{ results: { clientReference: string; status: string; message: string }[] }> => {
+      batches.push(drafts.map((draft) => draft.clientReference));
+      await held;
+      return {
+        results: drafts.map((draft) => {
+          const firstSighting = !seen.has(draft.clientReference);
+          seen.add(draft.clientReference);
+          return {
+            clientReference: draft.clientReference,
+            // What `/drafts/sync` answers: the first request registers the
+            // capture, a second carrying the same client reference is told it
+            // is already there.
+            status: firstSighting ? 'SYNCED' : 'DUPLICATE',
+            message: firstSighting ? 'Registered.' : 'Already synchronised.',
+          };
+        }),
+      };
+    };
+
+    return { poster, batches, release: () => open!() };
+  }
+
+  it('sends the queue once, and tells both callers the same true number', async () => {
+    await saveDraft('TAXPAYER_REGISTRATION', TAXPAYER);
+    await saveDraft('TAXPAYER_REGISTRATION', { ...TAXPAYER, phone: '+2347044000005' });
+
+    const { poster, batches, release } = serverLikePoster();
+    const fromTheConnection = syncDrafts(poster);
+    const fromTheWorker = syncDrafts(poster);
+    release();
+    const [first, second] = await Promise.all([fromTheConnection, fromTheWorker]);
+
+    expect(batches, 'the queue left the phone once, not twice over a reconnecting link')
+      .toHaveLength(1);
+    expect(second).toEqual(first);
+    expect(first.synced).toBe(2);
+    expect(
+      second.synced,
+      'the second caller was told none of the captures went, about work it had just sent itself',
+    ).toBe(2);
+    expect(second.duplicates).toBe(0);
+    expect(await listDrafts()).toHaveLength(0);
+  });
+
+  it('starts a fresh sync for a capture made after the last one finished', async () => {
+    /*
+     * The guard on the guard. A flight that is never cleared would make the
+     * first sync of a session the only one, and the agent's queue would sit on
+     * the phone for ever with the app reporting nothing wrong.
+     */
+    await saveDraft('TAXPAYER_REGISTRATION', TAXPAYER);
+    const firstRun = serverLikePoster();
+    const first = syncDrafts(firstRun.poster);
+    firstRun.release();
+    expect((await first).synced).toBe(1);
+
+    await saveDraft('TAXPAYER_REGISTRATION', { ...TAXPAYER, phone: '+2347044000006' });
+    const secondRun = serverLikePoster();
+    const second = syncDrafts(secondRun.poster);
+    secondRun.release();
+
+    expect((await second).synced).toBe(1);
+    expect(secondRun.batches).toHaveLength(1);
+    expect(await listDrafts()).toHaveLength(0);
+  });
+
+  it('fails every caller sharing a flight, and clears it so the next one runs', async () => {
+    /*
+     * A caller told nothing happened when a sync failed is a caller that will
+     * not retry. Both get the failure, and the queue is intact for whichever
+     * of them asks again.
+     */
+    await saveDraft('TAXPAYER_REGISTRATION', TAXPAYER);
+
+    let refuse: ((error: Error) => void) | undefined;
+    const refused = new Promise<never>((_resolve, reject) => {
+      refuse = reject;
+    });
+    /*
+     * Rejected below before the flight has reached the poster, so a handler is
+     * attached here or Node reports it as unhandled and the run fails on an
+     * error outside any test. The assertions that matter are further down.
+     */
+    refused.catch(() => {});
+    const failing = async () => refused;
+
+    const fromTheConnection = syncDrafts(failing);
+    const fromTheWorker = syncDrafts(failing);
+    refuse!(new Error('the signal went'));
+
+    await expect(fromTheConnection).rejects.toThrow('the signal went');
+    await expect(fromTheWorker).rejects.toThrow('the signal went');
+    expect(await pendingDrafts()).toHaveLength(1);
+
+    // And the flight is gone, so the retry is a real one.
+    const retry = serverLikePoster();
+    const after = syncDrafts(retry.poster);
+    retry.release();
+    expect((await after).synced).toBe(1);
+  });
+});

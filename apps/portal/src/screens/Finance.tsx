@@ -330,11 +330,28 @@ export function ReconciliationScreen() {
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
 
-      {loadError && (
-        <Alert kind="info" title="ofcFnNotYourRole">
-          <p style={{ margin: 0 }}>{loadError.message}</p>
-        </Alert>
-      )}
+      {/*
+        * Labelled "not available to your role" only when that is what happened.
+        *
+        * Three reads write this one slot, and the label was fixed: a 500 from
+        * the settlement endpoint, or a request that never left the browser,
+        * told a finance officer the figures were not available to their role.
+        * They stop looking — the screen has given them a reason that is not
+        * theirs to fix — and nobody learns the endpoint is down, on the screen
+        * PSIRS uses to check that money it collected actually arrived.
+        *
+        * The comment above this state already draws one distinction, between
+        * "this is not yours to see" and "what you just did did not happen".
+        * This is the third: "nobody can see it right now".
+        */}
+      {loadError &&
+        (loadError.code === 'FORBIDDEN' ? (
+          <Alert kind="info" title="ofcFnNotYourRole">
+            <p style={{ margin: 0 }}>{loadError.message}</p>
+          </Alert>
+        ) : (
+          <ErrorAlert error={loadError} />
+        ))}
 
       {settlements && (
         <div className="stat-grid">
@@ -896,6 +913,8 @@ function CommissionByPlace() {
 export function ApprovalsScreen({ user }: { user: User }) {
   const { t } = usePortalI18n();
   const [approvals, setApprovals] = useState<any[] | null>(null);
+  /** How many the filter matched, which can be more than the queue returned. */
+  const [matched, setMatched] = useState(0);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('REQUESTED');
@@ -904,8 +923,13 @@ export function ApprovalsScreen({ user }: { user: User }) {
     const params = new URLSearchParams();
     if (statusFilter) params.set('status', statusFilter);
     api
-      .get<any[]>(`/government/approvals?${params.toString()}`)
-      .then(setApprovals)
+      .get<{ approvals: any[]; matched: number; cap: number }>(
+        `/government/approvals?${params.toString()}`,
+      )
+      .then((queue) => {
+        setApprovals(queue.approvals);
+        setMatched(queue.matched);
+      })
       .catch((caught) => {
         setError(asApiError(caught));
       });
@@ -985,6 +1009,19 @@ export function ApprovalsScreen({ user }: { user: User }) {
 
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
+      {approvals && matched > approvals.length && (
+        /*
+         * Said, because the requests that fall off are the oldest: newest
+         * first, cut at the cap, they are the ones that have waited longest.
+         */
+        <Alert kind="info" title="ofcFnQueueStopsShort">
+          <p style={{ margin: 0 }}>
+            {t.ofcFnQueueStopsShortBody
+              .replace('{{matched}}', matched.toLocaleString())
+              .replace('{{shown}}', approvals.length.toLocaleString())}
+          </p>
+        </Alert>
+      )}
 
       <div className="card card--flush">
         {!approvals ? (
@@ -1001,7 +1038,33 @@ export function ApprovalsScreen({ user }: { user: User }) {
               },
               { key: 'entity_type', label: 'ofcSpSubject' },
               { key: 'requested_by_name', label: 'ofcFnRequestedBy' },
-              { key: 'requested_reason', label: 'ofcAgReason' },
+              {
+                key: 'requested_reason',
+                label: 'ofcAgReason',
+                /*
+                 * And, for money going back, what is being decided: how much,
+                 * and whose doing the requester says it was. That second fact
+                 * decides whether the bill is withdrawn or owed again and
+                 * whether the citizen's score is touched, and it lives in the
+                 * payload where the queue never showed it. A request that did
+                 * not say is carried out as the State's, which is what this
+                 * prints for it.
+                 */
+                render: (row) =>
+                  ['PAYMENT_REVERSAL', 'REFUND'].includes(row.approval_type) && row.payload ? (
+                    <>
+                      {row.requested_reason}
+                      <br />
+                      <span className="muted">
+                        {row.payload.amountKobo ? <Money kobo={row.payload.amountKobo} /> : null}
+                        {row.payload.amountKobo ? ' · ' : ''}
+                        {t.ofcT3ReverseWhose}: {enumLabel(row.payload.attributableTo ?? 'GOVERNMENT', t)}
+                      </span>
+                    </>
+                  ) : (
+                    row.requested_reason
+                  ),
+              },
               {
                 key: 'requested_at',
                 label: 'ofcRhRequested',

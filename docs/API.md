@@ -269,7 +269,8 @@ already in force, which the gate would never read.
 | `POST` | `/revenue/assessments` | `assessment:create` + active agent |
 | `GET` | `/revenue/assessments/:id` · `/invoices/:id` | read |
 | `POST` | `/revenue/invoices/:id/document` | render invoice PDF |
-| `GET` | `/revenue/taxpayers/:id/obligations` | outstanding invoices |
+| `POST` | `/revenue/invoices/:id/reissue` | `invoice:create` + active agent — issue again a bill that can no longer be paid: one past its deadline, owed again after a payment the taxpayer's bank or the gateway reversed, or still in date but raised in a month that has since been closed (paying it would add to the closed month's figures, so `/payments/initiate` refuses it with `INVOICE_PERIOD_CLOSED`). A fresh invoice and transaction against the same assessment, for the same amounts, with a new thirty-day window — or, for a bill moved out of a closed month, its original deadline; the old invoice is cancelled and names its replacement (`reissued_as`). Refused, by code, for a bill still payable, paid or part paid, withdrawn, under an open objection, with a payment in progress, on a record that is not active, or for a vehicle renewal no longer pending. Asked again, answers `200` with the replacement already made. Migration 091 holds the amounts, the link and one live invoice per assessment. |
+| `GET` | `/revenue/taxpayers/:id/obligations` | everything the taxpayer owes, lapsed or not; each row carries `needs_reissue` — past its deadline, its charge ended by a reversal, or raised in a month since closed (`period_closed` names it) — for a bill to issue again before it is paid, and `under_objection` for one not to be pressed for |
 
 ## Payments, receipts, vehicles
 
@@ -379,12 +380,13 @@ process would be a lost capture wearing the costume of a successful one.
 | `GET` | `/government/reconciliation/exceptions` | exception queue |
 | `POST` | `/government/reconciliation/exceptions/:id/resolve` | resolution required |
 | `GET`/`POST` | `/government/settlements` | `payment:reconcile` |
-| `GET`/`POST` | `/government/approvals` | maker-checker |
+| `GET`/`POST` | `/government/approvals` | maker-checker. Only kinds something carries out once granted can be asked for: `PAYMENT_REVERSAL`, `REFUND`, `COMMISSION_PAYOUT`, `BANK_ACCOUNT_CHANGE`, `AGENT_OVERRIDE_ACTIVATION`, `INVOICE_WITHDRAWAL`. The other kinds the table holds are refused with `APPROVAL_NOT_CARRIED_OUT`, naming where that act is really done; one already waiting can be rejected but not granted |
 | `POST` | `/government/approvals/:id/decide` | requester may never decide |
+| `POST` | `/government/approvals` with `INVOICE_WITHDRAWAL` | withdraw an unpaid bill raised in error — a duplicate, a charge against the wrong record. Asked for one invoice (`entityType: invoice`) by somebody holding `approval:request` and `invoice:create`; refused at once, by code, for a bill paid or part paid, already withdrawn, or with a payment in progress, and while another request for it is waiting. Granting it through `/decide` withdraws the bill in the same transaction: the invoice CANCELLED, its charge closed, a waiting vehicle renewal cancelled, the approval EXECUTED. A bill paid in the meantime refuses the decision, which stays open to be rejected. |
 | `POST` | `/government/approvals/:id/execute-reversal` | `payment:reverse:approve` + step-up; approver may not execute |
 | `POST` | `/government/commissions/promote` | `commission:manage` |
 | `GET` | `/government/commissions/payouts` | `commission:read:all` |
-| `POST` | `/government/commissions/payouts/:id/approve` · `/complete` | segregation of duties |
+| `POST` | `/government/commissions/payouts/:id/approve` · `/complete` | segregation of duties: whoever asked for a payout may not approve it, and the officer who approved it may not record it paid (`SEGREGATION_OF_DUTIES`) |
 | `GET` | `/government/leakage` · `/fraud/flags` | `fraud:read` |
 | `POST` | `/government/fraud/flags/:id/review` · `/fraud/sweep` | `fraud:manage` |
 | `GET` | `/government/roles` | `user:manage` — every role, its permissions, its officers, and how many rows it may export |
@@ -478,7 +480,7 @@ reconciliation sweep operated is an audit fact.
 | Every transaction by agent X between two dates | `/government/audit/queries/agent-transactions` |
 | All transactions reversed after successful payment | `/government/audit/queries/reversed-after-success` |
 | All changes made to revenue rates | `/government/audit/queries/rate-changes` |
-| All users who accessed taxpayer record X | `/government/audit/queries/taxpayer-access` |
+| Who has read taxpayer record X, and who has changed it | `/government/audit/queries/taxpayer-access` — reads come from `taxpayer_record_access_logs`, changes from `audit_logs`; every row says which it is. A search (`/taxpayers/search`) is not recorded — see the readiness assessment's "Sensitive data accessed" row for why |
 | All receipts generated for a revenue item | `/government/audit/queries/receipts-by-item` |
 | All payments from LGA X | `/government/transactions?lgaId=` |
 | All commission paid to agent X | `/government/commissions/payouts` |

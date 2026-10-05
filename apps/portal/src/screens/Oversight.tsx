@@ -6,7 +6,7 @@ import { Alert, Badge, BeforeAfter, ErrorAlert, ExportButtons, Loading, Money, R
 import { withJustification } from '../lib/justify';
 import { usePortalI18n } from '../lib/i18n';
 import { useFilters } from '../lib/filters';
-import { CHAIN_TEXT, enumLabel, localName, todayIsoLocal } from '@psirs/shared';
+import { CHAIN_TEXT, ENUM_LABELS, enumLabel, localName, todayIsoLocal } from '@psirs/shared';
 import type { ChainVerdict, TranslationDictionary } from '@psirs/shared';
 
 /**
@@ -411,6 +411,43 @@ interface AuditQuery {
   period?: boolean;
 }
 
+/**
+ * Whether a cell of an audit answer is a state the dictionary can name.
+ *
+ * Narrow on purpose, in both directions — the comment at the call site gives
+ * the two reasons. `ENUM_LABELS` is consulted directly rather than through
+ * `enumLabel`, because `enumLabel` always returns something: its fallback is
+ * what mangles an action identifier, so the question "does the dictionary
+ * know this" has to be asked before it is called.
+ */
+function isTranslatedState(column: string, value: unknown): value is string {
+  if (column !== 'kind' && column !== 'action') return false;
+  return typeof value === 'string' && value in ENUM_LABELS;
+}
+
+/**
+ * One of the six audit answers, however the endpoint shapes it.
+ *
+ * Three of them are capped — 500 entries of who has touched a taxpayer's
+ * record, 500 searches of the register, 1000 receipts for one revenue item —
+ * and they used to answer a bare array, so an auditor asking "who has looked
+ * at this record" was shown 500 rows and nothing to say there were four
+ * thousand. The other three are uncapped and answer an array still, which is
+ * why this takes either shape rather than assuming the new one.
+ *
+ * The figures are checked rather than written down: `a-figure-nobody-recounted`
+ * reads `AUDIT_QUERIES` and the caps in `reports.ts` and fails if this sentence
+ * disagrees with them. It said five and two until the register-search answer
+ * was added beside it and this comment was not.
+ */
+async function auditAnswer(path: string): Promise<{ rows: any[]; cap: number | null }> {
+  const answer = await api.get<any[] | { rows: any[]; truncated: boolean; cap: number | null }>(
+    path,
+  );
+  if (Array.isArray(answer)) return { rows: answer, cap: null };
+  return { rows: answer.rows, cap: answer.truncated ? (answer.cap ?? null) : null };
+}
+
 const AUDIT_QUERIES: AuditQuery[] = [
   {
     key: 'reversed',
@@ -434,6 +471,16 @@ const AUDIT_QUERIES: AuditQuery[] = [
     label: 'ofcOvReceiptsOneItem',
     path: '/government/audit/queries/receipts-by-item',
     parameter: { name: 'revenueItemCode', prompt: 'ofcOvWhichRevenueItem', source: 'revenueItems' },
+  },
+  /*
+   * No parameter, because the question is about the officers rather than about
+   * one citizen: "who has been trawling the register this week" is asked
+   * without knowing whose records came back.
+   */
+  {
+    key: 'register-searches',
+    label: 'ofcOvWhoSearchedTheRegister',
+    path: '/government/audit/queries/register-searches',
   },
   {
     key: 'taxpayer-access',
@@ -735,11 +782,15 @@ function chainAnswer(answer: ChainAnswer, t: TranslationDictionary): string {
 export function AuditScreen() {
   const { t } = usePortalI18n();
   const [entries, setEntries] = useState<any[] | null>(null);
+  /** The cap the entry list hit, or null when it holds everything asked for. */
+  const [entriesCap, setEntriesCap] = useState<number | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [verification, setVerification] = useState<ChainAnswer | null>(null);
   const [queryResult, setQueryResult] = useState<{
     label: keyof TranslationDictionary;
     rows: any[];
+    /** The cap this answer hit. Two of the five can be capped; three cannot. */
+    cap: number | null;
   } | null>(null);
   const [pending, setPending] = useState<AuditQuery | null>(null);
   /*
@@ -771,9 +822,23 @@ export function AuditScreen() {
     const params = auditQuery(150);
 
     setEntries(null);
+    setEntriesCap(null);
     api
-      .get<any[]>(`/government/audit?${params.toString()}`)
-      .then(setEntries)
+      .get<any[] | { rows: any[]; truncated: boolean; cap: number | null }>(
+        `/government/audit?${params.toString()}`,
+      )
+      /*
+       * The same envelope the transactions list reads, and for the same reason:
+       * the endpoint had always known whether 150 entries were all of them and
+       * told only the export. An auditor reading a log whose head is missing,
+       * and not knowing it is missing, is reading a different log.
+       */
+      .then((answer) => {
+        setEntries(Array.isArray(answer) ? answer : answer.rows);
+        setEntriesCap(
+          Array.isArray(answer) ? null : answer.truncated ? (answer.cap ?? null) : null,
+        );
+      })
       .catch((caught) => {
         setError(asApiError(caught));
       });
@@ -854,8 +919,7 @@ export function AuditScreen() {
                 }
                 setPending(null);
                 try {
-                  const rows = await api.get<any[]>(query.path);
-                  setQueryResult({ label: query.label, rows });
+                  setQueryResult({ label: query.label, ...(await auditAnswer(query.path)) });
                 } catch (caught) {
                   setError(asApiError(caught));
                 }
@@ -871,8 +935,8 @@ export function AuditScreen() {
         <AuditQueryParameters
           query={pending}
           onCancel={() => setPending(null)}
-          onRan={(rows) => {
-            setQueryResult({ label: pending.label, rows });
+          onRan={(answer) => {
+            setQueryResult({ label: pending.label, ...answer });
             setPending(null);
           }}
           onError={setError}
@@ -882,6 +946,11 @@ export function AuditScreen() {
       {queryResult && (
         <div className="card card--flush">
           <div className="card__pad">
+            {queryResult.cap !== null && (
+              <Alert kind="warning">
+                {t.ofcAnswerStoppedAtCap.replace('{{n}}', String(queryResult.cap))}
+              </Alert>
+            )}
             <div className="card__header">
               <h2 className="card__title">{t[queryResult.label]}</h2>
               <button type="button" className="small secondary" onClick={() => setQueryResult(null)}>{t.ofcKycClose}</button>
@@ -896,7 +965,40 @@ export function AuditScreen() {
                 typeof row[key] === 'object' && row[key] !== null ? (
                   <span className="mono">{JSON.stringify(row[key])}</span>
                 ) : (
-                  String(row[key] ?? '—')
+                  /*
+                   * Two columns go through the dictionary, and only values it
+                   * actually holds.
+                   *
+                   * `kind` and `action` are the only columns in any of these
+                   * answers that carry a state rather than a datum: READ or
+                   * CHANGE, and — on a read — which of the four things the
+                   * officer was shown. Rendered raw they reached a Hausa
+                   * auditor as `PAYMENT_HISTORY`.
+                   *
+                   * The second condition is load-bearing and tested:
+                   * `enumLabel` falls back to taking the underscores out and
+                   * lowercasing, which turned `taxpayer.status_changed` —
+                   * an audit action identifier, not a state — into
+                   * "taxpayer.status changed". An action has to stay the
+                   * string it is, so an auditor can match it against the log.
+                   *
+                   * The column restriction is conservatism rather than a
+                   * demonstrated hazard, and is worth being straight about:
+                   * widening this to every cell would translate anything that
+                   * matched a dictionary key, which for the states in these
+                   * five answers (`status`, `result`, `rate_type`) would
+                   * probably be an improvement. It is not done here because
+                   * `ENUM_LABELS` is keyed by bare value and these answers are
+                   * arbitrary SQL projections: a future column holding `A` as
+                   * a datum would read "Class A", on the one screen where a
+                   * wrong label is a wrong fact. No test here discriminates
+                   * the two, so the narrower rule is the one that ships.
+                   */
+                  isTranslatedState(key, row[key]) ? (
+                    enumLabel(row[key] as string, t)
+                  ) : (
+                    String(row[key] ?? '—')
+                  )
                 ),
             }))}
             rows={queryResult.rows}
@@ -934,6 +1036,14 @@ export function AuditScreen() {
             />
           </div>
         </div>
+
+        {entriesCap !== null && (
+          <div className="card__pad" style={{ paddingTop: 0 }}>
+            <Alert kind="warning">
+              {t.ofcListStoppedAtCap.replace('{{n}}', String(entriesCap))}
+            </Alert>
+          </div>
+        )}
 
         {!entries ? (
           <div style={{ padding: 18 }}>
@@ -1014,7 +1124,7 @@ function AuditQueryParameters({
 }: {
   query: AuditQuery;
   onCancel: () => void;
-  onRan: (rows: any[]) => void;
+  onRan: (answer: { rows: any[]; cap: number | null }) => void;
   onError: (error: ApiError) => void;
 }) {
   const { lang, t } = usePortalI18n();
@@ -1120,7 +1230,7 @@ function AuditQueryParameters({
         params.set('from', new Date(`${range.from}T00:00:00`).toISOString());
         params.set('to', new Date(`${range.to}T23:59:59`).toISOString());
       }
-      onRan(await api.get<any[]>(`${query.path}?${params.toString()}`));
+      onRan(await auditAnswer(`${query.path}?${params.toString()}`));
     } catch (caught) {
       onError(asApiError(caught));
     } finally {

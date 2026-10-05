@@ -106,7 +106,11 @@ async function close(periodId: string, body: Record<string, unknown> = {}) {
 }
 
 /** A verified collection dated inside a chosen month. */
-async function backdatedCollection(when: Date, amountKobo = 5_000_000n): Promise<string> {
+async function backdatedCollection(
+  when: Date,
+  amountKobo = 5_000_000n,
+  status = 'SETTLED',
+): Promise<string> {
   const row = await queryOne<{ id: string }>(
     pool,
     `INSERT INTO transactions (
@@ -115,10 +119,10 @@ async function backdatedCollection(when: Date, amountKobo = 5_000_000n): Promise
      )
      SELECT 'TXN-PER-' || gen_random_uuid()::text, t.taxpayer_id, t.invoice_id,
             t.assessment_id, t.revenue_item_id, t.lga_id, $1, $1,
-            'SETTLED', t.created_by, $2, t.territory_id
+            $3, t.created_by, $2, t.territory_id
        FROM transactions t WHERE t.status = 'SETTLED' ORDER BY t.created_at LIMIT 1
      RETURNING id`,
-    [amountKobo.toString(), when],
+    [amountKobo.toString(), when, status],
   );
   assert.ok(row, 'a settled transaction existed to copy');
   return row!.id;
@@ -364,6 +368,53 @@ describe('what closing refuses to do quietly', () => {
     );
   });
 
+  /*
+   * Money the month took that the bank has not paid in yet.
+   *
+   * Not an exception — settlement takes a day or two — but the settled figure
+   * freezes with the rest, and a bank credit dated inside a closed month
+   * cannot be recorded without reopening it. So the close waits for the bank,
+   * and an officer who cannot wait says why.
+   */
+  it('waits for money the bank has not yet paid in, unless somebody says why', async () => {
+    await collect('8');
+    const bounds = lastMonth();
+    await backdatedCollection(bounds.start, 5_000_000n, 'RECONCILIATION_PENDING');
+
+    const figures = await get(
+      `/government/periods/figures?periodStart=${iso(bounds.start)}&periodEnd=${iso(bounds.end)}`,
+      auth('finance'),
+    );
+    assert.equal(figures.status, 200, JSON.stringify(figures.body));
+    assert.equal(figures.body.awaiting_settlement, '1', 'the preview shows what the close will refuse over');
+    assert.equal(figures.body.unreconciled, '0', 'and it is not counted as an exception');
+
+    const period = await openPeriod(bounds);
+    const refused = await close(period.id);
+    assert.equal(refused.status, 409, JSON.stringify(refused.body));
+    assert.equal(refused.body.error.code, 'PERIOD_NOT_SETTLED');
+    assert.match(refused.body.error.message, /1 collection\(s\) not yet paid into a government account/);
+
+    const forced = await close(period.id, {
+      overrideReason: 'Statutory deadline; the bank has confirmed the credit for the 1st.',
+    });
+    assert.equal(forced.status, 200, JSON.stringify(forced.body));
+    assert.equal(forced.body.overridden, true);
+  });
+
+  it('does not wait for money another month took', async () => {
+    // The control: unsettled money from this month says nothing about last.
+    await collect('9');
+    const bounds = lastMonth();
+    await backdatedCollection(bounds.start);
+    await backdatedCollection(new Date(), 5_000_000n, 'RECONCILIATION_PENDING');
+
+    const period = await openPeriod(bounds);
+    const closed = await close(period.id);
+    assert.equal(closed.status, 200, JSON.stringify(closed.body));
+    assert.equal(closed.body.overridden, false);
+  });
+
   it('refuses two periods that cover the same day', async () => {
     const bounds = lastMonth();
     await openPeriod(bounds);
@@ -502,5 +553,74 @@ describe('reopening, and who may do it', () => {
     );
     assert.equal(begun.status, 200, JSON.stringify(begun.body));
     await assert.rejects(() => backdatedCollection(bounds.start), /is closed/);
+  });
+
+  /*
+   * THE MONTH AS A FIELD, so an officer reading Hausa is told which one.
+   *
+   * These three refusals are the row `HAUSA-REVIEW-QUESTIONS.md` §7 calls the
+   * tier: closing a revenue month is an act an officer's name goes on, and
+   * "already closed" read as "closed now" is an officer believing they have
+   * done something they have not. The portal translates by code, so the month
+   * has to travel beside the sentence rather than be parsed back out of it —
+   * which would break the moment somebody improved an English sentence,
+   * silently, in the language nobody testing it reads.
+   *
+   * This is the half only the server can get wrong. The portal's own test
+   * supplies its details, so it would pass with none of these sent.
+   */
+  it('names the month a second closing was refused for', async () => {
+    const bounds = lastMonth();
+    const period = await openPeriod(bounds);
+    assert.equal((await close(period.id)).status, 200);
+
+    const again = await close(period.id);
+    assert.equal(again.status, 409, JSON.stringify(again.body));
+    assert.equal(again.body.error.code, 'PERIOD_CLOSED');
+    assert.deepEqual(
+      again.body.error.details,
+      [{ field: 'period', issue: period.label }],
+      'the month the refusal is about has to travel with it',
+    );
+  });
+
+  it('names the month a second reopening was refused for', async () => {
+    const period = await openPeriod();
+
+    await grantStepUp(tokens.admin, PHONES.admin, 'financial.period.reopen');
+    const reopened = await post(
+      `/government/periods/${period.id}/reopen`,
+      { reason: 'A correction the Accountant-General asked for.' },
+      auth('admin'),
+    );
+    assert.equal(reopened.status, 409, JSON.stringify(reopened.body));
+    assert.equal(reopened.body.error.code, 'PERIOD_OPEN');
+    assert.deepEqual(reopened.body.error.details, [{ field: 'period', issue: period.label }]);
+  });
+
+  it('names the state a month is in when closing cannot begin', async () => {
+    const bounds = lastMonth();
+    const period = await openPeriod(bounds);
+    assert.equal(
+      (await post(`/government/periods/${period.id}/begin-closing`, {}, auth('finance'))).status,
+      200,
+    );
+
+    const again = await post(
+      `/government/periods/${period.id}/begin-closing`,
+      {},
+      auth('finance'),
+    );
+    assert.equal(again.status, 409, JSON.stringify(again.body));
+    assert.equal(again.body.error.code, 'PERIOD_NOT_OPEN');
+    /*
+     * The state as the schema holds it, not the lowercased word the English
+     * prints. The portal reads it through the shared enum table, which has a
+     * name for CLOSING in both languages and none for "closing".
+     */
+    assert.deepEqual(again.body.error.details, [
+      { field: 'period', issue: period.label },
+      { field: 'state', issue: 'CLOSING', code: 'STATE' },
+    ]);
   });
 });

@@ -32,6 +32,7 @@ import type { PoolClient } from 'pg';
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { conflict, forbidden, notFound } from '../lib/errors';
+import { LIVE_SESSION_SQL } from '../lib/live-session';
 import { recordAudit } from './audit';
 
 export interface Actor {
@@ -46,12 +47,63 @@ export interface Actor {
  * with the whole building, and an officer on a phone changes theirs every few
  * minutes -- so an address-based handle would merge every colleague into one
  * device and split one officer's morning into six.
+ *
+ * AND DELIBERATELY NOT THE USER AGENT, WHICH IS WHAT IT USED TO BE
+ *
+ * This hashed `${clientDeviceId}|${userAgent}`, and the officer portal never
+ * sent a client identifier -- only the agent app did, and agents do not get
+ * officer device rows at all (see `auth.ts`, which passes null for them). So
+ * for every officer the first half was empty and the handle was a function of
+ * the user agent and nothing else. Two consequences, and the second is the
+ * one that matters:
+ *
+ *   - Two machines running the same browser build were one device. An
+ *     officer's desktop and laptop appeared as a single row, and blocking
+ *     either blocked both.
+ *   - A browser update changed the user agent, which changed the handle, so
+ *     the next sign-in matched no row and inserted a fresh ACTIVE one. The
+ *     remedy `auth.ts` offers for "a laptop in somebody else's hands"
+ *     therefore expired at the next Chrome update, every few weeks, silently.
+ *
+ * `blockDevice` was never the weak part: it revokes the sessions and
+ * migration 063's trigger refuses any future session on that row at the
+ * database. Both are correct about the row they name. The row simply stopped
+ * being the one the laptop came back as.
+ *
+ * So when the client sends an identifier, that is the whole handle and the
+ * user agent is excluded -- otherwise a browser update would move the
+ * fingerprint again and nothing would be fixed. The user agent is still
+ * stored on the row and still produces the label a person reads.
+ *
+ * WHAT THIS DOES NOT CLAIM. The identifier lives in the browser's own
+ * storage, so whoever holds the machine can clear it and come back as a new
+ * device. Blocking is not tamper-proof against someone with the laptop and
+ * must not be relied on as though it were; the durable controls are ending
+ * the sessions and disabling the account. What this fixes is the routine
+ * silent failure and the two-machines-one-row conflation.
+ *
+ * The comment on `officer_devices.fingerprint` in migration 063 still
+ * describes the old intent. It cannot be corrected: `migrate.ts` records a
+ * checksum of every applied file and refuses to start when one changes, so
+ * editing an applied migration would stop every existing deployment booting.
  */
 export function fingerprintOf(userAgent: string | null, clientDeviceId: string | null): string {
-  return createHash('sha256')
-    .update(`${clientDeviceId ?? ''}|${userAgent ?? ''}`)
-    .digest('hex')
-    .slice(0, 32);
+  const material = clientDeviceId ? `device:${clientDeviceId}` : `|${userAgent ?? ''}`;
+  return createHash('sha256').update(material).digest('hex').slice(0, 32);
+}
+
+/**
+ * The handle an officer's row carries if it was created before the portal sent
+ * an identifier.
+ *
+ * Kept so `deviceForSignIn` can find such a row and carry it forward instead
+ * of leaving it behind. Leaving it behind is not a cosmetic loss: a BLOCKED
+ * row left behind is a block that stopped applying, which would have made
+ * this change unblock every blocked device in the estate on the day it
+ * deployed.
+ */
+export function legacyFingerprintOf(userAgent: string | null): string {
+  return createHash('sha256').update(`|${userAgent ?? ''}`).digest('hex').slice(0, 32);
 }
 
 /**
@@ -94,34 +146,99 @@ export async function deviceForSignIn(
 ): Promise<string> {
   const fingerprint = fingerprintOf(params.userAgent, params.clientDeviceId);
 
-  const existing = await queryOne<{ id: string; status: string }>(
-    client,
-    'SELECT id, status FROM officer_devices WHERE user_id = $1 AND fingerprint = $2',
-    [params.userId, fingerprint],
-  );
-
-  if (existing) {
-    if (existing.status === 'BLOCKED') {
-      throw forbidden(
-        'This device has been blocked. Sign in from another one.',
-        'An administrator can unblock it.',
-      );
-    }
-    await client.query(
-      'UPDATE officer_devices SET last_seen_at = now(), user_agent = $2 WHERE id = $1',
-      [existing.id, params.userAgent],
+  const find = (handle: string) =>
+    queryOne<{ id: string; status: string }>(
+      client,
+      'SELECT id, status FROM officer_devices WHERE user_id = $1 AND fingerprint = $2',
+      [params.userId, handle],
     );
-    return existing.id;
+
+  const refuse = () => {
+    throw forbidden(
+      'This device has been blocked. Sign in from another one.',
+      'An administrator can unblock it.',
+    );
+  };
+
+  /*
+   * The row this machine used to be, before it sent an identifier.
+   *
+   * Only worth looking for when an identifier arrived and the new handle
+   * matches nothing: that is exactly the first sign-in after this change
+   * reached the browser. Adopting the row rather than inserting beside it
+   * keeps the device's history, its label and -- the point -- its status.
+   * Without this, the first sign-in after the portal started sending an
+   * identifier would have left every existing row behind, which would have
+   * unblocked every blocked device in the estate on the day of the fix.
+   *
+   * A BLOCKED row found here is refused on the spot rather than adopted, and
+   * its handle is left alone, so that a second machine which shared the row
+   * still matches it: both were blocked, and both stay blocked until somebody
+   * says otherwise.
+   *
+   * This refusal and the `withTransaction` wrapper `auth.ts` puts around the
+   * call are redundant, and the measurement is the only reason I know which
+   * claim to make. Remove this line alone and nothing fails: the adoption
+   * rewrites the row onto the new handle, the upsert below conflicts with that
+   * same row, sees BLOCKED and refuses anyway, and the rollback undoes the
+   * rewrite. Remove the transaction alone and nothing fails either, because
+   * this line stops the rewrite happening. Remove BOTH and two tests fail --
+   * the second machine stops matching the row and walks past the block, and a
+   * refused attempt leaves the row carrying a different handle.
+   *
+   * So neither is "the" protection. The guess that this one was load-bearing
+   * on its own was wrong, and so was the earlier guess that the transaction
+   * was.
+   *
+   * Two machines that shared one legacy row split apart over time: the first
+   * to sign in adopts it, the second finds neither handle and gets its own.
+   * That is the conflation unwinding, in the only direction it can.
+   */
+  if (params.clientDeviceId && !(await find(fingerprint))) {
+    const legacy = await find(legacyFingerprintOf(params.userAgent));
+    if (legacy?.status === 'BLOCKED') refuse();
+    if (legacy) {
+      await client.query('UPDATE officer_devices SET fingerprint = $2 WHERE id = $1', [
+        legacy.id,
+        fingerprint,
+      ]);
+    }
   }
 
-  const created = await queryOne<{ id: string }>(
+  /*
+   * The row, whether it already existed or starts here, in one statement.
+   *
+   * This was a SELECT, then a touch if it hit, then a bare INSERT if it
+   * missed -- which is a race with a unique constraint at the end of it:
+   * `UNIQUE (user_id, fingerprint)`. An officer double-clicking sign-in, or
+   * two tabs restoring at once, gives two requests that both miss the SELECT
+   * and both insert. One wins; the other gets a 23505, and the officer gets a
+   * 500 from the one screen that is supposed to let them in. It heals on a
+   * retry, because by then the row exists -- which is exactly the kind of
+   * fault that gets dismissed as a glitch and never fixed.
+   *
+   * `ON CONFLICT DO UPDATE` collapses all three into one round trip and makes
+   * the loser of the race take the winner's row, which is the right answer:
+   * it is the same computer, and the row it wanted now exists. It also leaves
+   * one place where a BLOCKED row is recognised instead of two, and that one
+   * place is reachable by an ordinary sign-in from a blocked machine -- so it
+   * is pinned by a test rather than defended by an argument.
+   *
+   * The UPDATE touching a blocked row before the refusal is rolled back:
+   * `auth.ts` calls this inside `withTransaction`, and the throw unwinds it.
+   */
+  const row = await queryOne<{ id: string; status: string }>(
     client,
     `INSERT INTO officer_devices (user_id, fingerprint, label, user_agent)
      VALUES ($1,$2,$3,$4)
-     RETURNING id`,
+     ON CONFLICT (user_id, fingerprint) DO UPDATE
+       SET last_seen_at = now(), user_agent = EXCLUDED.user_agent
+     RETURNING id, status`,
     [params.userId, fingerprint, labelFor(params.userAgent), params.userAgent],
   );
-  return created!.id;
+
+  if (row!.status === 'BLOCKED') refuse();
+  return row!.id;
 }
 
 // ===========================================================================
@@ -137,6 +254,12 @@ export interface SessionRow {
   expires_at: string;
   revoked_at: string | null;
   revoked_reason: string | null;
+  /**
+   * Whether it can still be used. Not the same as "not revoked": a session
+   * that went idle or reached its absolute lifetime is over without anybody
+   * having ended it. See `lib/live-session.ts`.
+   */
+  live: boolean;
   full_name?: string;
 }
 
@@ -146,6 +269,8 @@ export interface SessionRow {
  * Revoked sessions are included and marked rather than filtered out, because
  * "I ended that one on Tuesday" is exactly what somebody checking their own
  * account needs to see, and an administrator investigating needs it more.
+ * So are sessions that lapsed without being ended, marked by `live` — which
+ * the screen used to infer from `revoked_at` alone, and so showed as active.
  */
 export async function sessionsFor(
   db: Db,
@@ -156,11 +281,12 @@ export async function sessionsFor(
     db,
     `SELECT s.id, s.ip_address::text AS ip_address, s.user_agent,
             s.issued_at, s.last_used_at, s.expires_at, s.revoked_at, s.revoked_reason,
+            ${LIVE_SESSION_SQL} AS live,
             d.label AS device_label, d.status AS device_status
        FROM sessions s
        LEFT JOIN officer_devices d ON d.id = s.officer_device_id
       WHERE s.user_id = $1
-      ORDER BY (s.revoked_at IS NULL) DESC, s.last_used_at DESC NULLS LAST, s.issued_at DESC
+      ORDER BY ${LIVE_SESSION_SQL} DESC, s.last_used_at DESC NULLS LAST, s.issued_at DESC
       LIMIT 100`,
     [userId],
   );
@@ -225,8 +351,7 @@ export async function devicesFor(db: Db, userId: string) {
             d.blocked_at, d.block_reason,
             b.full_name AS blocked_by_name,
             (SELECT count(*)::int FROM sessions s
-              WHERE s.officer_device_id = d.id AND s.revoked_at IS NULL
-                AND s.expires_at > now()) AS live_sessions
+              WHERE s.officer_device_id = d.id AND ${LIVE_SESSION_SQL}) AS live_sessions
        FROM officer_devices d
        LEFT JOIN users b ON b.id = d.blocked_by
       WHERE d.user_id = $1

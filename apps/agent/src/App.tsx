@@ -186,6 +186,39 @@ export function App() {
     if (connection !== 'OFFLINE' && pendingCount > 0) void runSync();
   }, [connection, pendingCount, runSync]);
 
+  /*
+   * The browser telling us the signal is back, which nothing was listening for.
+   *
+   * `requestBackgroundSync` registers the `psirs-sync-drafts` tag, the browser
+   * fires `sync` in the worker when connectivity returns, and the worker posts
+   * `SYNC_DRAFTS` to every client it can find. That last hop had no receiver
+   * anywhere in this application, so the whole chain ended in a dropped
+   * message — including the one the catch above asks for by name when a sync
+   * dies of no signal, which says "ask the browser to try again later" and
+   * then was never told when later arrived.
+   *
+   * What the worker cannot do is send the drafts itself: they are in IndexedDB,
+   * which it can read, but the access token is held in this page and a sync
+   * needs it. So messaging the page is the right shape; it simply needed
+   * somebody at the other end.
+   *
+   * This does not reach a handset whose app is fully closed — `matchAll` finds
+   * no client, and the event completes having done nothing. What it does reach
+   * is the case a field agent actually spends their day in: the app open but
+   * backgrounded, in a pocket, between one stall with signal and the next
+   * without.
+   */
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+
+    const onWorkerMessage = (event: MessageEvent) => {
+      if ((event.data as { type?: string } | null)?.type === 'SYNC_DRAFTS') void runSync();
+    };
+
+    navigator.serviceWorker.addEventListener('message', onWorkerMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onWorkerMessage);
+  }, [runSync]);
+
   // Version check runs once a session exists, because the endpoint is
   // authenticated and the answer is per-agent.
   useEffect(() => {

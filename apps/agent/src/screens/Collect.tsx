@@ -24,7 +24,7 @@ import type { ConnectionState } from '../lib/device';
 import { queryParams, useRoute } from '../router';
 import { useI18n } from '../lib/i18n';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
-import { enumLabel, formatDateIn, formatNaira, formatDateTimeIn, localName, translations, type Language, type TranslationDictionary } from '@psirs/shared';
+import { enumLabel, formatDateIn, formatNaira, formatDateTimeIn, formulaInputLabelKey, localName, translations, type Language, type TranslationDictionary } from '@psirs/shared';
 
 interface RevenueItem {
   id: string;
@@ -68,6 +68,14 @@ interface Quote {
  * one the money was for.
  */
 interface Obligation {
+  /**
+   * The trader has formally objected and the objection is still open.
+   *
+   * Optional so an older API degrades to the screen it had before rather than
+   * marking nothing. When true, PSIRS is not pursuing this invoice while the
+   * objection is decided, and this screen must not invite the agent to.
+   */
+  under_objection?: boolean;
   invoice_id: string;
   invoice_number: string;
   total_amount_kobo: string;
@@ -84,6 +92,18 @@ interface Obligation {
   transaction_id: string | null;
   transaction_reference: string | null;
   transaction_status: string | null;
+  /**
+   * Owed, but not collectable as it stands — past its deadline, or its charge
+   * ended by a reversal — so it is issued again before it is paid. Optional
+   * so an older API, which left such bills off the list, degrades to that.
+   */
+  needs_reissue?: boolean;
+  /**
+   * The closed month this bill was raised in, when that is why it has to be
+   * issued again: still in date, but paying it would add to a month whose
+   * figures have been signed off.
+   */
+  period_closed?: string | null;
 }
 
 interface TaxpayerSummary {
@@ -122,6 +142,35 @@ export function paymentOutcomeText(
         : t.colPayAwaitingSettlement;
 }
 
+/**
+ * The label for a measurement a formula reads, in the reader's language.
+ *
+ * A name on the platform's list of measurements (`FORMULA_INPUTS`) has a label
+ * in the dictionary, in English and Hausa. The API refuses a new formula that
+ * names anything else, so the fallback below is only for a rate written before
+ * that rule, or straight into the database: better a readable English label
+ * than a box with no label at all.
+ */
+export function measureLabel(name: string, t: TranslationDictionary): string {
+  const key = formulaInputLabelKey(name);
+  return key ? (t[key] as string) : inputLabel(name);
+}
+
+/**
+ * A formula's input name, as a person would read it: `floorAreaSqm` becomes
+ * "Floor area sqm". The fallback for a name not on the list of measurements;
+ * it stops a form asking for something spelt like code, and is not a
+ * translation.
+ */
+export function inputLabel(name: string): string {
+  const words = name
+    .replace(/_/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .trim()
+    .toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function CollectScreen({
   navigate,
   connection,
@@ -143,6 +192,21 @@ export function CollectScreen({
   const [items, setItems] = useState<RevenueItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<RevenueItem | null>(null);
   const [baseAmount, setBaseAmount] = useState('');
+  /*
+   * What this item's rate has to be told, for this taxpayer, by name.
+   *
+   * The screen used to decide from the catalogue's rate type: a base amount
+   * for PERCENTAGE and TIERED, and nothing otherwise. A FORMULA item names its
+   * own inputs — an area, a number of rooms — and was sent none, so every
+   * quote for one was refused and the item could not be collected in the
+   * field. The server now says what the rate in force for this taxpayer's
+   * Council reads, and the screen asks for exactly that.
+   *
+   * `null` until it has answered. If it cannot be asked, the old rule stands
+   * in, so a base-amount item still works offline from the cache.
+   */
+  const [required, setRequired] = useState<string[] | null>(null);
+  const [measures, setMeasures] = useState<Record<string, string>>({});
   const [quote, setQuote] = useState<Quote | null>(null);
 
   /*
@@ -189,7 +253,9 @@ export function CollectScreen({
   useEffect(() => {
     if (!taxpayer) return;
     api
-      .get<RevenueItem[]>(`/revenue/items?taxpayerType=${taxpayer.taxpayer_type}`)
+      // The taxpayer as well as their type, so the server lists only what can
+      // be charged where they are, with their Council's rate beside it.
+      .get<RevenueItem[]>(`/revenue/items?taxpayerType=${taxpayer.taxpayer_type}&taxpayerId=${taxpayer.id}`)
       .then(setItems)
       .catch((caught) => {
         setError(asApiError(caught));
@@ -206,6 +272,7 @@ export function CollectScreen({
    */
   const [owes, setOwes] = useState<Obligation[] | null>(null);
   const [owesFailed, setOwesFailed] = useState(false);
+  const [reissuing, setReissuing] = useState<string | null>(null);
 
   const loadOwes = useCallback(() => {
     if (!taxpayer) return;
@@ -224,8 +291,71 @@ export function CollectScreen({
     loadOwes();
   }, [loadOwes]);
 
-  const needsBaseAmount =
-    selectedItem?.rate_type === 'PERCENTAGE' || selectedItem?.rate_type === 'TIERED';
+  /*
+   * Issue a lapsed bill again and go to the charge that collects it. Asked
+   * twice, the server answers with the replacement already made, so a second
+   * press after a dropped connection lands in the same place.
+   */
+  async function issueAgain(row: Obligation) {
+    setReissuing(row.invoice_id);
+    setError(null);
+    try {
+      const replacement = await api.post<{ transactionReference: string }>(
+        `/revenue/invoices/${row.invoice_id}/reissue`,
+        {},
+        newIdempotencyKey('reissue'),
+      );
+      navigate(`/transactions/${replacement.transactionReference}`);
+    } catch (caught) {
+      setError(asApiError(caught));
+    } finally {
+      setReissuing(null);
+    }
+  }
+
+  useEffect(() => {
+    setRequired(null);
+    setMeasures({});
+    if (!selectedItem || !taxpayer) return;
+    let current = true;
+    api
+      .get<{ rateType: string; inputs: string[] }>(
+        `/revenue/items/${selectedItem.id}/inputs?taxpayerId=${taxpayer.id}`,
+      )
+      .then((answer) => {
+        // An answer without a list is not "nothing to ask"; the old rule stands.
+        if (current && Array.isArray(answer?.inputs)) setRequired(answer.inputs);
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [selectedItem, taxpayer]);
+
+  const asked =
+    required ??
+    (selectedItem?.rate_type === 'PERCENTAGE' || selectedItem?.rate_type === 'TIERED'
+      ? ['baseAmountKobo']
+      : []);
+  const needsBaseAmount = asked.includes('baseAmountKobo');
+  const measureNames = asked.filter((name) => name !== 'baseAmountKobo');
+
+  /**
+   * The values a formula reads, or the first one that is not a number.
+   *
+   * Sent as typed, decimals and all: the engine reads 15.5 exactly and rounds
+   * only the bill. A negative or a word is caught here so the agent is told
+   * which box, in their language, rather than by the server in English.
+   */
+  function measureInputs(): { inputs: Record<string, string> } | { missing: string } {
+    const inputs: Record<string, string> = {};
+    for (const name of measureNames) {
+      const value = (measures[name] ?? '').trim();
+      if (!/^\d+(\.\d+)?$/.test(value)) return { missing: name };
+      inputs[name] = value;
+    }
+    return { inputs };
+  }
 
   const getQuote = useCallback(async () => {
     // The taxpayer as well as the item: eleven revenue items now carry a rate
@@ -253,6 +383,17 @@ export function CollectScreen({
         }
         inputs.baseAmountKobo = String(Math.round(naira * 100));
       }
+      const measured = measureInputs();
+      if ('missing' in measured) {
+        setError({
+          code: 'INVALID_INPUT',
+          message: t.colNeedMeasure.replace('{{name}}', measureLabel(measured.missing, t)),
+          moneyStatus: 'NOT_APPLICABLE',
+        });
+        setBusy(false);
+        return;
+      }
+      Object.assign(inputs, measured.inputs);
       setQuote(await api.post<Quote>('/revenue/quote', { revenueItemId: selectedItem.id, inputs, taxpayerId: taxpayer.id }));
       flow.current?.step('amount-calculated');
     } catch (caught) {
@@ -260,7 +401,7 @@ export function CollectScreen({
     } finally {
       setBusy(false);
     }
-  }, [selectedItem, taxpayer, needsBaseAmount, baseAmount]);
+  }, [selectedItem, taxpayer, needsBaseAmount, baseAmount, measures, required]);
 
   async function createAndPay() {
     if (!taxpayer || !selectedItem) return;
@@ -274,6 +415,9 @@ export function CollectScreen({
       if (needsBaseAmount) {
         inputs.baseAmountKobo = String(Math.round(Number.parseFloat(baseAmount.replace(/,/g, '')) * 100));
       }
+      // The same values the quote was given; it refused anything else.
+      const measured = measureInputs();
+      if ('inputs' in measured) Object.assign(inputs, measured.inputs);
 
       /*
        * Where this is being collected.
@@ -483,14 +627,59 @@ export function CollectScreen({
                         · <Badge status={row.status} />
                       </p>
                     </div>
-                    {row.transaction_reference && (
-                      <button
-                        type="button"
-                        className="small secondary"
-                        onClick={() => navigate(`/transactions/${row.transaction_reference}`)}
-                      >
-                        {t.colTakeThisPayment}
-                      </button>
+                    {/*
+                      * A disputed invoice is shown, and not offered for
+                      * collection.
+                      *
+                      * It stays in the list because it is still owed, and
+                      * because hiding it is what would push the agent into
+                      * raising a second assessment for the same levy. But
+                      * the trader has formally objected, and while the
+                      * objection is open PSIRS does not pursue it — so the
+                      * one-tap "Take this payment" is replaced by a sentence
+                      * saying so. An agent paid commission on collections is
+                      * the last person the platform should put one tap away
+                      * from a disputed debt.
+                      *
+                      * A trader who wants to pay under protest can still do
+                      * so through an officer. That is a deliberate trade:
+                      * the default at the stall must not be enforcement.
+                      */}
+                    {row.under_objection ? (
+                      <p className="list__meta" style={{ margin: '4px 0 0' }}>
+                        <strong>{t.colUnderObjection}</strong> — {t.colUnderObjectionBody}
+                      </p>
+                    ) : row.needs_reissue ? (
+                      /*
+                       * Lapsed, or owed again after a reversal: the old
+                       * charge takes nothing, so the button that led to it
+                       * would lead to a refusal. Issued again — same amount,
+                       * same levy, a fresh window — and the agent is taken to
+                       * the new charge to collect on it.
+                       */
+                      <div>
+                        <p className="list__meta" style={{ margin: '4px 0' }}>
+                          {row.period_closed ? t.colPeriodClosedReissue : t.colNeedsReissue}
+                        </p>
+                        <button
+                          type="button"
+                          className="small secondary"
+                          disabled={reissuing !== null}
+                          onClick={() => issueAgain(row)}
+                        >
+                          {reissuing === row.invoice_id ? t.colIssuingAgain : t.colIssueAgain}
+                        </button>
+                      </div>
+                    ) : (
+                      row.transaction_reference && (
+                        <button
+                          type="button"
+                          className="small secondary"
+                          onClick={() => navigate(`/transactions/${row.transaction_reference}`)}
+                        >
+                          {t.colTakeThisPayment}
+                        </button>
+                      )
                     )}
                   </li>
                 ))}
@@ -534,6 +723,20 @@ export function CollectScreen({
               />
             </Field>
           )}
+
+          {measureNames.map((name) => (
+            <Field key={name} label={measureLabel(name, t)} hint={t.colMeasureHint} required>
+              <input
+                inputMode="decimal"
+                value={measures[name] ?? ''}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setMeasures((previous) => ({ ...previous, [name]: value }));
+                }}
+                placeholder="0"
+              />
+            </Field>
+          ))}
 
           <button type="button" disabled={busy || !selectedItem} onClick={getQuote}>
             {busy ? <Spinner /> : null}
@@ -686,6 +889,12 @@ interface TransactionStatus {
     total_amount_kobo: string;
     invoice_id: string;
     invoice_number: string;
+    /** The bill's own state, which decides whether a failed attempt can be tried again. */
+    invoice_status: string;
+    /** The invoice issued in this one's place, when it has been issued again. */
+    invoice_reissued_as?: string | null;
+    /** The closed month this charge was raised in, while it waits for a payment. */
+    period_closed?: string | null;
     expires_at: string | null;
     revenue_item: string;
     revenue_item_ha: string | null;
@@ -703,6 +912,8 @@ interface TransactionStatus {
     failure_reason: string | null;
     receipt_id: string | null;
     receipt_number: string | null;
+    /** VALID, or REVERSED / REFUNDED / VOID once the money has gone back. */
+    receipt_status?: string | null;
     receipt_code: string | null;
     document_id: string | null;
     acknowledgement_id: string | null;
@@ -710,6 +921,18 @@ interface TransactionStatus {
     acknowledgement_code: string | null;
   };
   events: { to_status: string; reason: string | null; created_at: string }[];
+  /**
+   * Whether this deployment would accept `POST /payments/simulate`.
+   *
+   * Decided by the server, because only the server knows which gateway is
+   * configured and whether the deployment named itself a demonstration. This
+   * screen used to decide with `import.meta.env.DEV` — right while the only
+   * deployment that could simulate was a developer's, and wrong the moment
+   * `DEMO_ALLOW_MOCK_GATEWAY` existed, because a production build hid the
+   * control on exactly the deployment that had just been given it. A field
+   * agent on a real deployment is sent `false` and sees nothing.
+   */
+  simulation_available?: boolean;
 }
 
 /**
@@ -814,6 +1037,30 @@ export function TransactionScreen({
    * A second press cannot open a second payment: the server answers with the
    * one already in flight rather than initiating again.
    */
+  /*
+   * Issue the bill again, or — when it already has been — find the bill
+   * that replaced it: the server answers either with the replacement, so one
+   * call serves both, and the agent lands on the charge to collect.
+   */
+  const [issuing, setIssuing] = useState(false);
+  async function issueAgain() {
+    if (!data) return;
+    setIssuing(true);
+    setError(null);
+    try {
+      const replacement = await api.post<{ transactionReference: string }>(
+        `/revenue/invoices/${data.transaction.invoice_id}/reissue`,
+        {},
+        newIdempotencyKey('reissue'),
+      );
+      navigate(`/transactions/${replacement.transactionReference}`);
+    } catch (caught) {
+      setError(asApiError(caught));
+    } finally {
+      setIssuing(false);
+    }
+  }
+
   async function startPayment() {
     if (!data) return;
     setConfirming(true);
@@ -889,7 +1136,20 @@ export function TransactionScreen({
   if (!data) return null;
 
   const transaction = data.transaction;
-  const paid = transaction.receipt_number !== null;
+  /*
+   * Paid means a receipt that still stands.
+   *
+   * A reversal keeps the receipt row and marks it REVERSED, and this read
+   * the number alone: a payment whose money went back to the payer showed
+   * "Payment successful" with its receipt offered for download and sharing,
+   * over a bill that was owed again. Measured on a settled payment reversed
+   * for a reason that was the payer's.
+   */
+  const reversed = transaction.status === 'REVERSED' || transaction.status === 'REFUNDED';
+  const paid =
+    transaction.receipt_number !== null &&
+    !reversed &&
+    (transaction.receipt_status ?? 'VALID') === 'VALID';
   /*
    * The middle state, and the one an agent standing at a stall most needs.
    *
@@ -898,8 +1158,53 @@ export function TransactionScreen({
    * tell the agent the payment had not gone through and invite them to collect
    * a second time from someone who has already paid.
    */
-  const acknowledged = !paid && transaction.acknowledgement_number !== null;
+  const acknowledged = !paid && !reversed && transaction.acknowledgement_number !== null;
   const failed = ['FAILED', 'CANCELLED', 'EXPIRED'].includes(transaction.status);
+  /*
+   * A declined attempt, on a bill that can still be paid, can be tried again.
+   *
+   * The failure alert below has always said "You can start the payment
+   * again", and the actions that would do it were hidden for every failed
+   * state alike — so the agent was told to press a button that was not there.
+   * CANCELLED and EXPIRED are the end of the bill and stay hidden; FAILED is
+   * the end of one attempt. The bill's deadline is checked here as well as by
+   * the server, so a lapsed bill does not offer a payment the server refuses.
+   */
+  const canTryAgain =
+    transaction.status === 'FAILED' &&
+    transaction.invoice_status === 'UNPAID' &&
+    (!transaction.expires_at || new Date(transaction.expires_at).getTime() > Date.now());
+  /*
+   * A bill past its deadline, with nothing in flight against it, cannot be
+   * paid as it stands — and this screen said "payment not yet confirmed" over
+   * a start button the server would refuse. It can be issued again, and one
+   * that already has been says so and opens the replacement.
+   */
+  const replaced = Boolean(transaction.invoice_reissued_as);
+  const lapsedBill =
+    !paid &&
+    !acknowledged &&
+    !transaction.payment_id &&
+    !replaced &&
+    (transaction.invoice_status === 'EXPIRED' ||
+      (transaction.invoice_status === 'UNPAID' &&
+        transaction.expires_at !== null &&
+        new Date(transaction.expires_at).getTime() <= Date.now()));
+  /*
+   * In date, but raised in a month whose figures have since been signed off.
+   * Paying it would add to that month, so the server refuses the start button
+   * this screen would otherwise draw (INVOICE_PERIOD_CLOSED). Issued again it
+   * is raised in an open month, for the same amount and the same deadline.
+   */
+  const monthClosed = Boolean(transaction.period_closed) && !replaced && !lapsedBill;
+  /*
+   * Held because the gateway named a different amount from the bill. The
+   * screen said only "payment not yet confirmed", over a button to give the
+   * trader the invoice again — which reads as an invitation to pay a second
+   * time while the first payment is still in somebody's hands. What it is
+   * waiting for is the gateway's next answer, and checking is how to get it.
+   */
+  const underReview = transaction.status === 'UNDER_REVIEW';
   const name =
     transaction.business_name ??
     `${transaction.first_name ?? ''} ${transaction.last_name ?? ''}`.trim();
@@ -955,11 +1260,58 @@ export function TransactionScreen({
             </strong>
           </p>
         </Alert>
+      ) : reversed ? (
+        <Alert kind="error" title={t.colReversedTitle}>
+          {transaction.invoice_status === 'CANCELLED' && !replaced ? (
+            <p style={{ margin: 0 }}>{t.colReversedWithdrawnBody}</p>
+          ) : (
+            <>
+              <p style={{ margin: '0 0 0.5rem' }}>{t.colReversedOwedBody}</p>
+              <button type="button" disabled={issuing} onClick={issueAgain}>
+                {issuing ? <Spinner /> : null}
+                {replaced ? t.colOpenReplacement : issuing ? t.colIssuingAgain : t.colIssueAgain}
+              </button>
+            </>
+          )}
+        </Alert>
+      ) : replaced ? (
+        <Alert kind="info" title={t.colReplacedTitle}>
+          <p style={{ margin: '0 0 0.5rem' }}>{t.colReplacedBody}</p>
+          <button type="button" className="secondary" disabled={issuing} onClick={issueAgain}>
+            {issuing ? <Spinner /> : null}
+            {t.colOpenReplacement}
+          </button>
+        </Alert>
+      ) : underReview ? (
+        <Alert kind="warning" title={t.colUnderReviewTitle}>
+          <p style={{ margin: '0 0 0.5rem' }}>{t.colUnderReviewBody}</p>
+          <button type="button" disabled={confirming} onClick={confirmPayment}>
+            {confirming ? <Spinner /> : null}
+            {confirming ? t.colCheckingPayment : t.colCheckPaymentStatus}
+          </button>
+        </Alert>
+      ) : monthClosed ? (
+        <Alert kind="warning" title={t.colPeriodClosedTitle}>
+          <p style={{ margin: '0 0 0.5rem' }}>{t.colPeriodClosedBody}</p>
+          <button type="button" disabled={issuing} onClick={issueAgain}>
+            {issuing ? <Spinner /> : null}
+            {issuing ? t.colIssuingAgain : t.colIssueAgain}
+          </button>
+        </Alert>
+      ) : lapsedBill ? (
+        <Alert kind="warning" title={t.colLapsedTitle}>
+          <p style={{ margin: '0 0 0.5rem' }}>{t.colLapsedBody}</p>
+          <button type="button" disabled={issuing} onClick={issueAgain}>
+            {issuing ? <Spinner /> : null}
+            {issuing ? t.colIssuingAgain : t.colIssueAgain}
+          </button>
+        </Alert>
       ) : failed ? (
         <Alert kind="error" title={t.paymentFailed}>
           <p style={{ margin: 0 }}>
             {transaction.failure_reason ? `${transaction.failure_reason} ` : ''}
-            {t.paymentFailedBody}
+            {/* "Start the payment again" only where it can be. */}
+            {canTryAgain ? t.paymentFailedBody : t.paymentEndedBody}
           </p>
         </Alert>
       ) : (
@@ -1126,7 +1478,7 @@ export function TransactionScreen({
         </div>
       )}
 
-      {!paid && !failed && (
+      {!paid && !reversed && !replaced && !lapsedBill && !monthClosed && !underReview && (!failed || canTryAgain) && (
         <>
           {/*
             The artefact a taxpayer pays against later.
@@ -1168,10 +1520,11 @@ export function TransactionScreen({
             </button>
           )}
 
-          {/* Development only. The API refuses simulation outside the mock
-              gateway, but the control should not be visible to a field agent
-              in a production build either. */}
-          {import.meta.env.DEV && transaction.gateway_reference && (
+          {/* Only where the server says the endpoint behind it would answer:
+              the mock gateway, on a developer's machine or on a deployment
+              that named itself a demonstration. A field agent on a real
+              deployment never sees this. */}
+          {data.simulation_available && transaction.gateway_reference && (
             <div className="card" style={{ marginTop: 14 }}>
               <h2 className="card__title">{t.colDevGateway}</h2>
               <p className="card__hint">{t.colDevGatewayHint}</p>

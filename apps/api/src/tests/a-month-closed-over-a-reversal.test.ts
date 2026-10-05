@@ -259,8 +259,12 @@ describe('money in transit is not an exception until it is late', () => {
   /*
    * The distinction `exceptionQueue` already draws, held here so that widening
    * these three lists does not flatten it. A collection the gateway confirmed
-   * an hour ago is the ordinary state of money moving, and a month that
-   * refused to close over it would refuse every month.
+   * an hour ago is the ordinary state of money moving, not an exception.
+   *
+   * Whether the month's own money has all arrived is a separate question the
+   * close now also asks, by transaction status rather than by finding; it is
+   * tested in `a-month-that-can-be-closed`. The collection here is settled,
+   * so only the finding is in play.
    */
   it('a fresh pending settlement does not block the close', async () => {
     await clearPendingPayments();

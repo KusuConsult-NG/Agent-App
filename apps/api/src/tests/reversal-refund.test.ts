@@ -42,6 +42,7 @@ import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
 import { computeComplianceScore } from '../services/incentives';
+import { forget } from '../services/rbac-store';
 
 let agent: { token: string; device: string; id: string };
 let requester = '';
@@ -292,7 +293,8 @@ describe('Commission paid on a transaction later reversed is recovered', () => {
     await post(
       `/government/commissions/payouts/${payout.body.payoutId}/complete`,
       { bankReference: `BANK-${payout.body.payoutReference}` },
-      { token: approver },
+      // Recorded by somebody other than the officer who approved it.
+      { token: executor },
     );
   }
 
@@ -409,6 +411,55 @@ describe('A reversal needs three people', () => {
     assert.equal(selfExecute.status, 409);
     assert.equal(selfExecute.body.error.code, 'SEGREGATION_OF_DUTIES');
   });
+
+  it('refuses the requester executing, however the roles have been arranged', async () => {
+    /*
+     * The seeded roles keep asking and executing apart — no role holds both —
+     * so the rule was held by configuration alone. Since migration 059 an
+     * administrator arranges the roles. Here finance officers are given
+     * approval:request, which is all it takes to ask and execute.
+     */
+    await query(
+      pool,
+      `INSERT INTO role_permissions (role, permission, reason)
+       VALUES ('finance_officer', 'approval:request', 'arranged by an administrator')`,
+    );
+    forget();
+    const collected = await collect('9');
+    const request = await post(
+      '/government/approvals',
+      {
+        approvalType: 'PAYMENT_REVERSAL',
+        entityType: 'transaction',
+        entityId: collected.transactionId,
+        payload: { amountKobo: '300000', reason: 'Charged in error', refundType: 'REVERSAL' },
+        reason: 'Duplicate assessment for the same premises this period.',
+      },
+      { token: executor },
+    );
+    assert.equal(request.status, 201, JSON.stringify(request.body));
+    const approved = await post(
+      `/government/approvals/${request.body.approvalId}/decide`,
+      { decision: 'APPROVE', reason: 'Duplicate confirmed against the record.' },
+      { token: approver },
+    );
+    assert.equal(approved.status, 200, JSON.stringify(approved.body));
+
+    await grantStepUp('+2348000000023', executor);
+    const ownRequest = await post(
+      `/government/approvals/${request.body.approvalId}/execute-reversal`,
+      {},
+      { token: executor },
+    );
+    assert.equal(ownRequest.status, 409, JSON.stringify(ownRequest.body));
+    assert.equal(ownRequest.body.error.code, 'SEGREGATION_OF_DUTIES');
+    const transaction = await queryOne<{ status: string }>(
+      pool,
+      'SELECT status FROM transactions WHERE id = $1',
+      [collected.transactionId],
+    );
+    assert.notEqual(transaction?.status, 'REVERSED', 'no money went back on two people');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -481,6 +532,51 @@ describe('A reversal says whose doing it was', () => {
     assert.ok(after.score < before.score, 'and the score they are judged on should fall');
   });
 
+  /*
+   * What becomes of the bill. A reversal the State caused — a duplicate, a
+   * bill raised against the wrong record, and what silence defaults to — put
+   * the invoice back to UNPAID, so the citizen was refunded and then asked
+   * for the same money again, through a transaction no payment could reach.
+   */
+  it('withdraws the bill when the reversal was the State’s own doing', async () => {
+    const collected = await collect('11');
+    assert.equal((await reverse(collected.transactionId)).status, 200);
+
+    const invoice = await queryOne<{ status: string }>(
+      pool,
+      'SELECT i.status FROM invoices i JOIN transactions t ON t.invoice_id = i.id WHERE t.id = $1',
+      [collected.transactionId],
+    );
+    assert.equal(invoice?.status, 'CANCELLED', 'the duplicate was refunded and then demanded again');
+
+    const owed = await get(`/revenue/taxpayers/${collected.taxpayerId}/obligations`, {
+      token: requester,
+    });
+    assert.equal(owed.status, 200, JSON.stringify(owed.body));
+    assert.deepEqual(owed.body, [], 'and still offered to the agent as a payment to take');
+
+    const outstanding = (await scoreFor(collected.taxpayerId)).components.find((c) =>
+      c.factor.toLowerCase().includes('outstanding'),
+    );
+    assert.equal(outstanding?.points, 25, `and still docked on the score: ${outstanding?.detail}`);
+  });
+
+  it('leaves the bill owed when the money was recalled on the taxpayer’s side or by the gateway', async () => {
+    // The control: those debts are real, because the money never stayed with
+    // the State. Withdrawing them would let a chargeback write a bill off.
+    for (const [suffix, attributableTo] of [['12', 'TAXPAYER'], ['13', 'GATEWAY']] as const) {
+      const collected = await collect(suffix);
+      const executed = await reverse(collected.transactionId, { attributableTo });
+      assert.equal(executed.status, 200, JSON.stringify(executed.body));
+      const invoice = await queryOne<{ status: string }>(
+        pool,
+        'SELECT i.status FROM invoices i JOIN transactions t ON t.invoice_id = i.id WHERE t.id = $1',
+        [collected.transactionId],
+      );
+      assert.equal(invoice?.status, 'UNPAID', `${attributableTo}: a real debt was written off`);
+    }
+  });
+
   it('refuses an attribution it does not recognise rather than guessing', async () => {
     const collected = await collect('10');
     const refused = await reverse(collected.transactionId, { attributableTo: 'THE_WEATHER' });
@@ -494,5 +590,57 @@ describe('A reversal says whose doing it was', () => {
       [collected.transactionId],
     );
     assert.equal(refund, null, 'no refund is recorded for a reversal that was refused');
+  });
+});
+
+/*
+ * Money from a month that has been closed.
+ *
+ * The close freezes what the month collected, so a reversal of one of its
+ * collections is refused by the database until the month is reopened. That is
+ * the design. What has to hold is that the officer carrying it out is told
+ * which month, and what to do — reopen it, with a reason — rather than handed
+ * a refusal with nowhere to go, and that nothing moved on the way.
+ */
+describe('a reversal of money a closed month collected', () => {
+  it('is refused, names the month, says how to proceed, and moves nothing', async () => {
+    const paid = await collect('31');
+
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
+    const during = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 15, 10));
+    await pool.query('ALTER TABLE transactions DISABLE TRIGGER transactions_immutable');
+    try {
+      await pool.query('UPDATE transactions SET created_at = $2 WHERE id = $1', [
+        paid.transactionId,
+        during,
+      ]);
+    } finally {
+      await pool.query('ALTER TABLE transactions ENABLE TRIGGER transactions_immutable');
+    }
+    await pool.query(
+      `INSERT INTO financial_periods (label, period_start, period_end, status, closed_at, closed_by, closing_note)
+       VALUES ('Closed month', $1, $2, 'CLOSED', now(), (SELECT id FROM users LIMIT 1), 'Reported.')`,
+      [start, end],
+    );
+
+    const refused = await reverse(paid.transactionId);
+    assert.equal(refused.status, 409, JSON.stringify(refused.body));
+    assert.equal(refused.body.error.code, 'FINANCIAL_CONTROL_BLOCKED', JSON.stringify(refused.body));
+    assert.match(refused.body.error.message, /Closed month is closed/);
+    assert.equal(refused.body.error.nextStep, 'Reopen the period, with a reason.');
+
+    const after = await queryOne<{ status: string; refunds: string; receipt: string }>(
+      pool,
+      `SELECT t.status,
+              (SELECT count(*)::text FROM refunds WHERE transaction_id = t.id) AS refunds,
+              (SELECT status FROM receipts WHERE transaction_id = t.id LIMIT 1) AS receipt
+         FROM transactions t WHERE t.id = $1`,
+      [paid.transactionId],
+    );
+    assert.equal(after!.status, 'SETTLED', 'the collection is as it was');
+    assert.equal(after!.refunds, '0', 'and no refund was started');
+    assert.notEqual(after!.receipt, 'REVERSED', 'and the receipt still stands');
   });
 });

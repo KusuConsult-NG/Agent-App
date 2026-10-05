@@ -17,6 +17,11 @@ import { mkdirSync } from 'node:fs';
 
 const PORTAL = process.env.PORTAL_URL ?? 'http://localhost:5174';
 const API = process.env.API_URL ?? 'http://localhost:4000/api/v1';
+/**
+ * Where the API's stdout goes, which is where the development message
+ * provider writes what it "delivered". See [codeFromTheSms].
+ */
+const API_LOG = process.env.UAT_API_LOG ?? '/tmp/psirs-uat/api.log';
 const SHOTS = 'docs/uat-screenshots';
 const PHONE = { width: 414, height: 896 };
 
@@ -42,54 +47,123 @@ async function shot(page: Page, name: string, focus?: string): Promise<void> {
   await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: false });
 }
 
-/** A seeded taxpayer who has actually paid something, found through the API. */
+/**
+ * A seeded taxpayer who has actually paid something, found through the API.
+ *
+ * Both calls are checked for the shape they are supposed to return rather than
+ * assumed. `/taxpayers/search` is rate limited, and a limiter's reply is an
+ * object; calling `.find` on it threw `rows.find is not a function` from
+ * inside this helper, which says nothing about what went wrong and sent the
+ * last reader looking at the seed.
+ */
 async function aTaxpayerWhoHasPaid(): Promise<{ tin: string; phone: string }> {
   const login = await fetch(`${API}/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-app-version': '1.0.0' },
     body: JSON.stringify({ phone: '+2348000000001', password: 'Password123' }),
   });
-  const { accessToken } = (await login.json()) as { accessToken: string };
+  const session = (await login.json()) as { accessToken?: string };
+  expect(
+    session.accessToken,
+    `signing in as the demonstration administrator failed (${login.status}): ${JSON.stringify(session)}`,
+  ).toBeTruthy();
 
   const found = await fetch(`${API}/taxpayers/search?q=Amina&limit=5`, {
-    headers: { authorization: `Bearer ${accessToken}`, 'x-app-version': '1.0.0' },
+    headers: { authorization: `Bearer ${session.accessToken!}`, 'x-app-version': '1.0.0' },
   });
-  const rows = (await found.json()) as { tin: string | null; phone: string }[];
+  const body: unknown = await found.json();
+  expect(
+    Array.isArray(body),
+    `the taxpayer search answered ${found.status} with ${JSON.stringify(body)} rather than a list`,
+  ).toBe(true);
+
+  const rows = body as { tin: string | null; phone: string }[];
   const withTin = rows.find((row) => row.tin);
   expect(withTin, 'the seed registers a taxpayer with a TIN').toBeTruthy();
   return { tin: withTin!.tin!, phone: withTin!.phone };
 }
 
 /**
- * Read the code out of the SMS the platform queued.
+ * Read the code the platform actually sent, from where it actually sent it.
  *
- * From the database rather than from an endpoint, because there is no endpoint
- * that hands a one-time code back and there must not be. In the field this
- * step is a person reading their own phone; here it is the harness standing in
- * for the handset, which is the only part of the journey a browser cannot do.
+ * In the field this step is a person reading their own phone; here it is the
+ * harness standing in for the handset, which is the only part of the journey a
+ * browser cannot do. The question is where the harness may legitimately look.
+ *
+ * NOT THE DATABASE, AND THIS IS NOT A DETAIL. `notifications.message` keeps
+ * the sentence with the credential replaced by `██████` —
+ * `services/notifications.ts` calls it WITHHELD — and the deliverable body
+ * lives in `secret_message`, which the dispatcher reads once and sets to NULL
+ * as the row becomes SENT. `otp_codes` keeps only sha256(code). So after
+ * delivery the plaintext exists nowhere in the database, on purpose: a join
+ * from a queued body to the hash used to resolve the credential it opens.
+ *
+ * This helper read `notifications.message` and scraped the first four-to-ten
+ * digit run out of the five newest messages. It could not have worked. What it
+ * returned was whatever number came first — `2027` from "valid until
+ * 2027-10-01", or part of an amount from a receipt SMS — so the statement was
+ * refused and the failure read as the statement screen being broken.
+ *
+ * The development message provider logs what it delivered:
+ *
+ *     [notify:SMS] -> +2348031100000: PSIRS: Your verification code is 806919.
+ *
+ * That line is the handset. It exists only because `services/messaging/mock.ts`
+ * is selected, which `config.ts` refuses to boot with in production, so nothing
+ * here can read a real citizen's code.
  */
-async function codeFromTheSms(phone: string): Promise<string> {
-  const { Pool } = await import('pg');
-  const pool = new Pool({
-    connectionString:
-      process.env.UAT_DATABASE_URL ??
-      'postgres://postgres:postgres@localhost:5432/psirs_uat',
-  });
-  try {
-    const { rows } = await pool.query<{ message: string }>(
-      `SELECT message FROM notifications
-        WHERE channel = 'SMS' AND recipient = $1
-        ORDER BY created_at DESC LIMIT 5`,
-      [phone],
-    );
-    for (const row of rows) {
-      const match = /(\d{4,10})/.exec(row.message ?? '');
-      if (match) return match[1]!;
-    }
-    throw new Error(`No code in the messages sent to ${phone}`);
-  } finally {
-    await pool.end();
+/**
+ * How much of the log exists right now.
+ *
+ * Taken BEFORE the press that asks for a code, so [codeFromTheSms] can ignore
+ * everything written earlier. Without it the helper hands back the newest code
+ * it can see, which for the first second is the PREVIOUS one — the stack's log
+ * is not cleared between manual pokes and runs — and the server answers the
+ * statement request 400 because that code is spent or expired. Measured: four
+ * codes for one number in the log, and the test used the third.
+ */
+async function smsSoFar(): Promise<number> {
+  const { readFile } = await import('node:fs/promises');
+  return (await readFile(API_LOG, 'utf8').catch(() => '')).length;
+}
+
+async function codeFromTheSms(phone: string, since: number): Promise<string> {
+  const { readFile } = await import('node:fs/promises');
+  // The number is a literal, and it opens with '+'.
+  const quoted = phone.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const line = new RegExp(
+    `\\[notify:SMS\\] -> ${quoted}: [^\\n]*?verification code is (\\d{4,10})`,
+    'g',
+  );
+
+  /*
+   * Polled, because queueing and delivering are two steps: the request returns
+   * as soon as the row is written and the dispatcher sends it a moment later.
+   * The last match rather than the first — `workers: 1` in playwright.config.ts
+   * means one test is in flight, so the newest code for this number is this
+   * test's, and an earlier run's expired code must not win.
+   */
+  /*
+   * Longer than one dispatch cycle, which is the number that matters.
+   * `services/jobs.ts` declares `notification-dispatch` at 30s, so a request
+   * landing just after a tick waits almost that long before the provider
+   * writes anything. A 20s window passed whenever the timing was kind and
+   * failed the Hausa journey when it was not — the code was issued, nobody had
+   * waited long enough to see it.
+   */
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const log = await readFile(API_LOG, 'utf8').catch(() => '');
+    // Only what was written after this test asked.
+    const codes = [...log.slice(since).matchAll(line)].map((match) => match[1]!);
+    if (codes.length > 0) return codes[codes.length - 1]!;
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
+
+  throw new Error(
+    `No verification code for ${phone} written to ${API_LOG} in the 60s after ` +
+      'it was requested. Set UAT_API_LOG if the API writes its output somewhere ' +
+      'else; the code is not recoverable from the database by design.',
+  );
 }
 
 /**
@@ -214,6 +288,8 @@ test('the statement itself, once the code from the SMS is entered', async ({ pag
   await page.getByLabel(/^From$/i).fill('2026-01-01');
   await page.getByLabel(/^To$/i).fill('2026-12-31');
 
+  // Before the press that asks, so only this request's code can be read.
+  const asked = await smsSoFar();
   await pressing(
     page,
     /Send me a code/i,
@@ -222,7 +298,7 @@ test('the statement itself, once the code from the SMS is entered', async ({ pag
   );
   await shot(page, 'citizen-stmt-03-code-sent', 'code has gone to the phone');
 
-  await page.getByLabel(/Code from the SMS/i).fill(await codeFromTheSms(phone));
+  await page.getByLabel(/Code from the SMS/i).fill(await codeFromTheSms(phone, asked));
   await pressing(
     page,
     /Show my payments/i,
@@ -283,6 +359,8 @@ test('the whole journey, read in Hausa', async ({ page }) => {
   await page.getByLabel(/^Daga$/i).fill('2026-01-01');
   await page.getByLabel(/^Zuwa$/i).fill('2026-12-31');
 
+  // Before the press that asks, as in the English journey above.
+  const asked = await smsSoFar();
   await pressing(
     page,
     /Aiko min da lamba/i,
@@ -291,7 +369,7 @@ test('the whole journey, read in Hausa', async ({ page }) => {
   );
   await shot(page, 'citizen-stmt-ha-03-code-sent', 'an aika lamba');
 
-  await page.getByLabel(/Lambar da ke cikin sakon/i).fill(await codeFromTheSms(phone));
+  await page.getByLabel(/Lambar da ke cikin sakon/i).fill(await codeFromTheSms(phone, asked));
   await pressing(
     page,
     /Nuna min biyayyata/i,

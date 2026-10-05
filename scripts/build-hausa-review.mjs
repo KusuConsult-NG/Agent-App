@@ -28,7 +28,7 @@
  * `apps/agent/src/tests/hausa-safety-strings.test.tsx`, not a heuristic.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -71,24 +71,143 @@ function safetyKeys() {
   return [...block.matchAll(/'([A-Za-z0-9_]+)'/g)].map((m) => m[1]);
 }
 
-/** The Hausa notification templates, read out of the migration that inserts them. */
+/**
+ * Every error code the API can return, and how many of them each front end
+ * says in Hausa.
+ *
+ * Counted rather than written down, because the first attempt at writing it
+ * down was wrong. A sweep for `conflict('CODE'` on one line found 26 and
+ * missed every multi-line call and every `new AppError({ code: … })` literal —
+ * which is most of them. 26 went into the reviewer's index as the size of the
+ * gap, understating it by a factor of six, on the page this script exists to
+ * keep honest.
+ *
+ * `db/` is excluded: revenue items and notification templates carry a `code`
+ * field too, and `PIT`, `ROAD` and `RECEIPT_GENERATED_SMS` are not refusals.
+ *
+ * COMMENTS ARE STRIPPED FIRST, and the reason is the second time this has
+ * happened rather than the first. The `AppError` branch below decides whether
+ * a `code:` field is a refusal by looking 400 characters either side of it for
+ * `AppError` or `statusCode`. `TIN_NOT_FOUND` carries a fourteen-line comment
+ * between its `statusCode` and its `code` — a comment explaining why it has a
+ * code of its own at all, which is to say why it is a refusal — and that
+ * pushed the evidence out of the window. The figure was one short and the
+ * document was told to write down the short one.
+ *
+ * Measuring source by proximity cannot survive prose sitting in the middle of
+ * what is being measured, and prose is what this codebase has most of. So the
+ * comments come out before anything is counted, which also stops a
+ * commented-out refusal being counted as one.
+ */
+function withoutComments(source) {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
+function apiErrorCodes() {
+  const codes = new Set();
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== 'tests' && entry.name !== 'db') walk(path);
+      } else if (entry.name.endsWith('.ts')) {
+        const source = withoutComments(readFileSync(path, 'utf8'));
+        for (const match of source.matchAll(/(?:conflict|refused)\(\s*'([A-Z_][A-Z_0-9]*)'/g)) {
+          codes.add(match[1]);
+        }
+        // `paymentRefused({ code: 'X', … })` and anything else shaped like it:
+        // a helper that takes the code as a named field rather than a first
+        // positional argument. The count fell by five the moment the payment
+        // refusals moved into one, and the guard caught it, which is the
+        // argument for counting rather than writing the figure down.
+        for (const match of source.matchAll(
+          /[a-z][A-Za-z]*(?:Refused|Error|Conflict)\(\{\s*code:\s*'([A-Z_][A-Z_0-9]*)'/g,
+        )) {
+          codes.add(match[1]);
+        }
+        for (const match of source.matchAll(/code:\s*'([A-Z_][A-Z_0-9]*)'/g)) {
+          /*
+           * `code: 'STATE'` on an `ErrorDetail` is a field name, not a
+           * refusal — it tells a client that this detail carries a state it
+           * may translate. The agent's own guard skips it for the same reason.
+           *
+           * It stayed invisible here by luck. Every earlier use sits inside
+           * `paymentRefused({ … })`, a helper whose body is elsewhere, so
+           * neither `AppError` nor `statusCode` fell within the window below
+           * and the value was never reached. The first `code: 'STATE'` written
+           * inside a literal `new AppError({ statusCode: … })` put it in, and
+           * the API's count went from 172 to 173 with no refusal added.
+           *
+           * It is the only detail code written as a literal in this codebase —
+           * the agent blockers in `notCleared` are a mapped variable, which
+           * this pattern cannot see — so one name is enough rather than a
+           * general rule nobody can check.
+           */
+          if (match[1] === 'STATE') continue;
+          // An `AppError` literal, not a catalogue row that happens to have a
+          // `code` column.
+          const window = source.slice(Math.max(0, match.index - 400), match.index + 400);
+          if (window.includes('AppError') || window.includes('statusCode')) codes.add(match[1]);
+        }
+      }
+    }
+  };
+  walk(join(ROOT, 'apps', 'api', 'src'));
+  return codes;
+}
+
+/** How many of those codes an application translates, by reading its map. */
+function translatedServerCodes(app, codes) {
+  const source = readFileSync(join(ROOT, 'apps', app, 'src', 'ui.tsx'), 'utf8');
+  const start = source.indexOf('const TRANSLATED_ERRORS');
+  const block = source.slice(start, source.indexOf('\n};', start));
+  return [...block.matchAll(/^  ([A-Z_][A-Z_0-9]*):/gm)]
+    .map((match) => match[1])
+    .filter((code) => codes.has(code));
+}
+
+/**
+ * The Hausa notification templates, read out of every migration that inserts
+ * them.
+ *
+ * This read migration 048 alone, which held all thirty when it was written. A
+ * message added since in a migration of its own would have gone to citizens
+ * in Hausa without ever reaching this sheet — the one place a native speaker
+ * reads them — so every migration is read, in order.
+ */
 function templates() {
-  const source = readFileSync(
-    join(ROOT, 'apps', 'api', 'src', 'db', 'migrations', '048_the_thirty_messages_in_hausa.sql'),
-    'utf8',
-  );
+  const dir = join(ROOT, 'apps', 'api', 'src', 'db', 'migrations');
+  const source = readdirSync(dir)
+    .filter((name) => name.endsWith('.sql'))
+    .sort()
+    .map((name) => readFileSync(join(dir, name), 'utf8'))
+    .join('\n');
   const rows = [];
   // The `E'…'` form appears on the two multi-paragraph email bodies, which
   // carry `\n`. Missing it silently dropped exactly those two from the sheet —
   // the receipt email and the acknowledgement email, which are the longest and
   // most consequential strings in the set.
+  /*
+   * Found by the language column, not by the code.
+   *
+   * This matched codes ending `_HA`, which is how migration 048 spelt them.
+   * Migration 101's reminders follow their English siblings instead
+   * (`TAX-REMINDER-6W-SMS-HA`), so all twelve were skipped — and the count
+   * below, which checks the sheet is not short, used the same pattern and
+   * agreed with it. A Hausa message spelt any other way would have reached
+   * citizens without reaching the one person who reads them before they do.
+   * Any code, and `'ha'` in the language position, is what makes a row Hausa.
+   */
   const pattern =
-    /\('([A-Z0-9_]+_HA)',\s*'([A-Z_]+)',\s*'([A-Z]+)',\s*'ha',\s*(NULL|E?'(?:[^']|'')*'),\s*E?'((?:[^']|'')*)'/g;
+    /\('([A-Z0-9_-]+)',\s*'([A-Z_0-9]+)',\s*'([A-Z]+)',\s*'ha',\s*(NULL|E?'(?:[^']|'')*'),\s*E?'((?:[^']|'')*)'/g;
+  // Real line breaks as well as `\n` escapes: the reminders are written as
+  // multi-line literals, and a newline inside a table row ends the row.
   const literal = (value) =>
     value
       .replace(/^E?'|'$/g, '')
       .replace(/''/g, "'")
-      .replace(/\\n/g, ' ');
+      .replace(/\\n/g, ' ')
+      .replace(/\s*\n\s*/g, ' ');
   for (const match of source.matchAll(pattern)) {
     rows.push({
       code: match[1],
@@ -99,7 +218,7 @@ function templates() {
     });
   }
 
-  const declared = [...source.matchAll(/\('([A-Z0-9_]+_HA)',/g)].length;
+  const declared = [...source.matchAll(/\('[A-Z0-9_-]+',\s*'[A-Z_0-9]+',\s*'[A-Z]+',\s*'ha',/g)].length;
   if (rows.length !== declared) {
     throw new Error(`parsed ${rows.length} of ${declared} templates — the sheet would be short`);
   }
@@ -281,6 +400,132 @@ if (wrong.length > 0) {
     `docs/HAUSA-REVIEW.md says ${wrong[0][1]} where the dictionary holds ${total}.\n` +
       'The generated tables are right and the sentence above them is not, which is\n' +
       'the worst way round: the reviewer believes the smaller number.',
+  );
+  process.exit(1);
+}
+
+/*
+ * And the same counts in the document the sheet tells the reviewer to read
+ * first.
+ *
+ * `HAUSA-REVIEW-QUESTIONS.md` opens by saying how many strings the sheet
+ * carries, and states the size of its biggest question — how many strings
+ * address the reader as `ka` — in a headline, a table and a chain of
+ * corrections. All of it is hand-written, none of it was checked, and every
+ * figure in it was several hundred strings out of date: the index said 3,031
+ * where the dictionary held 3,425, and 332 `ka` strings where there were 433.
+ *
+ * It is the worse of the two documents to have wrong. The sheet's own header
+ * sends the reviewer here first — "If you are the Hausa reviewer, read this
+ * instead" — so the understated figure is the one they see before anything
+ * else, and the decision it understates is the one the sheet says blocks all
+ * the others.
+ *
+ * The `ka` count is recomputed rather than trusted, by the same definition the
+ * document sets out: the pronoun at a word boundary and case-insensitively,
+ * because Hausa imperatives open sentences constantly; the possessive and
+ * clitic forms beside it; and `kai` excluded, because every use of it in this
+ * dictionary is something else.
+ */
+/*
+ * Without the `g` flag, deliberately. `RegExp.prototype.test` on a global
+ * pattern advances `lastIndex` and resumes from there on the next call, so
+ * testing three thousand strings against a shared global regex skips most of
+ * them: the first version of this counted 385 where the dictionary holds 433,
+ * and the only reason that was caught is that it disagreed with a figure
+ * measured another way.
+ */
+const KA_FORMS = [/\bka\b/i, /\w+nka\b/i, /\w+rka\b/i, /\b(?:dinka|maka|naka|kanka)\b/i];
+const kaStrings = Object.values(ha).filter((value) =>
+  KA_FORMS.some((form) => form.test(value)),
+).length;
+
+const QUESTIONS = join(ROOT, 'docs', 'HAUSA-REVIEW-QUESTIONS.md');
+const questions = readFileSync(QUESTIONS, 'utf8');
+
+const errorCodes = apiErrorCodes();
+const portalTranslated = translatedServerCodes('portal', errorCodes);
+const agentTranslated = translatedServerCodes('agent', errorCodes);
+
+/*
+ * Each figure this document states, and what it is supposed to be.
+ *
+ * `optional` is for the ones that may legitimately be absent -- the historical
+ * references, and the `ka` table if somebody reflows it away. Everything else
+ * MUST match at least once, because the first version of this guard matched
+ * nothing at all: the sentence it was written for wraps between the number and
+ * the words after it, the pattern found no occurrences, and no occurrences read
+ * as no disagreements. A check that cannot fail is worse than no check, because
+ * the page then looks guarded. `\s+` rather than a space for the same reason:
+ * prose in this document is wrapped by hand and the wrap point moves.
+ */
+const FIGURES = [
+  {
+    what: 'the dictionary',
+    pattern: /\b(\d,\d{3})\s+(?:dictionary strings|keys|strings)\b/g,
+    actual: total,
+  },
+  {
+    what: 'the `ka` count',
+    pattern: /\*\*(\d{3})\s+strings\s+address\s+the\s+reader\s+as/g,
+    actual: String(kaStrings),
+  },
+  {
+    what: 'the `ka` count',
+    pattern: /\|\s+\*\*Total\*\*\s+\|\s+\*\*(\d{3})\*\*\s+of/g,
+    actual: String(kaStrings),
+  },
+  {
+    what: 'the API',
+    pattern: /raises\s+\*\*(\d+)\s+distinct\s+error\s+codes\*\*/g,
+    actual: String(errorCodes.size),
+  },
+  {
+    /*
+     * The same figure, said twice in two paragraphs — and the second copy had
+     * gone stale at 171 while the first was recomputed on every build. A
+     * number the script writes and a number beside it that nobody checks is
+     * worse than one number, because the unchecked one borrows the checked
+     * one's authority. So both are checked now.
+     */
+    what: 'how many codes cannot reach an officer',
+    pattern: /Not\s+all\s+(\d+)\s+can\s+reach\s+an\s+officer/g,
+    actual: String(errorCodes.size),
+  },
+  {
+    what: 'the portal map',
+    pattern: /the\s+officer\s+portal\s+says\s+(\d+)\s+of\s+them/g,
+    actual: String(portalTranslated.length),
+  },
+  {
+    what: 'the agent application',
+    pattern: /the\s+agent\s+application\s+says\s+(\d+)/g,
+    actual: String(agentTranslated.length),
+  },
+];
+
+const questionsWrong = [];
+for (const { what, pattern, actual } of FIGURES) {
+  const found = [...questions.matchAll(pattern)];
+  if (found.length === 0) {
+    console.error(
+      `docs/HAUSA-REVIEW-QUESTIONS.md no longer states ${what}.\n` +
+        'The figure was checked and the sentence carrying it is gone or reworded,\n' +
+        'so nothing is checking it now. Restate it or drop the check deliberately.',
+    );
+    process.exit(1);
+  }
+  for (const match of found) {
+    if (match[1] !== actual) questionsWrong.push([match[1], actual, what]);
+  }
+}
+
+if (questionsWrong.length > 0) {
+  const [said, actual, what] = questionsWrong[0];
+  console.error(
+    `docs/HAUSA-REVIEW-QUESTIONS.md says ${said} where ${what} holds ${actual}.\n` +
+      'That is the page the sheet sends the reviewer to first, so its figure is the\n' +
+      'one they see before anything else.',
   );
   process.exit(1);
 }

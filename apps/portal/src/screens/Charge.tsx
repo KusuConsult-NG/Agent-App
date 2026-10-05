@@ -37,7 +37,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
 import {
   Alert,
   Badge,
@@ -82,6 +82,11 @@ interface InvoiceRecord {
   revenue_category_ha: string | null;
   transaction_reference: string | null;
   transaction_status: string | null;
+  /** The invoice issued in its place, when it has been issued again. */
+  reissued_as: string | null;
+  reissued_as_number: string | null;
+  /** The closed month it was raised in, while its charge waits for a payment. */
+  period_closed?: string | null;
 }
 
 interface AssessmentRecord {
@@ -200,12 +205,94 @@ export function InvoiceScreen({
   const { record, error, reload } = useRecord<InvoiceRecord>(
     `/revenue/invoices/${encodeURIComponent(id)}`,
   );
+  const [reissuing, setReissuing] = useState(false);
+  const [reissueError, setReissueError] = useState<ApiError | null>(null);
+  const [withdrawReason, setWithdrawReason] = useState('');
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawSent, setWithdrawSent] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<ApiError | null>(null);
 
   if (error) return <Failed error={error} retry={reload} />;
   if (!record) return <div className="card"><Loading rows={6} /></div>;
 
   const owed = BigInt(record.total_amount_kobo) - BigInt(record.amount_paid_kobo);
-  const lapsed = record.status === 'EXPIRED';
+  /*
+   * Lapsed by the deadline as well as by the status. The expiry sweep writes
+   * EXPIRED up to an hour after the deadline, and the payment path refuses
+   * from the deadline itself; an officer in that hour was shown a payable bill.
+   */
+  const pastDeadline =
+    record.expires_at !== null && new Date(record.expires_at).getTime() <= Date.now();
+  const lapsed = record.status === 'EXPIRED' || (record.status === 'UNPAID' && pastDeadline);
+  /*
+   * Owed and unpayable for the other reason: a payment the taxpayer's bank or
+   * the gateway reversed puts the bill back to UNPAID, and its transaction is
+   * REVERSED for good.
+   */
+  const stranded =
+    record.status === 'UNPAID' &&
+    !pastDeadline &&
+    (record.transaction_status === 'REVERSED' || record.transaction_status === 'REFUNDED');
+  /*
+   * In date, but raised in a month whose figures have since been signed off:
+   * paying it would add to them, so it is issued again into an open month
+   * first — same amount, same deadline. See INVOICE_PERIOD_CLOSED.
+   */
+  const monthClosed =
+    record.status === 'UNPAID' && !pastDeadline && !record.reissued_as && Boolean(record.period_closed);
+  const mayReissue = (lapsed || stranded || monthClosed) && can('invoice:create');
+  /*
+   * A bill raised in error — a duplicate, a charge against the wrong record —
+   * is withdrawn by approval: asked here, decided by another officer in the
+   * approvals queue. Offered on a bill nobody has paid, to somebody who may
+   * both ask for approvals and issue bills, which is what the server checks.
+   */
+  const mayAskWithdrawal =
+    (record.status === 'UNPAID' || record.status === 'EXPIRED') &&
+    !record.reissued_as &&
+    can('approval:request') &&
+    can('invoice:create');
+
+  async function askWithdrawal() {
+    if (!record) return;
+    setWithdrawing(true);
+    setWithdrawError(null);
+    try {
+      await api.post('/government/approvals', {
+        approvalType: 'INVOICE_WITHDRAWAL',
+        entityType: 'invoice',
+        entityId: record.id,
+        payload: {},
+        reason: withdrawReason.trim(),
+      });
+      setWithdrawSent(true);
+    } catch (caught) {
+      setWithdrawError(asApiError(caught));
+    } finally {
+      setWithdrawing(false);
+    }
+  }
+
+  /*
+   * Issue it again, and go to the bill that replaces it — the one the money
+   * is now taken against. Asked twice, the server answers with the same
+   * replacement, so a second press lands in the same place.
+   */
+  async function reissue() {
+    if (!record) return;
+    setReissuing(true);
+    setReissueError(null);
+    try {
+      const replacement = await api.post<{ invoiceId: string }>(
+        `/revenue/invoices/${encodeURIComponent(record.id)}/reissue`,
+      );
+      navigate(`/invoice/${replacement.invoiceId}`);
+    } catch (caught) {
+      setReissueError(asApiError(caught));
+    } finally {
+      setReissuing(false);
+    }
+  }
 
   return (
     <>
@@ -239,6 +326,37 @@ export function InvoiceScreen({
           </Alert>
         )}
 
+        {stranded && (
+          <Alert kind="warning" title="ofcChStrandedTitle">
+            <p style={{ margin: 0 }}>{t.ofcChStranded}</p>
+          </Alert>
+        )}
+
+        {monthClosed && (
+          <Alert kind="warning" title="ofcChMonthClosedTitle">
+            <p style={{ margin: 0 }}>
+              {t.ofcChMonthClosed.replace('{{period}}', record.period_closed ?? '')}
+            </p>
+          </Alert>
+        )}
+
+        {record.reissued_as && (
+          <Alert kind="info" title="ofcChReplacedTitle">
+            <p style={{ margin: '0 0 0.5rem' }}>
+              {t.ofcChReplaced.replace('{{number}}', record.reissued_as_number ?? '')}
+            </p>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => navigate(`/invoice/${record.reissued_as}`)}
+            >
+              {t.ofcChOpenReplacement.replace('{{number}}', record.reissued_as_number ?? '')}
+            </button>
+          </Alert>
+        )}
+
+        <ErrorAlert error={reissueError} />
+
         <KeyValue
           items={[
             [
@@ -261,6 +379,11 @@ export function InvoiceScreen({
         />
 
         <div className="button-row">
+          {mayReissue && (
+            <button type="button" disabled={reissuing} onClick={reissue}>
+              {reissuing ? t.ofcChReissuing : t.ofcChReissue}
+            </button>
+          )}
           <button
             type="button"
             className="secondary"
@@ -288,6 +411,37 @@ export function InvoiceScreen({
           )}
         </div>
       </div>
+
+      {mayAskWithdrawal && (
+        <div className="card">
+          <h2 className="card__title">{t.ofcChWithdrawTitle}</h2>
+          <p className="card__hint">{t.ofcChWithdrawHint}</p>
+          {withdrawSent ? (
+            <Alert kind="success">{t.ofcChWithdrawSent}</Alert>
+          ) : (
+            <>
+              <ErrorAlert error={withdrawError} />
+              <div className="field">
+                <label htmlFor="withdraw-reason">{t.ofcChWithdrawReason}</label>
+                <textarea
+                  id="withdraw-reason"
+                  rows={3}
+                  value={withdrawReason}
+                  onChange={(event) => setWithdrawReason(event.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                className="secondary"
+                disabled={withdrawing || withdrawReason.trim().length < 10}
+                onClick={askWithdrawal}
+              >
+                {withdrawing ? t.ofcChWithdrawSending : t.ofcChWithdrawSend}
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       <Calculation trace={record.computation_trace} />
     </>

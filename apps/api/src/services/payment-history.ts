@@ -19,6 +19,26 @@
  * happened, and a history that quietly dropped it would look like a mistake to
  * anybody holding the receipt.
  *
+ * WHY THE LIST SAYS WHEN IT STOPPED.
+ *
+ * The summary is computed over the whole window and the list of lines is
+ * capped, so a window holding more payments than the cap produced a statement
+ * whose total counted payments that were not on it. Four items in the
+ * catalogue are charged DAILY — market levy, abattoir fees, slaughter slab,
+ * motor park levy — so a trader paying one of them crosses the 200-line
+ * default inside seven months, and the default window is a year.
+ *
+ * Both screens that print this invite exactly the comparison that then fails.
+ * The citizen's statement ends "Keep your receipts. If this list and your
+ * receipts disagree, take them to a PSIRS office — the receipt is the proof,
+ * this is the record." The officer's panel is introduced as "an answer they
+ * can check against their receipts". A trader holding 365 receipts against 200
+ * lines was being sent to a counter to argue about a gap a LIMIT had invented.
+ *
+ * So `truncated` is part of the answer, not a detail of the query. A capped
+ * levy roll, a capped agent list and a partial workbench report each already
+ * carry a line naming the cap; this was the one capped list that stayed quiet.
+ *
  * WHY THE PERIOD IS REQUIRED AND NOT DEFAULTED TO EVERYTHING.
  *
  * "What did I pay last year" is the question people ask for a reason — they
@@ -31,6 +51,7 @@
 
 import type { Db } from '../db/pool';
 import { query, queryOne } from '../db/pool';
+import { RETURNED_STATES } from '@psirs/shared';
 import { badRequest } from '../lib/errors';
 
 /** The statuses that mean money arrived. Kept in step with the score. */
@@ -41,7 +62,15 @@ function asDate(value: string | Date | null): string | null {
 }
 
 const PAID_STATUSES = ['SETTLED', 'RECEIPT_GENERATED', 'RECONCILIATION_PENDING'] as const;
-const RETURNED_STATUSES = ['REVERSED', 'REFUNDED'] as const;
+/*
+ * The shared definition rather than a fourth copy of the pair.
+ *
+ * `PAID_STATUSES` above stays local and deliberately narrower than the
+ * platform's recognised set, for the reason `lib/revenue-states.ts` records.
+ * This one had no such reason — it was the same two values the state machine
+ * declares, written out again.
+ */
+const RETURNED_STATUSES = RETURNED_STATES;
 
 export interface PaymentHistoryRow {
   transactionReference: string;
@@ -63,6 +92,14 @@ export interface PaymentHistoryRow {
 export interface PaymentHistory {
   from: string;
   to: string;
+  /**
+   * True when the window holds more payments than `rows` carries.
+   *
+   * The summary still covers the whole window, so a caller printing both the
+   * total and the lines has to say this: without it the lines do not add up to
+   * the total above them and nothing on the screen explains why.
+   */
+  truncated: boolean;
   summary: {
     payments: number;
     totalKobo: string;
@@ -96,7 +133,16 @@ export async function paymentHistory(
    * day of the window, silently. Compared against the start of the following
    * day instead.
    */
-  const args = [params.taxpayerId, params.from, params.to, limit];
+  /*
+   * One row more than the caller asked for, and that row is never returned.
+   *
+   * It is there to answer "was anything dropped" exactly, for the cost of a
+   * row. A second COUNT would answer it too and would have to repeat this
+   * query's status filter to be right: the list carries reversals and
+   * `summary.payments` counts only the paid ones, so comparing `rows.length`
+   * against that figure is a different question with a different answer.
+   */
+  const args = [params.taxpayerId, params.from, params.to, limit + 1];
 
   const rows = await query<{
     transaction_reference: string;
@@ -141,6 +187,9 @@ export async function paymentHistory(
       LIMIT $4`,
     [...args, [...PAID_STATUSES, ...RETURNED_STATUSES]],
   );
+
+  const truncated = rows.length > limit;
+  const listed = truncated ? rows.slice(0, limit) : rows;
 
   const summary = await queryOne<{
     payments: string;
@@ -201,6 +250,7 @@ export async function paymentHistory(
   return {
     from: params.from,
     to: params.to,
+    truncated,
     summary: {
       payments: Number.parseInt(summary?.payments ?? '0', 10),
       totalKobo: summary?.total_kobo ?? '0',
@@ -212,7 +262,7 @@ export async function paymentHistory(
         totalKobo: row.total_kobo,
       })),
     },
-    rows: rows.map((row) => ({
+    rows: listed.map((row) => ({
       transactionReference: row.transaction_reference,
       paidAt: row.paid_at ? row.paid_at.toISOString() : null,
       revenueItem: row.revenue_item,

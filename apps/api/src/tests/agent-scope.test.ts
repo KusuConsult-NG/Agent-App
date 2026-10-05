@@ -311,6 +311,7 @@ describe('An agent cannot see revenue beyond their own work', () => {
     ['reversed transaction report', 'GET', '/government/audit/queries/reversed-after-success'],
     ['taxpayer access log', 'GET', '/government/audit/queries/taxpayer-access?taxpayerId=SUB_TAXPAYER'],
     ['receipts by revenue item', 'GET', '/government/audit/queries/receipts-by-item?revenueItemCode=BP-RENEW-URBAN'],
+    ['who has been searching the register', 'GET', '/government/audit/queries/register-searches'],
     ['incentive programmes', 'GET', '/government/programmes'],
     ['commission payouts across agents', 'GET', '/government/commissions/payouts'],
     ['approval queue', 'GET', '/government/approvals'],
@@ -501,7 +502,7 @@ describe('Government retains the full view', () => {
 
     const transactions = await get('/government/transactions', { token: ctx.adminToken });
     assert.ok(
-      (transactions.body as { transaction_reference: string }[]).some(
+      (transactions.body.rows as { transaction_reference: string }[]).some(
         (row) => row.transaction_reference === ctx.otherTransactionRef,
       ),
     );

@@ -41,6 +41,7 @@ import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
 import { forecast, resolvePeriod } from '../services/targets';
+import { todayInPlateau } from '../lib/calendar-day';
 
 const tokens: Record<string, string> = {};
 let lgaId = '';
@@ -324,6 +325,144 @@ describe('target versus actual', () => {
     assert.equal(rollup.body.lga_targets_kobo, '30000000');
     assert.equal(rollup.body.lgas_with_a_target, '1');
     assert.ok(Number(rollup.body.lgas_total) >= 17, 'Plateau has 17 LGAs');
+  });
+});
+
+// ===========================================================================
+describe('two labels for one period, and the figure that depended on which', () => {
+  /*
+   * Migration 056 set out to make two live targets impossible, and said what
+   * the second one costs: "every achievement percentage would depend on which
+   * row the query happened to read first."
+   *
+   * `revenue_targets_one_live_per_scope` keyed that on `period_kind` as well
+   * as the dates, and nothing that reads a target filters on `period_kind` —
+   * not `withTarget`, which takes the forecast's figure with `LIMIT 1` and no
+   * ORDER BY, and not `targetRollup`, whose count and SUM run over the same
+   * columns. The route takes `periodKind`, `periodStart` and `periodEnd` as
+   * three independent fields, so a MONTHLY target for this month and a
+   * QUARTERLY one for the same two dates were two live rows the index allowed
+   * and every reader treated as one.
+   *
+   * Both assertions below are on counts and sums rather than on which row came
+   * back, because which row came back is the part that was never decided.
+   */
+  it('supersedes the figure for the same dates, whatever the period is called', async () => {
+    const period = thisMonth();
+    const first = await setTarget({ periodKind: 'MONTHLY', amountKobo: '50000000' });
+    assert.equal(first.status, 201, JSON.stringify(first.body));
+
+    const second = await setTarget({ periodKind: 'QUARTERLY', amountKobo: '90000000' });
+    assert.equal(second.status, 201, JSON.stringify(second.body));
+    assert.equal(
+      second.body.superseded,
+      first.body.id,
+      'a second figure for the same scope and the same two dates did not ' +
+        'supersede the first, so both are live and the label is the only thing ' +
+        'telling them apart',
+    );
+
+    const live = await query<{ amount_kobo: string; period_kind: string }>(
+      pool,
+      `SELECT amount_kobo::text, period_kind FROM revenue_targets
+        WHERE status = 'ACTIVE' AND scope = 'STATE'
+          AND period_start = $1 AND period_end = $2`,
+      [iso(period.start), iso(period.end)],
+    );
+    assert.equal(
+      live.length,
+      1,
+      `${live.length} live state targets for one period: ${JSON.stringify(live)}`,
+    );
+    assert.equal(live[0]!.amount_kobo, '90000000', 'and it is the figure set second');
+  });
+
+  it('counts an LGA once in the rollup, not once per label', async () => {
+    // The rollup's own symptom, and the deterministic one: `lgas_with_a_target`
+    // is a count and `lga_targets_kobo` a sum, so a second live row does not
+    // merely risk being read — it is read, and added.
+    const period = thisMonth();
+    await setTarget({ scope: 'LGA', lgaId, periodKind: 'MONTHLY', amountKobo: '30000000' });
+    await setTarget({ scope: 'LGA', lgaId, periodKind: 'QUARTERLY', amountKobo: '45000000' });
+
+    const rollup = await get(
+      `/government/targets/rollup?periodStart=${iso(period.start)}&periodEnd=${iso(period.end)}`,
+      auth('admin'),
+    );
+    assert.equal(rollup.status, 200, JSON.stringify(rollup.body));
+    assert.equal(
+      rollup.body.lgas_with_a_target,
+      '1',
+      'one LGA with one target for the period was reported as more than one',
+    );
+    assert.equal(
+      rollup.body.lga_targets_kobo,
+      '45000000',
+      'the apportioned figure is the sum of two rows that both claim to be ' +
+        'the target for the same work',
+    );
+  });
+
+  it('is refused a second live figure at the database, not only by the service', async () => {
+    /*
+     * Asserted here rather than through the route, because the service is now
+     * correct and would never send the second insert. The index's job is to
+     * hold whoever writes — migration 080's header is the principle: "a rule
+     * the service enforces and the database does not is one UPDATE away from
+     * being undone." It was keyed on `period_kind`, so the two rows below were
+     * accepted, and every reader of a target then read them as one.
+     */
+    const period = thisMonth();
+    const setter = await queryOne<{ id: string }>(
+      pool,
+      'SELECT id FROM users WHERE phone = $1',
+      ['+2348073000001'],
+    );
+    assert.ok(setter, 'the officer who sets the figure exists');
+
+    const insert = (periodKind: string, amountKobo: string) =>
+      pool.query(
+        `INSERT INTO revenue_targets
+           (scope, period_kind, period_start, period_end, amount_kobo, set_by)
+         VALUES ('STATE', $1, $2, $3, $4, $5)`,
+        [periodKind, iso(period.start), iso(period.end), amountKobo, setter!.id],
+      );
+
+    await insert('MONTHLY', '50000000');
+    await assert.rejects(
+      insert('QUARTERLY', '90000000'),
+      /revenue_targets_one_live_per_scope/,
+      'the database accepted a second live target for the same scope and the ' +
+        'same two dates, differing only in what the period is called',
+    );
+  });
+
+  it('still lets the same scope hold a target for a longer period beside it', async () => {
+    /*
+     * The tightening has to stop at identical dates. A month and the quarter
+     * containing it are different periods and both are ordinary things to
+     * plan against — which is why this is keyed on the dates rather than on
+     * anything that would make one of the two unsettable.
+     */
+    const month = thisMonth();
+    const quarter = resolvePeriod('QUARTERLY');
+    const monthly = await setTarget({ periodKind: 'MONTHLY', amountKobo: '50000000' });
+    const quarterly = await setTarget({
+      periodKind: 'QUARTERLY',
+      periodStart: iso(quarter.start),
+      periodEnd: iso(quarter.end),
+      amountKobo: '150000000',
+    });
+
+    assert.equal(monthly.status, 201, JSON.stringify(monthly.body));
+    assert.equal(quarterly.status, 201, JSON.stringify(quarterly.body));
+    assert.equal(quarterly.body.superseded, null, 'the quarter superseded the month inside it');
+    assert.notEqual(
+      iso(month.end),
+      iso(quarter.end),
+      'this month and this quarter end on the same day, so the case above is ' +
+        'not the one this test means to cover',
+    );
   });
 });
 
@@ -818,5 +957,270 @@ describe('how far into a period a forecast thinks it is', () => {
     assert.equal(result.days_elapsed, 30);
     assert.equal(result.confidence, 'HIGH');
     assert.equal(result.projected_kobo, result.collected_kobo);
+  });
+});
+
+// ===========================================================================
+
+/**
+ * The same hour, in every other figure that buckets money by day.
+ *
+ * The describe above fixed the targets. The rest of the platform went on
+ * asking the database session's calendar, which is UTC: the period a month's
+ * close freezes, the executive dashboard's today, week, month and year and its
+ * per-category month, the thirty-day trend, an agent's month against the last
+ * and the agent's own "today". Each case below stamps one collection at 00:30
+ * in Jos on the day its figure begins — an instant whose UTC date is the day
+ * before — and asserts the figure moved by exactly that amount.
+ *
+ * The period close is read against a month long past, like the targets above,
+ * so it is the same every hour. The rest are "now" figures and have to use
+ * this week's, month's and year's own first day; each skips itself in the one
+ * half-hour a year, month, week or day when that instant is still to come.
+ */
+describe('the first hour of a Plateau day, everywhere else money is counted by day', () => {
+  /** A settled collection by the demonstration agent, stamped at an exact instant. */
+  async function collectionAt(instant: Date, amountKobo: bigint): Promise<void> {
+    await query(
+      pool,
+      `INSERT INTO transactions (
+         transaction_reference, taxpayer_id, invoice_id, assessment_id, revenue_item_id,
+         lga_id, amount_kobo, total_amount_kobo, status, created_by, created_at, territory_id,
+         agent_id
+       )
+       SELECT 'TXN-TZ-' || gen_random_uuid()::text, t.taxpayer_id, t.invoice_id,
+              t.assessment_id, t.revenue_item_id, t.lga_id, $1, $1,
+              'SETTLED', t.created_by, $2, t.territory_id, t.agent_id
+         FROM transactions t
+        WHERE t.status = 'SETTLED' ORDER BY t.created_at LIMIT 1`,
+      [amountKobo.toString(), instant],
+    );
+  }
+
+  /** 00:30 in Jos on a Plateau calendar day — 23:30Z on the day before. */
+  const halfPastMidnight = (day: string) => new Date(`${day}T00:30:00+01:00`);
+
+  const plateauToday = () => todayInPlateau();
+  const shift = (day: string, days: number) =>
+    new Date(Date.parse(`${day}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+  const mondayOf = (day: string) => shift(day, -((new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7));
+
+  /** Read a figure, stamp a collection, read it again: the difference. */
+  async function moves(
+    day: string,
+    read: () => Promise<bigint>,
+    amountKobo = 4_321_00n,
+  ): Promise<bigint | null> {
+    const instant = halfPastMidnight(day);
+    if (instant.getTime() > Date.now()) return null; // that half-hour is still to come
+    await collect('1');
+    const before = await read();
+    await collectionAt(instant, amountKobo);
+    return (await read()) - before;
+  }
+
+  const dashboard = async () => {
+    const response = await get('/government/dashboard', auth('admin'));
+    assert.equal(response.status, 200, JSON.stringify(response.body).slice(0, 300));
+    return response.body;
+  };
+
+  it('puts it in the month a period close freezes, not the month before', async () => {
+    const figures = async (start: string, end: string) => {
+      const response = await get(
+        `/government/periods/figures?periodStart=${start}&periodEnd=${end}`,
+        auth('admin'),
+      );
+      assert.equal(response.status, 200, JSON.stringify(response.body));
+      return response.body as { collected_kobo: string; transaction_count: string };
+    };
+    await collect('1');
+    const [marchBefore, aprilBefore] = [
+      await figures('2026-03-01', '2026-03-31'),
+      await figures('2026-04-01', '2026-04-30'),
+    ];
+
+    await collectionAt(new Date('2026-03-31T23:30:00Z'), 7_000_00n);
+
+    const [march, april] = [
+      await figures('2026-03-01', '2026-03-31'),
+      await figures('2026-04-01', '2026-04-30'),
+    ];
+    assert.equal(
+      BigInt(april.collected_kobo) - BigInt(aprilBefore.collected_kobo),
+      7_000_00n,
+      "money taken at 00:30 on 1 April in Jos was left out of April's close",
+    );
+    assert.equal(Number(april.transaction_count) - Number(aprilBefore.transaction_count), 1);
+    assert.equal(
+      BigInt(march.collected_kobo),
+      BigInt(marchBefore.collected_kobo),
+      "and was frozen into March's instead",
+    );
+  });
+
+  it('counts it in today on the executive dashboard', async () => {
+    const moved = await moves(plateauToday(), async () => BigInt((await dashboard()).collections.today_kobo));
+    if (moved !== null) assert.equal(moved, 4_321_00n, "it was counted in yesterday's figure");
+  });
+
+  it('counts it in this week, from its Monday', async () => {
+    const moved = await moves(mondayOf(plateauToday()), async () =>
+      BigInt((await dashboard()).collections.week_kobo),
+    );
+    if (moved !== null) assert.equal(moved, 4_321_00n);
+  });
+
+  it('counts it in this month, from its first day', async () => {
+    const moved = await moves(`${plateauToday().slice(0, 8)}01`, async () =>
+      BigInt((await dashboard()).collections.month_kobo),
+    );
+    if (moved !== null) assert.equal(moved, 4_321_00n);
+  });
+
+  it('counts it in the year to date, from 1 January', async () => {
+    const moved = await moves(`${plateauToday().slice(0, 4)}-01-01`, async () =>
+      BigInt((await dashboard()).collections.ytd_kobo),
+    );
+    if (moved !== null) assert.equal(moved, 4_321_00n);
+  });
+
+  it("counts it in its category's month", async () => {
+    const moved = await moves(`${plateauToday().slice(0, 8)}01`, async () =>
+      ((await dashboard()).revenueByCategory as { month_kobo: string }[]).reduce(
+        (total, row) => total + BigInt(row.month_kobo),
+        0n,
+      ),
+    );
+    if (moved !== null) assert.equal(moved, 4_321_00n);
+  });
+
+  it("puts it on today's bar of the thirty-day trend", async () => {
+    const today = plateauToday();
+    const moved = await moves(today, async () => {
+      const bar = ((await dashboard()).dailyTrend as { day: string; amount_kobo: string }[]).find(
+        (row) => row.day === today,
+      );
+      return BigInt(bar?.amount_kobo ?? '0');
+    });
+    if (moved !== null) assert.equal(moved, 4_321_00n);
+  });
+
+  it("counts it in the agent's month on the performance report", async () => {
+    const moved = await moves(`${plateauToday().slice(0, 8)}01`, async () => {
+      const rows = await get('/agents/performance', auth('admin'));
+      assert.equal(rows.status, 200, JSON.stringify(rows.body).slice(0, 300));
+      return (rows.body as { month_kobo: string }[]).reduce(
+        (total, row) => total + BigInt(row.month_kobo),
+        0n,
+      );
+    });
+    if (moved !== null) assert.equal(moved, 4_321_00n);
+  });
+
+  it("counts it in the agent's own today", async () => {
+    const moved = await moves(plateauToday(), async () => {
+      const demo = await seedDemoAgent();
+      const session = await loginAs(demo!.phone, demo!.password, demo!.deviceIdentifier);
+      const home = await get('/agents/me/home', {
+        token: session.accessToken,
+        deviceId: demo!.deviceIdentifier,
+      });
+      assert.equal(home.status, 200, JSON.stringify(home.body).slice(0, 300));
+      return BigInt(home.body.today.collected_kobo);
+    });
+    if (moved !== null) assert.equal(moved, 4_321_00n, "the agent's screen put it in yesterday");
+  });
+});
+
+/**
+ * And where a person reads the date, or a Council reads a month.
+ *
+ * The officer home screens send their dates and times as finished strings,
+ * which the portal prints as they arrive, and the commission report groups by
+ * month. All three were formatted on UTC's clock.
+ */
+describe('a date or a time a person reads, on Plateau’s clock', () => {
+  const shift = (day: string, days: number) =>
+    new Date(Date.parse(`${day}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+
+  const plateauWallClock = (instant: Date) => {
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Africa/Lagos',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      })
+        .formatToParts(instant)
+        .map((part) => [part.type, part.value]),
+    );
+    return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+  };
+
+  it("gives a refused action the time it happened in Jos, on the auditor's home", async () => {
+    // An auditor reads; setting a target is refused, and the refusal is audited.
+    const refused = await setTarget({}, 'auditor');
+    assert.equal(refused.status, 403, 'the fixture needs a refusal to record');
+    const entry = await queryOne<{ created_at: Date }>(
+      pool,
+      `SELECT created_at FROM audit_logs WHERE result = 'DENIED' ORDER BY created_at DESC LIMIT 1`,
+      [],
+    );
+    assert.ok(entry, 'the refusal was recorded');
+
+    const home = await get('/government/home', auth('auditor'));
+    assert.equal(home.status, 200, JSON.stringify(home.body).slice(0, 300));
+    assert.equal(
+      (home.body.work.refusals as { at: string }[])[0]?.at,
+      plateauWallClock(entry!.created_at),
+      'the auditor is shown UTC under "When", an hour behind Jos',
+    );
+  });
+
+  it("shows an invoice's last day as Plateau's date on the revenue officer's home", async () => {
+    // A bill whose payment window closes at 00:30 tomorrow in Jos: in UTC
+    // that is still today, and the list said so.
+    await collect('1');
+    const tomorrow = shift(todayInPlateau(), 1);
+    const deadline = new Date(`${tomorrow}T00:30:00+01:00`);
+    const unpaid = await queryOne<{ id: string }>(
+      pool,
+      `UPDATE invoices SET status = 'UNPAID', amount_paid_kobo = 0, expires_at = $1
+        WHERE id = (SELECT id FROM invoices ORDER BY created_at LIMIT 1)
+        RETURNING id`,
+      [deadline],
+    );
+    assert.ok(unpaid);
+
+    const home = await get('/government/home', auth('revenue_officer'));
+    assert.equal(home.status, 200, JSON.stringify(home.body).slice(0, 300));
+    const row = (home.body.work.expiring as { id: string; expires_on: string }[]).find(
+      (invoice) => invoice.id === unpaid!.id,
+    );
+    assert.equal(row?.expires_on, tomorrow, 'the officer was told it lapses a day early');
+  });
+
+  it('files commission accrued at 00:30 on the first under the month that began', async () => {
+    const { transactionId } = await collect('1');
+    const firstOfMonth = `${shift(`${todayInPlateau().slice(0, 8)}01`, -40).slice(0, 8)}01`;
+    const stamped = await queryOne<{ id: string }>(
+      pool,
+      'UPDATE commissions SET created_at = $2 WHERE transaction_id = $1 RETURNING id',
+      [transactionId, new Date(`${firstOfMonth}T00:30:00+01:00`)],
+    );
+    assert.ok(stamped, 'the collection earned a commission to stamp');
+
+    const report = await get('/government/commissions/by-place', auth('admin'));
+    assert.equal(report.status, 200, JSON.stringify(report.body).slice(0, 300));
+    const periods = (report.body.byPeriod as { period: string }[]).map((row) => row.period);
+    assert.deepEqual(
+      periods,
+      [firstOfMonth.slice(0, 7)],
+      'it was filed under the month before, which had already ended in Jos',
+    );
   });
 });

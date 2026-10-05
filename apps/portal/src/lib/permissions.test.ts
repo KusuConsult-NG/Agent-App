@@ -37,7 +37,6 @@ import {
   READ_ONLY_PERMISSIONS,
   availableGroups,
   availableItems,
-  belongsInPortal,
   can,
   isReadOnly,
   landingPath,
@@ -66,23 +65,45 @@ function menu(role: Role): string[] {
 
 // ===========================================================================
 describe('each role gets a distinct portal', () => {
-  it('gives the field agent nothing, because they belong in the agent app', () => {
+  it('gives the field agent a short menu that leads with an explanation', () => {
     /*
-     * `catalogue:read` is the only portal gate an agent passes, which is how
-     * they used to arrive at a shell containing one item. They are now turned
-     * away at the door instead — see `belongsInPortal`, which is the control
-     * this test exists for and is asserted below.
+     * `catalogue:read` is the only portal gate an agent passes, so filtering
+     * alone leaves them two reference tables and a landing page on whichever
+     * sorted first. That is what the door check existed to spare them, and
+     * refusing a valid sign-in to spare somebody an awkward menu is the wrong
+     * trade — so `NAV_BY_ROLE.agent` arranges the menu instead, and "Your
+     * field work" leads it because it is the item that explains the others.
      *
-     * The presumptive schedule joined that same gate deliberately. It is a
-     * published rate table, and an agent standing at a stall being asked why
-     * the figure is what it is has a better reason to read it than most
-     * officers do. Narrowing the gate to keep it off a menu nobody can reach
-     * would hide a screen the API serves, which is the failure this codebase
-     * already recorded once when a supervisor's own dashboard was hidden from
-     * them while the endpoint answered.
+     * The presumptive schedule is on that same gate deliberately. It is a
+     * published rate table, and an agent at a stall being asked why the
+     * figure is what it is has a better reason to read it than most officers
+     * do.
      */
-    expect(menu('agent')).toEqual(['Presumptive schedule', 'Revenue catalogue']);
-    expect(belongsInPortal('agent')).toBe(false);
+    expect(menu('agent')).toEqual([
+      'Your field work',
+      'Revenue catalogue',
+      'Presumptive schedule',
+    ]);
+  });
+
+  it('lands the field agent on the explanation, not on a rate table', () => {
+    // `/` is the executive dashboard and an agent holds nothing it needs, so
+    // landingPath falls through to the first menu item. That it is the right
+    // one is a property of the arrangement above, and worth pinning here.
+    expect(landingPath(principal('agent'))).toBe('/field-work');
+  });
+
+  it('offers the agent no officer screen, arrangement or not', () => {
+    /*
+     * The menu is a convenience, never the control. Every officer screen is
+     * gated on a permission the agent role does not hold — and the API checks
+     * it again whichever application asks — so this asserts the filter, not
+     * the security boundary.
+     */
+    const paths = availableItems(principal('agent')).map((item) => item.path);
+    for (const officerOnly of ['/', '/my-work', '/cases', '/agents', '/transactions']) {
+      expect(paths).not.toContain(officerOnly);
+    }
   });
 
   /*
@@ -361,17 +382,7 @@ describe('the auditor is read-only, observably', () => {
 });
 
 // ===========================================================================
-describe('who belongs in this portal', () => {
-  it('admits the five government roles and turns away the field agent', () => {
-    expect(ROLES.filter(belongsInPortal)).toEqual([
-      'supervisor',
-      'revenue_officer',
-      'finance_officer',
-      'auditor',
-      'admin',
-    ]);
-  });
-
+describe('the roles this portal is arranged around', () => {
   it('names only roles that exist', () => {
     for (const role of PORTAL_ROLES) {
       expect(ROLES as readonly string[]).toContain(role);

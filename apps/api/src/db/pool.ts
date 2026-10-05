@@ -23,6 +23,10 @@ types.setTypeParser(types.builtins.NUMERIC, (value) => value);
 export const pool = new Pool({
   connectionString: config.database.url,
   max: config.database.poolSize,
+  // Waiting for ever for a connection is how an exhausted pool becomes a
+  // sign-in that spins until a proxy answers 504, with nothing in this
+  // service's log to say why. See the note in config.ts.
+  connectionTimeoutMillis: config.database.connectionTimeoutMs,
   statement_timeout: config.database.statementTimeoutMs,
   // A backstop, not a licence: several services still call an external
   // provider with a transaction open, and this is what stops one that never
@@ -110,7 +114,31 @@ export async function withTransaction<T>(
     try {
       await client.query(`BEGIN ISOLATION LEVEL ${options.isolationLevel ?? 'READ COMMITTED'}`);
       const result = await fn(client);
-      await client.query('COMMIT');
+      const committed = await client.query('COMMIT');
+      /*
+       * A COMMIT is not always a commit.
+       *
+       * PostgreSQL abandons a transaction at its first failed statement, and
+       * catching that statement's error in TypeScript does not un-fail it. The
+       * COMMIT that follows succeeds as a command and quietly does a ROLLBACK,
+       * with nothing raised. So a callback that caught an error and carried on
+       * returned normally from here, its caller reported success, and
+       * everything the transaction wrote was gone. Measured on the support desk:
+       * a reply answered 201 and was never saved, because the notice about it
+       * had failed inside the same transaction and been caught as best-effort.
+       *
+       * The command tag says what really happened. Anything but COMMIT is a
+       * transaction that saved nothing, and that is an error however the
+       * callback ended. Work that is allowed to fail inside a transaction goes
+       * through `withSavepoint` below, which is what makes catching it safe.
+       */
+      if (committed.command !== 'COMMIT') {
+        throw new Error(
+          'A statement inside this transaction failed and its error was caught, so PostgreSQL ' +
+            'rolled the whole transaction back and nothing in it was saved. ' +
+            'Work that may fail inside a transaction belongs in withSavepoint.',
+        );
+      }
       return result;
     } catch (error) {
       try {
@@ -139,6 +167,33 @@ export async function withTransaction<T>(
   }
 }
 
+let savepoints = 0;
+
+/**
+ * Run work inside a transaction that is allowed to fail without failing it.
+ *
+ * A failed statement abandons the whole transaction, so a try/catch around
+ * best-effort work inside one is not best-effort at all: it takes everything
+ * else in the transaction down with it, and since `withTransaction` now checks
+ * the COMMIT, it does so loudly. A savepoint is how PostgreSQL scopes a
+ * failure. On error this rolls back to it, so the transaction is usable again
+ * and only this work is undone, and then rethrows for the caller to decide
+ * what the failure means.
+ */
+export async function withSavepoint<T>(client: PoolClient, work: () => Promise<T>): Promise<T> {
+  savepoints += 1;
+  const name = `best_effort_${savepoints}`;
+  await client.query(`SAVEPOINT ${name}`);
+  try {
+    const result = await work();
+    await client.query(`RELEASE SAVEPOINT ${name}`);
+    return result;
+  } catch (error) {
+    await client.query(`ROLLBACK TO SAVEPOINT ${name}`);
+    throw error;
+  }
+}
+
 /**
  * Serialise concurrent work on one logical resource.
  *
@@ -162,6 +217,67 @@ export const LOCK_NAMESPACE = {
   WORKER: 7,
   /** Schema migration, so simultaneous boots do not race each other. */
   MIGRATION: 8,
+  /**
+   * One registration number, however many agents are looking at the vehicle.
+   *
+   * `upsertVehicle` read the plate and then inserted, which is a merge for one
+   * caller and a race for two. Keyed on the normalised number rather than on a
+   * row id because the row may not exist yet, which is exactly the case that
+   * raced.
+   */
+  VEHICLE: 9,
+  /**
+   * A phone number, while an application is being created against it.
+   *
+   * `submitApplication` reads `users` for the phone and then inserts one. Two
+   * taps on Apply both found nothing, both inserted, and the second was
+   * refused by `users_phone_key` — so the answer was the generic duplicate
+   * sentence instead of `PHONE_ALREADY_REGISTERED`, which the agent
+   * application translates and which says to sign in instead.
+   */
+  APPLICATION_PHONE: 10,
+  /** A department code, while one is being created against it. */
+  DEPARTMENT_CODE: 11,
+  /** One agent's identity check, while a new attempt supersedes the last. */
+  AGENT_KYC: 12,
+  /**
+   * One application's referee slot, while a nomination is written into it.
+   *
+   * `nominateReferee` reads `referees` for any row in an active state, refuses
+   * if it finds one, and inserts if it does not — and the row it looks for
+   * does not exist yet. Two nominations submitted together both found nothing
+   * and both inserted, leaving an applicant with two outstanding invitations
+   * and no record of a replacement: two attempts at clearance where PRD §29's
+   * control is one at a time, deliberately chosen and recorded.
+   */
+  AGENT_REFEREE: 13,
+  /**
+   * One scope's target for one period, while a figure is being set against it.
+   *
+   * `setTarget` supersedes whatever stood for the same scope and dates and
+   * then inserts, which is a revision for one caller and a race for two: both
+   * UPDATEs match nothing, both INSERT, and the second meets
+   * `revenue_targets_one_live_per_scope`. The caller is then refused a target
+   * that would have been set had the two arrived a second apart, and told to
+   * close a target they cannot see — where sequentially they would have
+   * superseded it and been told which figure they replaced.
+   *
+   * Keyed on the scope, its identifiers and the two dates, in the same shape
+   * the index is keyed on. The dates go into the key as the DATE Postgres will
+   * store, so two callers who name the same day differently still queue.
+   */
+  REVENUE_TARGET: 14,
+  /**
+   * One capture of one identity document at a time, per applicant or referee.
+   *
+   * `storeKycDocument` supersedes the current capture and inserts the new one.
+   * Two captures at once both found the same current row; the second's UPDATE
+   * waited, then matched nothing once the first had superseded it, and its
+   * insert left two current captures for the reviewer to choose between. The
+   * same race `AGENT_KYC` closed for the identity check itself. Keyed on the
+   * owner and the document type, the columns the unique index is keyed on.
+   */
+  KYC_DOCUMENT: 15,
 } as const;
 
 /**

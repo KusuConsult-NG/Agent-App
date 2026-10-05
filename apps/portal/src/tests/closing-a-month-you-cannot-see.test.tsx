@@ -57,10 +57,11 @@ const SETTLED = {
   transaction_count: 412,
   unreconciled: '0',
   pending_payments: '0',
+  awaiting_settlement: '0',
 };
 
 /** How the figures request behaves for a given test. */
-let figures: 'settled' | 'outstanding' | 'fails' = 'settled';
+let figures: 'settled' | 'outstanding' | 'unbanked' | 'fails' = 'settled';
 
 beforeEach(() => {
   cleanup();
@@ -72,7 +73,9 @@ beforeEach(() => {
       if (figures === 'fails') throw new Error('gateway timeout');
       return (figures === 'outstanding'
         ? { ...SETTLED, unreconciled: '3', pending_payments: '2' }
-        : SETTLED) as never;
+        : figures === 'unbanked'
+          ? { ...SETTLED, awaiting_settlement: '4' }
+          : SETTLED) as never;
     }
     return [PERIOD] as never;
   });
@@ -124,6 +127,23 @@ describe('closing a month you cannot see', () => {
     await openTheClosingPanel();
 
     await waitFor(() => expect(screen.getByText(en.ofcPeNotReady)).toBeTruthy());
+    expect(screen.getByLabelText(en.ofcPeOverride)).toBeTruthy();
+  });
+
+  /*
+   * Money the month took that the bank has not paid in.
+   *
+   * The server refuses the close over it, so the screen has to say so and
+   * offer the field for the reason — otherwise an officer with no exceptions
+   * and no pending payments presses Close and is refused over a figure they
+   * were never shown.
+   */
+  it('says how much the bank has not yet paid in, and asks why when closing over it', async () => {
+    figures = 'unbanked';
+    await openTheClosingPanel();
+
+    await waitFor(() => expect(screen.getByText(en.ofcPeNotReady)).toBeTruthy());
+    expect(screen.getByText(new RegExp(en.ofcPeAwaitingSettlement))).toBeTruthy();
     expect(screen.getByLabelText(en.ofcPeOverride)).toBeTruthy();
   });
 

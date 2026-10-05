@@ -2,7 +2,7 @@
 
 import type { ReactElement, ReactNode } from 'react';
 import { Children, cloneElement, isValidElement, useId, useState } from 'react';
-import { BLOCKER_TEXT, enumLabel, formatNaira, statusSeverity } from '@psirs/shared';
+import { BLOCKER_TEXT, ENUM_LABELS, enumLabel, formatNaira, statusSeverity } from '@psirs/shared';
 import type { AgentBlocker, TranslationDictionary } from '@psirs/shared';
 import type { ApiError } from './lib/api';
 import { useI18n } from './lib/i18n';
@@ -50,7 +50,7 @@ function fieldLabel(field: string): string {
  * Hausa sentence guessed for a message nobody has seen would be worse than the
  * English one — the agent cannot tell a guess from a translation.
  */
-const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
+export const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   /*
    * A capture PSIRS refused. These reach here rather than through `ApiError`
    * because they arrive one-per-draft inside a batch response, but they are
@@ -93,6 +93,105 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   BANK_CHANGE_ALREADY_PENDING: 'errBankChangeAlreadyPending',
   BANK_CHANGE_ALREADY_SETTLED: 'errBankChangeAlreadySettled',
   PAYOUT_IN_FLIGHT: 'errPayoutInFlight',
+
+  /*
+   * COLLECTING, WHICH IS WHAT THE APPLICATION IS FOR
+   *
+   * Every refusal `createAssessmentIn` raises reaches an agent from the screen
+   * they collect on, and not one of them was in this map — in an application
+   * that has offered Hausa since it was built, and after the same gap was
+   * closed once already on the path to becoming an agent.
+   *
+   * Three had no code to key on and were raised as INVALID_REQUEST, the code a
+   * malformed field gets. They were named first, in `services/revenue.ts`,
+   * for the reason the comment above gives: a sentence nobody can name is a
+   * sentence nobody can translate.
+   *
+   * Each has one fixed meaning, which is the test this map sets. None of them
+   * carries a figure, so none needs a placeholder: the agent chose the levy
+   * off a list a moment earlier and knows which one it was.
+   */
+  TAXPAYER_NOT_ACTIVE: 'errTaxpayerNotActive',
+  REVENUE_ITEM_INACTIVE: 'errRevenueItemInactive',
+  REVENUE_ITEM_NOT_FOR_TAXPAYER_TYPE: 'errRevenueItemNotForTaxpayerType',
+  REVENUE_ITEM_NOT_IN_LGA: 'errRevenueItemNotInLga',
+  NO_TAX_PAYABLE: 'errNoTaxPayable',
+  ASSESSMENT_AMOUNT_ZERO: 'errAssessmentAmountZero',
+
+  /*
+   * THE SIX THE LAST PASS AT THIS MISSED, AND WHY IT MISSED THEM.
+   *
+   * The commit that added the block above was called "Every refusal on the
+   * collect screen, in English" and it was not. I enumerated the refusals
+   * `createAssessmentIn` raises, and all six of those are above. Doing it
+   * mechanically instead — slicing out the functions the collect path actually
+   * runs and extracting every code — finds what reading one function body
+   * cannot:
+   *
+   *   NO_EFFECTIVE_RATE is raised one level down, by `resolveRate`, which
+   *   `createAssessmentIn` and `quote` both call. It fires when government has
+   *   ended a rate version without publishing a successor.
+   *
+   *   The five payment codes are raised by `initiatePayment`, reached from the
+   *   same screen one tap later. The sentence that decides whether a citizen is
+   *   asked to pay twice was already in Hausa — `ErrorAlert` renders the money
+   *   status from the dictionary and `fe3ef17` saw to that — but the headline
+   *   above it, which says *what* happened, was the server's English.
+   *
+   * `a-refusal-the-collect-screen-can-show.test.ts` now holds the whole path
+   * rather than one function, so the next helper added below this one cannot
+   * repeat it.
+   */
+  NO_EFFECTIVE_RATE: 'errNoEffectiveRate',
+  INVOICE_ALREADY_PAID: 'errInvoiceAlreadyPaid',
+  PAYMENT_ALREADY_VERIFIED: 'errPaymentAlreadyVerified',
+  INVOICE_NOT_PAYABLE: 'errInvoiceNotPayable',
+  INVOICE_EXPIRED: 'errInvoiceExpired',
+  TRANSACTION_NOT_PAYABLE: 'errTransactionNotPayable',
+  // A bill from a month whose figures have been signed off is issued again first.
+  INVOICE_PERIOD_CLOSED: 'errInvoicePeriodClosed',
+  /*
+   * Issuing a lapsed bill again (`POST /revenue/invoices/:id/reissue`), from
+   * the trader's list of bills and the transaction screen. Each refusal names
+   * one fixed state, and the agent is standing in front of the person whose
+   * bill it is.
+   */
+  INVOICE_STILL_PAYABLE: 'errInvoiceStillPayable',
+  INVOICE_UNDER_OBJECTION: 'errInvoiceUnderObjection',
+  INVOICE_PAYMENT_IN_PROGRESS: 'errInvoicePaymentInProgress',
+  INVOICE_WITHDRAWN: 'errInvoiceWithdrawn',
+  INVOICE_PART_PAID: 'errInvoicePartPaid',
+  VEHICLE_RENEWAL_CLOSED: 'errVehicleRenewalClosed',
+
+  /*
+   * PUTTING SOMEBODY ON THE REGISTER.
+   *
+   * The first thing an agent does for anybody, and the gate everything else
+   * is behind: nothing can be assessed, collected or receipted against a
+   * person who is not registered. All four refusals the screen can show were
+   * the server's English.
+   *
+   * Two of them had their next step in Hausa already and their headline in
+   * English — `nsTinServiceUnavailable` and `nsTinNotFound` were written when
+   * the advice on those two branches was corrected, and the sentence they are
+   * advice about was left behind. The agent read what to do in their own
+   * language and what had happened in somebody else's.
+   *
+   * Found the same way the six above were: by slicing the functions the
+   * screen's requests actually run and extracting every code, which is what
+   * `a-refusal-a-screen-can-show.test.ts` now does for this path too.
+   */
+  TAXPAYER_ALREADY_EXISTS: 'errTaxpayerAlreadyExists',
+  POSSIBLE_DUPLICATE_TAXPAYER: 'errPossibleDuplicateTaxpayer',
+  TIN_SERVICE_UNAVAILABLE: 'errTinServiceUnavailable',
+  TIN_NOT_FOUND: 'errTinNotFound',
+  /*
+   * Asking a group's leader to confirm its members, when the text carrying the
+   * link could not be queued. Translated because the agent must not come away
+   * believing the leader was sent anything: nobody but the leader's phone ever
+   * holds that link, so a request that was not sent is one nobody can answer.
+   */
+  ATTESTATION_NOT_SENT: 'errAttestationNotSent',
 };
 
 /**
@@ -132,9 +231,45 @@ export function errorText(
   if (!error.details?.length || !sentence.includes('{{')) return sentence;
   return error.details.reduce(
     (text, detail) =>
-      detail.field ? text.replace(`{{${detail.field}}}`, detail.issue) : text,
+      detail.field ? text.replace(`{{${detail.field}}}`, substituted(detail, t)) : text,
     sentence,
   );
+}
+
+/**
+ * What a detail puts into the hole.
+ *
+ * `issue` is prose composed by the server, and prose composed there is prose in
+ * English — so a figure goes in as it is and a STATE goes in through the
+ * dictionary. Two of the payment refusals name a state: "This invoice is
+ * cancelled and can no longer be paid" became, with the sentence translated and
+ * the value not, Hausa with `CANCELLED` sitting in the middle of it.
+ *
+ * Two conditions, and both are deliberate. The detail has to be marked
+ * `STATE`, and the value has to be one the dictionary holds.
+ *
+ * The second is the one that stops damage: `enumLabel` always returns
+ * something — its fallback takes the underscores out and lowercases — so
+ * calling it on a figure would turn an amount or a reference into something
+ * subtly different, and calling it on an unknown state would damage the state
+ * rather than translate it. The same rule is applied on the officer portal's
+ * audit table, for the same reason.
+ *
+ * The first is narrowness rather than safety, and it was nearly dropped for
+ * being untestable: a mutation that removed it failed nothing, because the
+ * details in flight today carry scores and pass marks and none of those is a
+ * dictionary key. It is kept because the alternative rule — translate any
+ * detail whose value happens to match a key — would quietly take in every
+ * detail added later, and `ACTIVE` or `PENDING` is an entirely plausible thing
+ * for some future field to carry as a datum. The test below holds it, so it is
+ * now a property rather than a hopeful line.
+ */
+function substituted(
+  detail: { field?: string; issue: string; code?: string },
+  t: TranslationDictionary,
+): string {
+  if (detail.code !== 'STATE') return detail.issue;
+  return detail.issue in ENUM_LABELS ? enumLabel(detail.issue, t) : detail.issue;
 }
 
 /**
@@ -148,9 +283,15 @@ export function errorText(
  *
  * Keyed by the error's own code, which has always travelled beside it, so
  * nothing new is sent. Only codes specific enough to imply one next step are
- * here: `VALIDATION_FAILED`, and anything a caller passed to `forbidden()` or
- * `conflict()`, means something different every time it is raised and keeps
- * the server's words.
+ * here. `VALIDATION_FAILED` and `FORBIDDEN` mean something different every
+ * time they are raised and keep the server's words.
+ *
+ * That sentence used to say the same of anything passed to `conflict()`, which
+ * was never true of the map above it — half its entries are conflict codes —
+ * and it was the reason the one next step on the collect path stayed in
+ * English. `NO_TAX_PAYABLE` always means one thing and its next step is the
+ * only instruction on that path that costs a trader money if it is not read:
+ * it tells the agent not to raise the figure to force the assessment through.
  */
 const TRANSLATED_NEXT_STEPS: Record<string, keyof TranslationDictionary> = {
   STEP_UP_REQUIRED: 'nsStepUpRequired',
@@ -165,6 +306,25 @@ const TRANSLATED_NEXT_STEPS: Record<string, keyof TranslationDictionary> = {
   PAYMENT_UNCONFIRMED: 'nsPaymentUnconfirmed',
   PAYMENT_FAILED: 'nsPaymentFailed',
   AGENT_NOT_CLEARED: 'nsAgentNotCleared',
+  NO_TAX_PAYABLE: 'nsNoTaxPayable',
+  // The two of the six that carry a next step. The other four say everything
+  // they have to say in one sentence, and an invented instruction would be
+  // worse than none.
+  NO_EFFECTIVE_RATE: 'nsNoEffectiveRate',
+  INVOICE_ALREADY_PAID: 'nsInvoiceAlreadyPaid',
+  /*
+   * The registration screen's two. The other two already had theirs, which is
+   * how the split was noticed at all.
+   *
+   * `POSSIBLE_DUPLICATE_TAXPAYER` is the one place this map does not translate
+   * the API's sentence so much as answer the same question for a different
+   * reader. The API says to resubmit with `acknowledgeDuplicates` set, which
+   * is correct for a client and useless to a person; the screen under this
+   * alert lists the matches and carries the button. So the next step points
+   * there, and the API keeps its own words for the callers they are for.
+   */
+  TAXPAYER_ALREADY_EXISTS: 'nsTaxpayerAlreadyExists',
+  POSSIBLE_DUPLICATE_TAXPAYER: 'nsPossibleDuplicateTaxpayer',
 };
 
 /** The next step for an error, or the server's own words when it has none. */

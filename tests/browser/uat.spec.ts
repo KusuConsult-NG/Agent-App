@@ -431,7 +431,18 @@ test.describe('A collection, end to end in the app', () => {
     const priceALevy = async () => {
       await agentPage.goto(`${AGENT}/#/collect`);
       await agentPage.waitForTimeout(2000);
-      await agentPage.locator('input[type="search"]').first().fill('Rifkatu');
+      /*
+       * Somebody in the agent's OWN Local Government Area.
+       *
+       * This said 'Rifkatu', who the seed registers in Pankshin while the
+       * demonstration agent works Jos North — and a name fragment is answered
+       * only from the caller's own territory, deliberately: `q` can be varied
+       * one letter at a time until the register falls out a hundred rows
+       * at a time, so `taxpayers.ts` bounds it where an identifier is not
+       * bounded. The agent was right to find nobody, and the test was asking
+       * them to do the thing that rule exists to prevent.
+       */
+      await agentPage.locator('input[type="search"]').first().fill('Amina');
       await agentPage.getByRole('button', { name: /^search$/i }).click();
       await agentPage.waitForTimeout(2500);
       await agentPage.locator('.list__item').first().click();

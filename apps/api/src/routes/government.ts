@@ -29,8 +29,10 @@ import * as auth from '../services/auth';
 import * as agents from '../services/agents';
 import * as reconciliation from '../services/reconciliation';
 import * as reports from '../services/reports';
+import * as revenue from '../services/revenue';
 import { arrearsWorklist } from '../services/arrears';
 import { paymentHistory } from '../services/payment-history';
+import { recordTaxpayerAccess, recordTaxpayerSearch } from '../services/taxpayer-access';
 import {
   assessFromObservation,
   attestObservation,
@@ -78,9 +80,10 @@ import * as workbench from '../services/audit-workbench';
 import * as exporting from '../services/export';
 import * as officerDevices from '../services/officer-devices';
 import * as inbox from '../services/officer-inbox';
+import { openApprovalRequest } from '../services/approval-requests';
 import { integrationStatus } from '../integrations';
 import { integrationHealth } from '../services/integration-health';
-import { jobHealth } from '../services/jobs';
+import { jobHealth, runOnDemand } from '../services/jobs';
 import { sendDueReminders } from '../services/reminders';
 
 export const governmentRouter = Router();
@@ -268,10 +271,18 @@ governmentRouter.get(
 /*
  * Who has read this person's record, and under what claimed purpose.
  *
- * Held behind `audit:read` rather than the report permissions. The officers
- * who look at the graph should not be the ones who decide what the log of
- * their looking says, and an auditor asking "who has been running coverage
- * queries against this citizen" is the question the log exists to answer.
+ * Held behind `audit:read` rather than the report permissions. The sentence
+ * that used to follow said "the officers who look at the graph should not be
+ * the ones who decide what the log of their looking says" — which describes a
+ * separation this gate does not make: `audit:read` is held by revenue_officer,
+ * finance_officer, auditor and admin, so the officers running coverage queries
+ * can read this log too.
+ *
+ * What stops them deciding what it says is that
+ * `taxpayer_connection_access_logs` is append-only at the database. The
+ * permission narrows who can look; the triggers are what make it evidence.
+ * Noticed while gating `/audit/queries/register-searches`, where I had started
+ * to repeat the claim.
  */
 governmentRouter.get(
   '/intelligence/taxpayers/:id/access-log',
@@ -307,7 +318,9 @@ governmentRouter.post(
   '/intelligence/rebuild',
   requirePermission('system:configure'),
   asyncHandler(async (req, res) => {
-    const result = await rebuildVehicleConnections(pool);
+    const result = await runOnDemand('connection-graph', 'An intelligence rebuild', () =>
+      rebuildVehicleConnections(pool),
+    );
     await withTransaction(async (client) => {
       await recordAudit(client, {
         actorId: req.auth!.userId,
@@ -435,14 +448,30 @@ governmentRouter.get(
           );
         }
       }
-      res.json(
-        await paymentHistory(pool, {
-          taxpayerId: req.params.id!,
-          from: data.from,
-          to: data.to,
-          limit: data.limit,
-        }),
-      );
+      const history = await paymentHistory(pool, {
+        taxpayerId: req.params.id!,
+        from: data.from,
+        to: data.to,
+        limit: data.limit,
+      });
+
+      /*
+       * This is the officer portal's route to a named person's affairs. It
+       * never calls `GET /taxpayers/:id` — it searches, then opens this tab —
+       * so logging only the profile read would have left every officer's look
+       * unrecorded while recording every field agent's.
+       */
+      await recordTaxpayerAccess({
+        taxpayerId: req.params.id!,
+        accessedBy: req.auth!.userId,
+        actorRole: req.auth!.role,
+        surface: 'PAYMENT_HISTORY',
+        ipAddress: req.clientIp,
+        deviceId: req.auth!.deviceId,
+        requestId: req.requestId,
+      });
+
+      res.json(history);
     },
   ),
 );
@@ -501,13 +530,16 @@ governmentRouter.post(
   validateBody(
     z.object({ reason: z.string().min(4).max(500) }),
     async (req, res, data) => {
-      await cancelPayeSchedule(pool, {
-        scheduleId: req.params.id!,
-        reason: data.reason,
-        actorId: req.auth!.userId,
-        actorRole: req.auth!.role,
-      });
-      res.status(204).end();
+      // 200 with the refunds it asked for: withdrawing a return already paid
+      // asks for the payment back, and the officer who withdrew it is told.
+      res.json(
+        await cancelPayeSchedule(pool, {
+          scheduleId: req.params.id!,
+          reason: data.reason,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
     },
   ),
 );
@@ -865,14 +897,18 @@ governmentRouter.post(
   validateBody(
     z.object({ uphold: z.boolean(), reason: z.string().min(4).max(1000) }),
     async (req, res, data) => {
-      await decideObjection(pool, {
-        objectionId: req.params.id!,
-        uphold: data.uphold,
-        reason: data.reason,
-        actorId: req.auth!.userId,
-        actorRole: req.auth!.role,
-      });
-      res.status(204).end();
+      // 200 with what the decision asked for, where it was 204 with nothing:
+      // an upheld objection on a paid bill opens a refund request, and the
+      // officer who decided is told so rather than left to find it.
+      res.json(
+        await decideObjection(pool, {
+          objectionId: req.params.id!,
+          uphold: data.uphold,
+          reason: data.reason,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
     },
   ),
 );
@@ -1134,12 +1170,20 @@ governmentRouter.get(
           data.revenueItemId ?? null,
           data.from ?? null,
           data.to ?? null,
-          data.limit,
+          /*
+           * One row more than was asked for, and it is never returned. It
+           * answers "was anything dropped" exactly, where a second count
+           * would have to repeat all six filters above to be right.
+           */
+          data.limit + 1,
         ],
       );
 
+      const truncatedAt = rows.length > data.limit ? data.limit : null;
+
       await deliver(req, res, {
-        rows,
+        rows: truncatedAt === null ? rows : rows.slice(0, data.limit),
+        truncatedAt,
         format: data.format,
         subject: 'Transactions',
         filename: 'transactions',
@@ -1318,7 +1362,7 @@ governmentRouter.get(
   '/reconciliation/exceptions',
   requirePermission('payment:reconcile', 'audit:read'),
   validateQuery(
-    z.object({ status: z.string().optional(), limit: z.coerce.number().int().max(500).default(100) }),
+    z.object({ status: z.string().optional(), limit: z.coerce.number().int().min(1).max(500).default(100) }),
     async (_req, res, data) => {
       res.json(await reconciliation.exceptionQueue(pool, data));
     },
@@ -1413,14 +1457,26 @@ governmentRouter.post(
 // Maker-checker approvals (PRD §69, §70)
 // ---------------------------------------------------------------------------
 
+/** How many approvals the queue returns at once. */
+export const APPROVAL_QUEUE_CAP = 200;
+
 governmentRouter.get(
   '/approvals',
   requirePermission('approval:review', 'approval:authorise', 'audit:read'),
   validateQuery(
     z.object({ status: z.string().optional(), type: z.string().optional() }),
     async (_req, res, data) => {
-      res.json(
-        await query(
+      /*
+       * With how many matched, not only the two hundred that fit.
+       *
+       * This answered a bare array cut at two hundred, newest first, and the
+       * screen filters it to REQUESTED by default. In a backlog that is
+       * exactly the wrong end to lose: the requests that drop off are the
+       * ones that have waited longest, and nothing on the screen said any had
+       * dropped. `count(*) OVER ()` runs before the LIMIT, so `matched` is
+       * the whole of what the filter found.
+       */
+      const rows = await query<{ matched: string }>(
           pool,
           `SELECT a.id, a.approval_type, a.entity_type, a.entity_id, a.payload, a.status,
                   a.requested_reason, a.requested_at, a.review_note, a.decision_reason,
@@ -1432,20 +1488,64 @@ governmentRouter.get(
                   a.requested_by AS requested_by_user_id,
                   requester.full_name AS requested_by_name,
                   reviewer.full_name AS reviewed_by_name,
-                  approver.full_name AS approved_by_name
+                  approver.full_name AS approved_by_name,
+                  count(*) OVER ()::text AS matched
              FROM approvals a
              JOIN users requester ON requester.id = a.requested_by
              LEFT JOIN users reviewer ON reviewer.id = a.reviewed_by
              LEFT JOIN users approver ON approver.id = a.approved_by
             WHERE ($1::text IS NULL OR a.status = $1)
               AND ($2::text IS NULL OR a.approval_type = $2)
-            ORDER BY a.requested_at DESC LIMIT 200`,
-          [data.status ?? null, data.type ?? null],
-        ),
+            ORDER BY a.requested_at DESC LIMIT $3`,
+          [data.status ?? null, data.type ?? null, APPROVAL_QUEUE_CAP],
       );
+      res.json({
+        approvals: rows.map(({ matched: _matched, ...row }) => row),
+        matched: Number.parseInt(rows[0]?.matched ?? '0', 10),
+        cap: APPROVAL_QUEUE_CAP,
+      });
     },
   ),
 );
+
+/**
+ * Approval kinds the table accepts and nothing in the platform carries out.
+ *
+ * Each could be requested and approved, and the approval changed nothing.
+ * Measured: an AGENT_SUSPENSION requested, approved by a second officer,
+ * answered APPROVED — and the agent still ACTIVE, collecting. A reviewer
+ * granting one believes they have suspended somebody, or changed a rate, and
+ * the record says they decided it. The acts themselves exist, each on its own
+ * screen with its own controls; this queue was a second door that opened onto
+ * nothing.
+ *
+ * So these are refused when asked, and one already waiting can be rejected
+ * but not approved. The values stay in the table's CHECK, for the rows that
+ * already carry them.
+ */
+const NOT_CARRIED_OUT: Partial<Record<string, string>> = {
+  AGENT_ACTIVATION:
+    "An agent is activated from their record, through the clearance review.",
+  AGENT_SUSPENSION:
+    "An agent is suspended from their record, under step-up, and it takes effect at once.",
+  REVENUE_RATE_CHANGE:
+    'A rate is changed in the catalogue, under step-up, which keeps every version.',
+  COMMISSION_ADJUSTMENT:
+    "Commission is not adjusted by hand; reversing a payment takes its commission back with it.",
+  MANUAL_CORRECTION:
+    'A record is corrected on its own screen, and a bill raised in error is withdrawn as INVOICE_WITHDRAWAL.',
+  TAXPAYER_ADJUSTMENT:
+    "A taxpayer's record is corrected from the record itself, under step-up.",
+};
+
+function refuseNotCarriedOut(approvalType: string): void {
+  const where = NOT_CARRIED_OUT[approvalType];
+  if (!where) return;
+  throw conflict(
+    'APPROVAL_NOT_CARRIED_OUT',
+    `Nothing in the platform carries out a ${approvalType.toLowerCase().replace(/_/g, ' ')} approval, so granting one would change nothing. ${where}`,
+  );
+}
 
 governmentRouter.post(
   '/approvals',
@@ -1464,6 +1564,7 @@ governmentRouter.post(
         'BANK_ACCOUNT_CHANGE',
         'TAXPAYER_ADJUSTMENT',
         'AGENT_OVERRIDE_ACTIVATION',
+        'INVOICE_WITHDRAWAL',
       ]),
       entityType: z.string().min(2).max(60),
       entityId: z.string().min(1).max(80),
@@ -1488,7 +1589,25 @@ governmentRouter.post(
        */
       const ALSO_NEEDED: Partial<Record<typeof data.approvalType, Permission>> = {
         PAYMENT_REVERSAL: 'payment:reverse:request',
+        /*
+         * And a refund, which is the same money going back by the same
+         * function: `recordReversal` executes either kind. Guarding one name
+         * and not the other left the door this permission was made to shut
+         * standing open beside it. Measured: an administrator refused a
+         * PAYMENT_REVERSAL asked for a REFUND of the same transaction instead,
+         * it was granted and executed, and the ₦3,000 went back.
+         */
+        REFUND: 'payment:reverse:request',
+        /*
+         * Asking for a bill to be withdrawn is asked by somebody who may
+         * issue one. The control on forgiving the debt is the second officer
+         * who decides; this keeps the asking with the people whose work bills
+         * are.
+         */
+        INVOICE_WITHDRAWAL: 'invoice:create',
       };
+      refuseNotCarriedOut(data.approvalType);
+
       const extra = ALSO_NEEDED[data.approvalType];
       if (extra && !req.auth!.permissions.includes(extra)) {
         throw forbidden(
@@ -1499,60 +1618,28 @@ governmentRouter.post(
       }
 
       const approval = await withTransaction(async (client) => {
-        const row = await queryOne<{ id: string }>(
-          client,
-          `INSERT INTO approvals
-             (approval_type, entity_type, entity_id, payload, requested_by, requested_reason)
-           VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-          [
-            data.approvalType,
-            data.entityType,
-            data.entityId,
-            JSON.stringify(data.payload),
-            req.auth!.userId,
-            data.reason,
-          ],
-        );
-        await recordAudit(client, {
-          actorId: req.auth!.userId,
-          actorRole: req.auth!.role,
-          action: 'approval.requested',
-          entityType: 'approval',
-          entityId: row!.id,
-          newValue: { approvalType: data.approvalType, entityId: data.entityId },
+        /*
+         * A withdrawal names one invoice, and one that could be withdrawn.
+         * Refused now, by the reason it would be refused when granted, so a
+         * colleague is not asked to decide on a bill that has been paid.
+         */
+        if (data.approvalType === 'INVOICE_WITHDRAWAL') {
+          if (data.entityType !== 'invoice' || !uuidSchema.safeParse(data.entityId).success) {
+            throw badRequest('A withdrawal is asked for one invoice, by its id.', [
+              { field: 'entityType', issue: 'Must be "invoice", with the invoice id as entityId' },
+            ]);
+          }
+          await revenue.checkInvoiceWithdrawal(client, data.entityId);
+        }
+        return openApprovalRequest(client, {
+          approvalType: data.approvalType,
+          entityType: data.entityType,
+          entityId: data.entityId,
+          payload: data.payload,
+          requestedBy: req.auth!.userId,
+          requestedByRole: req.auth!.role,
           reason: data.reason,
         });
-
-        /*
-         * Tell whoever reviews these, rather than waiting for them to look.
-         *
-         * Addressed to a role, not a person: an approval waiting on a named
-         * officer waits through their leave, and a reversal or a refund
-         * sitting unreviewed is money the platform is holding from somebody.
-         *
-         * Which role is derived from the permission rather than named here --
-         * `approval:review` is what the reviewing endpoint requires, and since
-         * migration 059 which roles hold it is PSIRS's decision rather than a
-         * constant in this file.
-         */
-        const reviewers = await query<{ role: string }>(
-          client,
-          `SELECT DISTINCT role FROM role_permissions WHERE permission = 'approval:review'`,
-        );
-        for (const reviewer of reviewers) {
-          await inbox.raise(client, {
-            role: reviewer.role,
-            kind: 'APPROVAL_WAITING',
-            severity: 'WARNING',
-            subject: `${data.approvalType} is waiting for a decision`,
-            body: data.reason,
-            entityType: 'approval',
-            entityId: row!.id,
-            dedupeKey: `approval:${row!.id}:${reviewer.role}`,
-          });
-        }
-
-        return row!;
       });
 
       res.status(201).json({ approvalId: approval.id, status: 'REQUESTED' });
@@ -1599,6 +1686,8 @@ governmentRouter.post(
             `This request is already ${approval.status.toLowerCase()}.`,
           );
         }
+        // One raised before these were refused can be cleared, not granted.
+        if (data.decision !== 'REJECT') refuseNotCarriedOut(approval.approval_type);
 
         const nextStatus =
           data.decision === 'REVIEW' ? 'REVIEWED' : data.decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
@@ -1685,6 +1774,16 @@ governmentRouter.post(
           }
         }
 
+        // Granted is carried out, in the same transaction as the decision.
+        let withdrawn: { invoiceNumber: string } | null = null;
+        if (approval.approval_type === 'INVOICE_WITHDRAWAL' && nextStatus === 'APPROVED') {
+          withdrawn = await revenue.withdrawInvoiceIn(client, {
+            approvalId: req.params.id!,
+            actorId: req.auth!.userId,
+            actorRole: req.auth!.role,
+          });
+        }
+
         if (approval.approval_type === 'BANK_ACCOUNT_CHANGE') {
           if (nextStatus === 'APPROVED') {
             applied = await agents.executeBankAccountChange(client, {
@@ -1703,8 +1802,11 @@ governmentRouter.post(
         }
 
         return {
-          status: nextStatus,
+          status: withdrawn ? 'EXECUTED' : nextStatus,
           approvalType: approval.approval_type,
+          ...(withdrawn
+            ? { message: `Invoice ${withdrawn.invoiceNumber} has been withdrawn. Nothing is owed on it.` }
+            : {}),
           ...(applied
             ? {
                 message:
@@ -1896,7 +1998,7 @@ governmentRouter.get(
   '/refunds/outstanding',
   requirePermission('payment:read:all'),
   asyncHandler(async (_req, res) => {
-    res.json({ refunds: await reconciliation.outstandingRefunds(pool) });
+    res.json(await reconciliation.outstandingRefunds(pool));
   }),
 );
 
@@ -1904,10 +2006,17 @@ governmentRouter.post(
   '/refunds/retry',
   requirePermission('payment:reconcile'),
   asyncHandler(async (req, res) => {
-    const result = await reconciliation.retryOutstandingRefunds({
-      actorId: req.auth!.userId,
-      actorRole: req.auth!.role,
-    });
+    const result = await runOnDemand(
+      'refund-retry',
+      'A refund retry',
+      () =>
+        reconciliation.retryOutstandingRefunds({
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      'Wait for it to finish. A second pass asks the gateway to return the same ' +
+        'refunds again, which is the traffic the lock exists to prevent.',
+    );
     res.json({
       ...result,
       // The other two catch-up endpoints say what happened in a sentence; this
@@ -1945,7 +2054,22 @@ governmentRouter.post(
   '/commissions/promote',
   requirePermission('commission:manage'),
   asyncHandler(async (_req, res) => {
-    const promoted = await commission.promoteEligibleCommissions();
+    /*
+     * The one button here that moves money, so it says more than the default.
+     *
+     * A second pass promotes nothing twice — `promoteEligibleCommissions`
+     * selects `FOR UPDATE OF c` and transitions inside the same transaction,
+     * so the second finds nothing PENDING. An officer refused on a payout
+     * button needs telling that, because the alternative reading of "already
+     * running" is that somebody is being paid twice.
+     */
+    const promoted = await runOnDemand(
+      'commission-promotion',
+      'Commission promotion',
+      () => commission.promoteEligibleCommissions(),
+      'Wait for it to finish and reload. No agent is promoted twice: each record is ' +
+        'locked as it moves, so the pass already running will have taken it.',
+    );
     res.json({ promoted, message: `${promoted} commission record(s) became eligible for payout.` });
   }),
 );
@@ -2108,7 +2232,7 @@ governmentRouter.get(
     z.object({
       status: z.string().optional(),
       severity: z.string().optional(),
-      limit: z.coerce.number().int().max(500).default(100),
+      limit: z.coerce.number().int().min(1).max(500).default(100),
     }),
     async (_req, res, data) => {
       res.json(
@@ -2249,7 +2373,7 @@ governmentRouter.get(
       action: z.string().optional(),
       from: z.string().datetime().optional(),
       to: z.string().datetime().optional(),
-      limit: z.coerce.number().int().max(500).default(100),
+      limit: z.coerce.number().int().min(1).max(500).default(100),
       format: z.enum(['json', 'csv', 'xlsx', 'pdf']).default('json'),
     }),
     async (req, res, data) => {
@@ -2273,12 +2397,18 @@ governmentRouter.get(
           data.action ?? null,
           data.from ?? null,
           data.to ?? null,
-          data.limit,
+          // As above. This is the export where it matters most: every row
+          // carries its chain hash, so a file of the most recent five hundred
+          // entries reads as the period's record and verifies as one.
+          data.limit + 1,
         ],
       );
 
+      const truncatedAt = rows.length > data.limit ? data.limit : null;
+
       await deliver(req, res, {
-        rows,
+        rows: truncatedAt === null ? rows : rows.slice(0, data.limit),
+        truncatedAt,
         format: data.format,
         subject: 'Audit log',
         filename: 'audit-log',
@@ -2385,6 +2515,38 @@ governmentRouter.get(
   requirePermission('audit:read'),
   validateQuery(z.object({ taxpayerId: uuidSchema }), async (_req, res, data) => {
     res.json(await reports.taxpayerAccessLog(pool, data.taxpayerId));
+  }),
+);
+
+/*
+ * The sixth of PRD §67's questions, which the PRD did not ask and the platform
+ * needs: who has been searching the register.
+ *
+ * Behind `audit:read`, which is the same gate as every other access log here —
+ * and which does NOT separate the searcher from the reader. A revenue officer
+ * holds `audit:read` and also runs the searches this records, so they can read
+ * their own trawl.
+ *
+ * That is worth stating rather than implying, because the neighbouring
+ * `/intelligence/taxpayers/:id/access-log` claims the opposite in its own
+ * comment — "the officers who look at the graph should not be the ones who
+ * decide what the log of their looking says" — and `audit:read` is held by
+ * revenue_officer, finance_officer, auditor and admin, so it has never
+ * separated them either. That comment is corrected below.
+ *
+ * What does hold is the half that matters more: the table is append-only at
+ * the database, so an officer who can read their searches still cannot remove
+ * one. "Deciding what the log says" is prevented by the triggers, not by the
+ * permission. Separating reading as well would need a permission only auditors
+ * and administrators hold, and the three that fit that shape — `audit:sample`,
+ * `audit:report`, `audit:sign` — all mean something else. Inventing a seventh
+ * is a decision about the role model and not one to make inside this route.
+ */
+governmentRouter.get(
+  '/audit/queries/register-searches',
+  requirePermission('audit:read'),
+  asyncHandler(async (_req, res) => {
+    res.json(await reports.registerSearches(pool));
   }),
 );
 
@@ -2740,7 +2902,34 @@ governmentRouter.post(
   '/reminders/send-due',
   requirePermission('support:manage'),
   asyncHandler(async (_req, res) => {
-    const result = await sendDueReminders();
+    /*
+     * Behind the sweep's own lock, so pressing this while it runs does not
+     * make a second one.
+     *
+     * The scheduled sweep goes through `runJob` and holds this lock; this
+     * route called `sendDueReminders()` bare, so an officer pressing the
+     * button during a sweep — or two officers pressing it together — had two
+     * sweeps reading the same window flags. Each invoice's claim is
+     * conditional now, which is what makes the duplicate impossible rather
+     * than unlikely; this is what stops the second sweep doing the work twice
+     * over before discovering that.
+     *
+     * The refusal is a 409 following the reconcile-now button in this file
+     * rather than the timer: "The scheduled path answers contention with
+     * `{ skipped: true }`, which is right for a timer and wrong for a person.
+     * An officer who presses Reconcile and is handed 'skipped' has learned
+     * nothing." `runOnDemand` is where that now lives, along with the reason
+     * it takes `withJobLock` and not `runJob`; the sentence below is this
+     * sweep's own, because what a second pass would and would not send is
+     * particular to the window flags.
+     */
+    const result = await runOnDemand(
+      'reminder-sweep',
+      'A reminder sweep',
+      () => sendDueReminders(),
+      'Wait for it to finish. Every invoice it has reached is flagged for this window, ' +
+        'so a second sweep would send nothing a taxpayer has not already been sent.',
+    );
     res.json({
       ...result,
       message: `${result.sent} reminder(s) queued, ${result.skipped} skipped (errors or daily levies).`,
@@ -2806,11 +2995,46 @@ async function deliver(
     subject: string;
     filename: string;
     parameters: Record<string, unknown>;
+    /**
+     * The cap the query hit, or null when these rows are all of them.
+     *
+     * A file is the one copy of this data that outlives the session: it is
+     * saved, emailed, filed and quoted months later, and nothing about a CSV
+     * of two hundred transactions says whether two hundred happened or two
+     * hundred were handed over. The signed workbench report has carried this
+     * since coverage was recorded. The two raw exports had the cap and not
+     * the disclosure.
+     */
+    truncatedAt?: number | null;
   },
 ): Promise<void> {
-  const { rows, format, subject, filename, parameters } = options;
+  const { rows, format, subject, parameters } = options;
+  const truncatedAt = options.truncatedAt ?? null;
+  /*
+   * In the filename, following the signed report rather than inventing a
+   * second convention for the same fact. A spreadsheet has nowhere to put a
+   * banner — a note row shifts every column under it and breaks the thing
+   * somebody opens the format to do — and a filename survives being saved,
+   * emailed and filed in a way a cell would not.
+   */
+  const filename = truncatedAt ? `${options.filename}-PARTIAL` : options.filename;
   if (format === 'json') {
-    res.json(rows);
+    /*
+     * The screen, which is not a file — and which used to be handed a bare
+     * array.
+     *
+     * The comment here said so, and said the shape could not change because
+     * two screens read it: "They still draw a capped list without saying so;
+     * that is a separate gap on a separate surface and is not closed here."
+     * The cap and the disclosure were computed one line above and thrown away
+     * for the one caller that is a person looking at a screen.
+     *
+     * It is an envelope now. Both screens normalise, because an endpoint that
+     * answers an array to one format and an object to another is worse than
+     * either — and `rows` first keeps the common case a one-word change at the
+     * call site.
+     */
+    res.json({ rows, truncated: truncatedAt !== null, cap: truncatedAt });
     return;
   }
 
@@ -2840,7 +3064,19 @@ async function deliver(
         actorRole: req.auth!.role,
         subject,
         format,
-        parameters,
+        /*
+         * Including whether this was all of it.
+         *
+         * `rows.length` below is how much data left, which is the right
+         * number for the log and is a different question: two hundred out of
+         * fifty thousand and two hundred out of two hundred are the same
+         * count. An entry that cannot tell them apart cannot answer the one
+         * thing an export log exists to answer.
+         */
+        parameters:
+          truncatedAt === null
+            ? { ...parameters, complete: true }
+            : { ...parameters, complete: false, rowCap: truncatedAt },
       },
       rows.length,
     ),
@@ -2868,6 +3104,7 @@ async function deliver(
     rows,
     parameters,
     generatedBy: `${req.auth!.role} ${req.auth!.userId}`,
+    truncatedAt,
   });
   res.setHeader('content-type', 'application/pdf');
   res.setHeader('content-disposition', `attachment; filename="${filename}.pdf"`);
@@ -2906,7 +3143,30 @@ governmentRouter.get(
     }),
     async (req, res, data) => {
       const scope = await resolveReportScope(pool, req.auth!);
-      res.json(await investigation.globalSearch(pool, officer(req), { term: data.q, limit: data.limit }, scope));
+      const viewer = officer(req);
+      const found = await investigation.globalSearch(pool, viewer, { term: data.q, limit: data.limit }, scope);
+      /*
+       * A search of the register, wherever the box is.
+       *
+       * Migration 085 logs every search of `GET /taxpayers/search`, because a
+       * name typed into it returns everybody who matches. This box does the
+       * same for anybody holding `taxpayer:read:all` — names, TINs, and a
+       * phone number typed in comes back as whose phone it is — and logged
+       * nothing. Recorded on the same log, marked as the header box so an
+       * auditor can tell which door it came through.
+       */
+      if (investigation.searchesTheRegister(viewer)) {
+        await recordTaxpayerSearch({
+          searchedBy: req.auth!.userId,
+          actorRole: req.auth!.role,
+          filters: { q: data.q, from: 'GLOBAL_SEARCH' },
+          matched: found.hits.filter((hit) => hit.kind === 'taxpayer').length,
+          ipAddress: req.clientIp,
+          deviceId: req.auth!.deviceId,
+          requestId: req.requestId,
+        });
+      }
+      res.json(found);
     },
   ),
 );
@@ -3631,6 +3891,8 @@ governmentRouter.get(
       limit: z.coerce.number().int().min(1).max(200).default(100),
     }),
     async (_req, res, data) => {
+      // Spread: the four figures above the table belong beside the page they
+      // describe, and the screen reads `cases` as it read the array before.
       res.json(await cases.listCases(pool, data));
     },
   ),
@@ -3883,7 +4145,9 @@ governmentRouter.get(
       limit: z.coerce.number().int().min(1).max(200).default(50),
     }),
     async (_req, res, data) => {
-      res.json({ samples: await workbench.listSamples(pool, data) });
+      // Spread, not nested: the four figures above the table belong beside the
+      // page they describe, and the screen reads `samples` exactly as before.
+      res.json(await workbench.listSamples(pool, data));
     },
   ),
 );
@@ -3957,7 +4221,7 @@ governmentRouter.get(
       limit: z.coerce.number().int().min(1).max(200).default(50),
     }),
     async (_req, res, data) => {
-      res.json({ reports: await workbench.listReports(pool, data) });
+      res.json(await workbench.listReports(pool, data));
     },
   ),
 );

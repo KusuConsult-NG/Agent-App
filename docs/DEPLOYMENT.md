@@ -220,6 +220,68 @@ agent at `/` and the portal at `/portal/` — so the `portal` service is
 optional. See *One URL for both apps* below. That is the arrangement to prefer
 for a demo or a pilot, because it is one address to publish rather than two.
 
+### Making a demonstration deployment work at all
+
+A demonstration deployment is a **real** deployment: production image,
+`NODE_ENV=production`, and every production control in force. Two of those
+controls stop a field agent doing the thing a demonstration exists to show,
+and each is lifted by a flag that names itself. Both go on the **API**
+service.
+
+| Flag | Without it | What it still enforces |
+|---|---|---|
+| `DEMO_RELAX_DEVICE_BINDING=true` | The seeded agent already has a handset, so a presenter opening the app in their own browser is that agent's *second* handset and cannot collect. Two people and a portal login to show one screen. | A REVOKED or SUSPENDED handset is still refused — the half worth demonstrating. |
+| `DEMO_ALLOW_MOCK_GATEWAY=true` | `PAYMENT_GATEWAY=mock` is refused at boot, so the gateway is a real one nobody has credentials for, and `POST /payments/simulate` is refused. The agent starts a payment and watches it stay PENDING for ever. | Every other production refusal — a mock TIN service, local storage, a per-instance rate limiter — plus webhook signatures and every rule about which status codes close a transaction. |
+
+Neither refuses to boot, because a flag nobody can start with answers nothing.
+Each is logged at **warn** on every boot instead, by name, beside the port and
+the gateway, so a deployment cannot run with them quietly.
+
+> **Never set either on a deployment collecting real money.** A revoked
+> handset that can be replaced without anybody looking is a revocation that
+> meant nothing, and a receipt issued against a mock gateway is not evidence
+> that anybody paid.
+
+With `DEMO_ALLOW_MOCK_GATEWAY` on, the agent app's **Simulate success /
+Simulate failure** controls appear again on the collection screen. The app no
+longer decides that for itself — it used to key off its own build mode, which
+hid the control on exactly the deployment that had just been given it — so the
+server reports `simulation_available` on every transaction status and the app
+follows it.
+
+### A demonstration needs demonstration data
+
+`npm run seed -- --demo --demo-agent` **refuses in production**, and that stays
+refused: those are ACTIVE government accounts, an administrator among them,
+sharing one published password. A production database gets reference data only.
+
+So a demonstration deployment needs either its own real agent and taxpayers
+created through the portal, or a database seeded before `NODE_ENV` was set to
+production. Signing in works either way — it is having nothing to collect from
+that makes the app look broken.
+
+### `VITE_AGENT_APP_URL` — only on the standalone `portal` service
+
+A field agent who signs into the officer portal is no longer turned away: they
+land on **Your field work**, which says their collection tools are in the
+agent PWA and links to it. The portal can only work that address out for
+itself in the combined image, where it is mounted at `/portal/` and the agent
+app is at the root of the same origin. On its own hostname it cannot, and
+without being told it can only say to ask a supervisor.
+
+So on the `portal` service, and nowhere else, pass the agent app's address as
+a **build argument**:
+
+```
+VITE_AGENT_APP_URL=https://agent-pwa-production.up.railway.app/
+```
+
+**Build time, not run time.** Vite inlines `import.meta.env` into the bundle,
+so a value set on the running container is read by nothing. On Railway this is
+a build argument on the service, not a service variable; `Dockerfile.portal`
+declares the matching `ARG`. Leaving it unset is safe — the screen names who
+to ask rather than offering a dead link.
+
 **Each service's Dockerfile path has to be set explicitly, and a new service
 will not work until it is.** Railway looks for a file named exactly
 `Dockerfile`; finding none it falls back to Railpack, which tries to infer a
@@ -253,10 +315,9 @@ const API_BASE = '/api/v1';    // apps/agent/src/lib/api.ts, apps/portal/src/lib
 ```
 
 That is deliberate, and `apps/agent/vite.config.ts` says why beside the dev
-proxy that makes it work locally: *"The PWA and API share an origin in
-production; the dev proxy keeps cookies, CSP and CORS behaviour the same in
-development."* The refresh-token cookie, the CSP and the absence of any CORS
-preflight all rest on it.
+proxy that makes it work locally: the PWA and API share an origin in
+production, and the proxy keeps the CSP and the absence of a CORS preflight
+the same in development. Both of those rest on the shared origin.
 
 **Deploying the three as separate services breaks that assumption, and neither
 nginx config restores it.** `Dockerfile.agent` and `Dockerfile.portal` define
@@ -277,8 +338,37 @@ inert.
 
 Each front-end image now serves `/api/` by proxying to the API, so the origin
 the client assumes is the origin it gets. Nothing in either client changed, and
-neither did CORS, the CSP or the cookie — which is the point of fixing it on
-this side rather than the other.
+neither did CORS or the CSP — which is the point of fixing it on this side
+rather than the other.
+
+### Where the refresh token actually lives
+
+**Not in a cookie.** This platform sets none — `grep -r cookie apps/api/src`
+finds a comment and the logger's redaction list, and nothing that writes one.
+This paragraph used to say "the refresh-token cookie, the CSP and the absence
+of any CORS preflight all rest on it", and `config.ts` said twice that taking
+`NODE_ENV` off production would turn off "the cookie hardening". None of it
+existed, and the claim is worth correcting rather than deleting because it
+asserted the opposite of the truth about the one thing it named.
+
+Both clients hold the refresh token in web storage, where script can read it:
+
+| | key | default | with "remember me" |
+|---|---|---|---|
+| Agent | `psirs.refresh` | `localStorage` | `localStorage` |
+| Officer portal | `psirs.portal.refresh` | `sessionStorage` | `localStorage` |
+
+An httpOnly cookie is not readable by injected script; web storage is. So the
+exposure a reader of the old sentence would have ruled out is the exposure
+this platform actually has, which is why `script-src 'self'` in both
+`index.html` files is load-bearing rather than belt-and-braces, and why
+`connect-src` is kept to `'self'` alone — together they are what bounds what
+a compromised bundle could read and where it could send it.
+
+Nothing here argues for a change. Both clients need the token from JavaScript
+to put it in an `Authorization` header, and a refresh cookie would need CSRF
+protection this platform does not have. It is written down so the next
+decision is made against what is true.
 
 ### If the front end stops reaching the API after an API redeploy
 
@@ -400,18 +490,45 @@ Verified against real nginx using the image's own envsubst semantics: with
 `PORT=8085` the config binds 8085, serves the SPA, still proxies `/api/v1`,
 and leaves nothing on 80; with `PORT` unset it binds 80.
 
-### One thing still to confirm on the deployed chain
+### The address a request appears to come from
 
-`TRUST_PROXY` makes the API `app.set('trust proxy', 1)` — one trusted hop.
-Routing API calls through the front-end nginx adds a hop, so `req.clientIp`
-may now resolve to the proxy rather than the citizen. That matters more than it
-sounds: it is the key for every `keyBy: 'ip'` rate limit, including the two
-deliberate enumeration thresholds on the public citizen lookup, and it is what
-the audit log records as the address a lookup came from.
+`TRUST_PROXY` is the number of proxies in front of the API whose
+`X-Forwarded-For` entries Express may believe. It is **off by default**, and
+the front-end image serving `/api/` by proxy makes that the wrong default for
+this deployment.
 
-This cannot be checked from a laptop, because it depends on how many hops the
-platform's own edge adds. Check it in one request after deploying — hit the
-public citizen lookup, then read the row it writes:
+Measured against the config rendered out of `Dockerfile.agent`, with that
+nginx as the only hop in front of a stub that reports what it received:
+
+| what the caller sent | socket address the API sees | `X-Forwarded-For` |
+|---|---|---|
+| nothing | the proxy | the caller |
+| `X-Forwarded-For: 102.89.33.7` | the proxy | `102.89.33.7, <the proxy's client>` |
+
+So our nginx contributes exactly one hop and appends the address it saw. The
+caller's address is in the header and nowhere else, and with `TRUST_PROXY`
+unset Express takes the socket address, so the caller's address is present in
+every request and ignored.
+
+**What that costs, in the order an operator notices it.** Every `keyBy: 'ip'`
+rate limit becomes one bucket for all callers at once. The sharpest are on the
+public citizen lookup — `citizen-status` at ten requests a minute and
+`citizen-statement-request` at five — so on one origin the lookup starts
+refusing ordinary citizens almost immediately, and a demonstration with
+several people in the room hits it in the first minute. Less visibly, the
+audit log and `verification_attempts` record the proxy's address on every row,
+which is the column somebody reads when asking where a lookup came from.
+
+The API warns once per process, on the first request that arrives carrying
+`X-Forwarded-For` while `TRUST_PROXY` is unset, naming both costs. A boot
+check cannot do this: whether anything forwards an address depends on what is
+in front of the API, which it learns only when a request arrives.
+
+**Set it to one if nginx faces the internet.** What cannot be settled from
+here is whether the platform's own edge adds a hop of its own in front of
+nginx, because that is a property of the deployment rather than of this
+repository. Check it in one request after deploying — hit the public citizen
+lookup, then read the row it writes:
 
 ```sql
 SELECT lookup_type, result, ip_address, created_at
@@ -421,7 +538,7 @@ SELECT lookup_type, result, ip_address, created_at
 ```
 
 If `ip_address` is an internal address rather than the caller's, the hop count
-is wrong and `TRUST_PROXY` needs to match the real chain.
+is short by however many hops the edge adds.
 
 `.railwayignore` keeps the CLI upload to about 10 MB of the 43 MB tracked tree,
 by leaving out `docs/` — several hundred UAT screenshots that no image copies.
@@ -468,7 +585,10 @@ front-end one:
    to start without it.
 3. Delete the `portal` service, or leave it running on its own hostname. Both
    work; nothing in the combined image depends on it being gone.
-   `Dockerfile.portal` is unchanged and still builds the portal alone at `/`.
+   `Dockerfile.portal` is **no longer a portal-only image** — it is derived
+   from `Dockerfile.agent` and serves exactly the same thing, so a service
+   pointed at either name gets a correct deployment. That change is the
+   subject of the header comment in both files.
 
 ### `VERIFICATION_BASE_URL`, which is the one that bites
 
@@ -490,6 +610,37 @@ this is worth getting right before anything is issued.
 `portalOrigin()` strips a trailing slash and a trailing `/verify`, so
 `.../portal`, `.../portal/` and `.../portal/verify` all resolve the same way.
 `PUBLIC_PORTAL_URL`, if it is set at all, needs the same subpath.
+
+### `VITE_VERIFICATION_BASE_URL`, which is the other one, and is not the same
+
+```
+VITE_VERIFICATION_BASE_URL=https://<your-host>/portal
+```
+
+**Two variables print the same address onto two different pieces of paper, and
+setting one does not set the other.**
+
+- `VERIFICATION_BASE_URL` is read by the API at **run time** and governs the
+  PDF certificate, the referee invitation, the attestation link and the
+  citizen SMS. A restart picks up a change.
+- `VITE_VERIFICATION_BASE_URL` is read by the **agent bundle**, and governs
+  only the QR code and link on a **thermal paper receipt** printed from a
+  handset. Vite bakes it in, so a change needs a **rebuild**, not a restart.
+
+The receipt one used to be unsettable. Both front-end images now declare
+`ARG VITE_VERIFICATION_BASE_URL` immediately before they build the agent — a
+name a Docker stage does not declare never reaches `RUN`, so until that line
+existed a `--build-arg` was dropped with a warning and a platform service
+variable never arrived. Set it as an ordinary variable on the front-end
+service and redeploy; it is read during the build.
+
+Left unset, the receipt prints with the verification code and **no QR code and
+no link at all** — `packages/shared/src/escpos.ts` emits that block only when a
+URL is supplied. That is deliberate rather than broken: the note at the top of
+`apps/agent/src/lib/verification-url.ts` explains why a government receipt
+carrying a dead address is worse than one carrying none, and a localhost value
+is discarded for the same reason. But a demonstration where the QR on the paper
+is part of the story needs this set.
 
 ### Why the portal is built differently in this image
 
@@ -627,13 +778,58 @@ Three things worth knowing about it:
 can be replaced without anybody looking is a revocation that meant nothing,
 and the money is somebody's tax.
 
+## Sign-in times out, and the proxy gets the blame
+
+Symptom: the apps load, sign-in spins, and the front end's log shows
+
+```
+upstream timed out (110: Operation timed out) while reading response header
+from upstream, request: "POST /api/v1/auth/login" ... 504
+```
+
+The proxy reached the API — the upstream address is right there in the line.
+The API never answered. Its own log shows the cause, but only from the
+background jobs:
+
+```
+(EMAXCONNSESSION) max clients reached in session mode
+                 - max clients are limited to pool_size: 15
+```
+
+**The API has run out of database connections.** `DB_POOL_SIZE` defaults to 10
+*per instance*, this service runs fifteen scheduled jobs that each take one,
+and a hosted pooler in **session mode** allows a small fixed number of clients
+— 15 on the tier this was found on. Two instances exhaust it.
+
+Why it is hard to see: `pg` used to wait for ever for a connection, so web
+requests did not fail, they stopped. Nothing was logged, because nothing had
+gone wrong yet. Only the jobs, which have their own timeout, said anything —
+and the visible artefact was a 504 from the proxy, two services away from the
+cause. `DB_CONNECTION_TIMEOUT_MS` now bounds that wait at 10s, so the same
+exhaustion answers in seconds and names the database.
+
+### The fix, best first
+
+| Change | Why |
+|---|---|
+| Point `DATABASE_URL` at port **6543** instead of 5432 | Supabase's **transaction-mode** pooler hands a server connection back between statements, so it serves far more clients. This is the right setting for anything running more than one instance. |
+| `DB_POOL_SIZE=5` | Fits two instances inside a 15-client pooler. |
+| Run a single instance | Fewest moving parts, fine for a demonstration. |
+
+The API warns at boot when its `DATABASE_URL` is a session-mode pooler, naming
+the pool size and the remedy — because without it the only clue is in another
+service's log.
+
 ## Going live
 
 - [ ] Secrets provisioned in the secret manager, none of them a development value
 - [ ] Every integration pointed at a real provider **and its mapping confirmed against that provider's sandbox** — see `docs/INTEGRATION-VERIFICATION.md`
-- [ ] `VERIFICATION_BASE_URL` set to the real portal, over HTTPS — this is printed onto every receipt and cannot be corrected afterwards
+- [ ] `VERIFICATION_BASE_URL` set to the real portal, over HTTPS — this is printed onto every certificate and cannot be corrected afterwards
 - [ ] `DEMO_RELAX_DEVICE_BINDING` is **not** set — see *Running a demonstration*; it is device binding off, and a revoked handset that can be replaced unseen is a revocation that meant nothing
-- [ ] `VERIFICATION_BASE_URL` carries the `/portal` subpath, since `Dockerfile.agent` serves both front ends on one origin — see *One URL for both apps*. Without it every receipt QR code points at the agent app's sign-in form, and a printed receipt cannot be recalled
+- [ ] `DATABASE_URL` is a transaction-mode pooler (port 6543), or `DB_POOL_SIZE` × the instance count fits the pooler's client limit — see *Sign-in times out*
+- [ ] `VERIFICATION_BASE_URL` carries the `/portal` subpath, since `Dockerfile.agent` serves both front ends on one origin — see *One URL for both apps*. Without it every certificate QR code points at the agent app's sign-in form, and a printed certificate cannot be recalled
+- [ ] `VITE_VERIFICATION_BASE_URL` set on the front-end service, with the same `/portal` subpath — a **different** variable, read at build time, and the only one that puts a QR code on a thermal paper receipt. Unset, receipts print with the code and no link; it needs a redeploy, not a restart
+- [ ] `TRUST_PROXY` set to the number of proxies in front of the API — unset, every `keyBy: 'ip'` rate limit shares one bucket for all callers (the public citizen lookup is ten a minute) and the audit log records the proxy's address instead of the caller's. See *The address a request appears to come from*
 - [ ] DNS and TLS certificates for the API, the portal and the agent PWA
 - [ ] `CORS_ORIGINS` set to the real portal and PWA origins
 - [ ] Webhook URL registered with Remita, and its source addresses allowlisted

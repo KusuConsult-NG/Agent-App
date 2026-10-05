@@ -112,6 +112,7 @@ export const APPROVAL_TYPES = [
   'MANUAL_CORRECTION',
   'BANK_ACCOUNT_CHANGE',
   'TAXPAYER_ADJUSTMENT',
+  'INVOICE_WITHDRAWAL',
 ] as const;
 export type ApprovalType = (typeof APPROVAL_TYPES)[number];
 
@@ -450,3 +451,28 @@ export const ECONOMIC_SECTOR_CODES = ECONOMIC_SECTORS.map((s) => s.code) as unkn
 export function sectorByCode(code: string): EconomicSectorDefinition | undefined {
   return ECONOMIC_SECTORS.find((s) => s.code === code);
 }
+
+/**
+ * The support categories that are complaints about how somebody was treated.
+ *
+ * A citizen reporting that a revenue agent overcharged them, or behaved
+ * badly, raises a support ticket — and the support screen counts these out of
+ * its ticket list into a banner above the table, because "a citizen who
+ * reports being overcharged by a revenue agent has no other way into this
+ * building".
+ *
+ * Shared because both sides of that banner now need the set. It lived in the
+ * portal alone while the count was done in the browser over the rows it had;
+ * the list is capped at fifty, so on a busy queue the banner understated. The
+ * count moved to SQL, which needs the same definition, and two hand-written
+ * copies of a set like this is the drift `lib/revenue-states.ts` exists to
+ * record.
+ *
+ * A subset of `TICKET_CATEGORIES` in the API's support service, which owns the
+ * whole list because it builds request validation from it.
+ * `a-complaint-nobody-saw` asserts the subset relation, so a category renamed
+ * there fails a test rather than quietly stopping being counted.
+ */
+export const CONDUCT_CATEGORIES = ['AGENT_MISCONDUCT', 'UNAUTHORISED_CHARGE'] as const;
+
+export type ConductCategory = (typeof CONDUCT_CATEGORIES)[number];

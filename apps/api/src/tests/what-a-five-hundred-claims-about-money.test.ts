@@ -39,15 +39,22 @@
 import './env';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { IllegalTransitionError } from '@psirs/shared';
 import { errorHandler } from '../middleware/error-handler';
 import { internal, paymentFailed, AppError } from '../lib/errors';
 
 interface Body {
-  error: { code: string; message: string; moneyStatus: string; nextStep?: string };
+  error: {
+    code: string;
+    message: string;
+    moneyStatus: string;
+    nextStep?: string;
+    reference?: string;
+  };
 }
 
 /** Drive the real handler, so the wiring is covered and not just `internal`. */
-function five_hundred(method: string, path: string): { status: number; body: Body } {
+function five_hundred(method: string, path: string, thrown?: Error): { status: number; body: Body } {
   const req = {
     method,
     path,
@@ -73,9 +80,17 @@ function five_hundred(method: string, path: string): { status: number; body: Bod
     },
   };
 
-  errorHandler(new Error('something nobody anticipated'), req, res as never, (() => {}) as never);
+  errorHandler(thrown ?? new Error('something nobody anticipated'), req, res as never, (() => {}) as never);
   assert.ok(body, 'the handler sent nothing at all');
   return { status, body: body! };
+}
+
+/** A unique violation as node-postgres reports one. */
+function uniqueViolation(constraint: string): Error {
+  return Object.assign(new Error(`duplicate key value violates unique constraint "${constraint}"`), {
+    code: '23505',
+    constraint,
+  });
 }
 
 /** The sentences that assert a financial outcome this path cannot know. */
@@ -168,6 +183,239 @@ describe('what a 500 claims about the money', () => {
 
     assert.equal(failed.error.moneyStatus, 'NOT_DEBITED');
     assert.match(failed.error.message, /no money has been taken/i);
+  });
+
+  it('says the same about a reference the platform composed twice', () => {
+    /*
+     * The 23505 branch made the identical claim and had not had the identical
+     * correction. A clash on a composed reference — `PSIRS/2026/000123`,
+     * `ASM/2026/000456` — is a generator fault, and it was answered 409
+     * DUPLICATE_RECORD with `moneyStatus: NOT_DEBITED`: "No money has been
+     * taken from the taxpayer", on a write under /payments, at the moment a
+     * receipt was being numbered. A receipt is numbered after the money has
+     * arrived.
+     *
+     * Driven here rather than end to end because the payment reference
+     * carries a random suffix on purpose, so it cannot be made to collide.
+     * `a-reference-the-platform-composed-twice.test.ts` provokes the real
+     * thing on the assessment sequence, which is what a restore without
+     * setval leaves.
+     */
+    const { status, body } = five_hundred(
+      'POST',
+      '/payments/initiate',
+      uniqueViolation('receipts_verification_code_key'),
+    );
+
+    assert.equal(status, 500, `answered ${status}, so the caller was blamed for it`);
+    assert.equal(body.error.moneyStatus, 'UNCONFIRMED');
+    assert.doesNotMatch(body.error.message, CLAIMS_NOTHING_HAPPENED);
+    assert.ok(body.error.reference, 'and nothing for the agent to quote');
+  });
+
+  it('claims nothing about money when the composed reference was not on a payment path', () => {
+    const { status, body } = five_hundred(
+      'POST',
+      '/revenue/assessments',
+      uniqueViolation('assessments_assessment_number_key'),
+    );
+    assert.equal(status, 500);
+    assert.equal(body.error.moneyStatus, 'NOT_APPLICABLE');
+  });
+
+  it('leaves a duplicate somebody really created as a duplicate', () => {
+    /*
+     * The control. `departments_code_key` is a code an officer typed and it
+     * keeps both its 409 and the sentence that names what they typed —
+     * otherwise this change would have turned every collision into a 500 and
+     * taken the actionable refusals with it.
+     */
+    const { status, body } = five_hundred(
+      'POST',
+      '/government/departments',
+      uniqueViolation('departments_code_key'),
+    );
+    assert.equal(status, 409);
+    assert.equal(body.error.code, 'DUPLICATE_RECORD');
+    assert.match(body.error.message, /already uses that code/);
+  });
+
+  it('does not claim nothing was taken when a settled transaction refused a move', () => {
+    /*
+     * The same false claim, in the branch next door.
+     *
+     * An `IllegalTransitionError` means this request changed nothing — the
+     * state machine refused it — so the honest money state is whatever the
+     * record already said. The branch answered every one of them
+     * `NOT_DEBITED`, which `MoneyStatus` defines as "No payment was
+     * attempted" and the agent application renders as "No money has been
+     * taken from the taxpayer".
+     *
+     * SETTLED is in `REVENUE_RECOGNISED_STATES` — "States in which government
+     * money is considered actually received". A re-receipt attempt against a
+     * settled transaction was therefore answered with the one sentence that
+     * contradicts the record it was refused by. RECEIVED exists for exactly
+     * this: "Money was received; the failure is downstream of the payment
+     * itself."
+     */
+    const { status, body } = five_hundred(
+      'POST',
+      '/payments/abc/confirm',
+      new IllegalTransitionError('Transaction', 'SETTLED', 'RECEIPT_GENERATED'),
+    );
+    assert.equal(status, 409);
+    assert.equal(body.error.code, 'ILLEGAL_STATE_TRANSITION');
+    assert.equal(body.error.moneyStatus, 'RECEIVED');
+    assert.doesNotMatch(body.error.message, CLAIMS_NOTHING_HAPPENED);
+  });
+
+  it('says the outcome is unknown while the payment is still in flight', () => {
+    const { status, body } = five_hundred(
+      'POST',
+      '/payments/abc/confirm',
+      new IllegalTransitionError('Transaction', 'PAYMENT_PENDING', 'SETTLED'),
+    );
+    assert.equal(status, 409);
+    assert.equal(body.error.moneyStatus, 'UNCONFIRMED');
+  });
+
+  it('keeps the reassurance where it is true', () => {
+    // Before a payment is started, NOT_DEBITED is the thing the agent needs
+    // in order to tell the citizen nothing was taken. It stays.
+    const { body } = five_hundred(
+      'POST',
+      '/payments/initiate',
+      new IllegalTransitionError('Transaction', 'INVOICE_GENERATED', 'SETTLED'),
+    );
+    assert.equal(body.error.moneyStatus, 'NOT_DEBITED');
+  });
+
+  it('reads the payment machine by its own state names, not the transaction\'s', () => {
+    /*
+     * Two machines track the same money under different words: a payment is
+     * VERIFIED where a transaction is PAYMENT_VERIFIED. Mapping one set onto
+     * both would have made every payment refusal read NOT_DEBITED, which is
+     * the defect with an extra step.
+     */
+    const verified = five_hundred(
+      'POST',
+      '/payments/abc/confirm',
+      new IllegalTransitionError('Payment', 'VERIFIED', 'SUCCESSFUL'),
+    );
+    assert.equal(verified.body.error.moneyStatus, 'RECEIVED');
+
+    const pending = five_hundred(
+      'POST',
+      '/payments/abc/confirm',
+      new IllegalTransitionError('Payment', 'PENDING', 'VERIFIED'),
+    );
+    assert.equal(pending.body.error.moneyStatus, 'UNCONFIRMED');
+
+    const failed = five_hundred(
+      'POST',
+      '/payments/abc/confirm',
+      new IllegalTransitionError('Payment', 'FAILED', 'VERIFIED'),
+    );
+    assert.equal(failed.body.error.moneyStatus, 'NOT_DEBITED');
+  });
+
+  it("says nothing about the taxpayer's money when the entity is not theirs", () => {
+    /*
+     * A commission is the agent's fee. An illegal transition on one told the
+     * agent "No money has been taken from the taxpayer", which is an answer
+     * to a question nobody asked — and one an agent requesting a payout could
+     * reach, because `requestPayout` transitions commissions.
+     */
+    const { body } = five_hundred(
+      'POST',
+      '/agents/me/commission/payout',
+      new IllegalTransitionError('Commission', 'PAID', 'ELIGIBLE'),
+    );
+    assert.equal(body.error.moneyStatus, 'NOT_APPLICABLE');
+    assert.doesNotMatch(body.error.message, CLAIMS_NOTHING_HAPPENED);
+  });
+
+  it('does not promise an agent nothing was taken when two confirmations collided', () => {
+    /*
+     * 40001 and 40P01 are the database saying "this transaction lost a race;
+     * run it again". `CONCURRENT_UPDATE` answered that NOT_DEBITED — "No
+     * payment was attempted".
+     *
+     * On a payment confirmation that is the opposite of what happened. The
+     * gateway is holding the money, the agent is confirming it, and
+     * `verifyPayment` runs with `retryOnConflict` because, in its own words,
+     * "READ COMMITTED still meets 40P01 occasionally". After ten retries the
+     * deadlock surfaces — and the request that beat this one may have just
+     * verified the payment. So the agent, standing in front of somebody who
+     * has handed over cash, was told nothing had been taken.
+     *
+     * UNCONFIRMED is the truthful answer and carries the right instruction
+     * with it: "A payment is in flight and its outcome is not yet known. Do
+     * not retry."
+     */
+    const deadlock = Object.assign(new Error('deadlock detected'), { code: '40P01' });
+    const confirming = five_hundred('POST', '/payments/abc/confirm', deadlock);
+
+    assert.equal(confirming.status, 409);
+    assert.equal(confirming.body.error.code, 'CONCURRENT_UPDATE');
+    assert.equal(confirming.body.error.moneyStatus, 'UNCONFIRMED');
+    assert.doesNotMatch(confirming.body.error.message, CLAIMS_NOTHING_HAPPENED);
+  });
+
+  it('leaves a collision away from the payment path as it was', () => {
+    /*
+     * The bound on the change. Two officers editing one department collide
+     * over nothing a citizen paid, and NOT_DEBITED there is both true and
+     * unread — the portal renders no money sentence at all. Narrowing this to
+     * the payment path is what keeps the change to the reader who has one.
+     */
+    const serialisation = Object.assign(new Error('could not serialize access'), {
+      code: '40001',
+    });
+    const officer = five_hundred('POST', '/government/departments', serialisation);
+    assert.equal(officer.status, 409);
+    assert.equal(officer.body.error.moneyStatus, 'NOT_DEBITED');
+  });
+
+  it('does not tell a reader that looking at a payment put one in flight', () => {
+    /*
+     * The other half of the rule, and the mutation that would otherwise
+     * survive: a read is not a payment. No endpoint can actually get here —
+     * a GET inserts nothing, so it cannot raise 23505, and these reads are
+     * READ COMMITTED so they do not serialise — which is why it is asserted
+     * through the handler rather than driven. The condition is still what
+     * stops a reporting GET under /payments from telling an agent money is
+     * moving when they have only opened a screen.
+     */
+    const deadlock = Object.assign(new Error('deadlock detected'), { code: '40P01' });
+    const reading = five_hundred('GET', '/payments/abc', deadlock);
+    assert.equal(reading.body.error.moneyStatus, 'NOT_DEBITED');
+  });
+
+  it('does not promise it for a duplicate met on the payment path either', () => {
+    /*
+     * The same reasoning one branch along.
+     * `documents_one_acknowledgement_per_transaction` is reached while
+     * confirming, and an acknowledgement exists because the money arrived —
+     * so "no money has been taken" is refuted by the very row that caused the
+     * refusal. It is a backstop behind an advisory lock, which is why it says
+     * UNCONFIRMED rather than RECEIVED: what this request did is what is
+     * unknown.
+     */
+    const duplicate = Object.assign(
+      new Error('duplicate key value violates unique constraint'),
+      { code: '23505', constraint: 'documents_one_acknowledgement_per_transaction' },
+    );
+    const confirming = five_hundred('POST', '/payments/abc/confirm', duplicate);
+
+    assert.equal(confirming.status, 409);
+    assert.equal(confirming.body.error.code, 'DUPLICATE_RECORD');
+    assert.equal(confirming.body.error.moneyStatus, 'UNCONFIRMED');
+    assert.match(
+      confirming.body.error.message,
+      /acknowledgement has already been issued/,
+      'the sentence that says what happened was lost',
+    );
   });
 
   it('still answers an anticipated error with what that error knows', () => {

@@ -16,7 +16,7 @@ import { config } from '../config';
 import { pool } from '../db/pool';
 import { authenticate, requireActiveAgent, requirePermission } from '../middleware/auth';
 import { rateLimit } from '../middleware/security';
-import { asyncHandler, uuidSchema, validateBody, validateQuery } from '../middleware/validate';
+import { asyncHandler, phoneSchema, uuidSchema, validateBody, validateQuery } from '../middleware/validate';
 import * as groups from '../services/groups';
 import * as allocations from '../services/allocations';
 import { callerUserId, seesEverything } from '../lib/ownership';
@@ -130,7 +130,9 @@ groupRouter.post(
       community: z.string().max(120).optional(),
       leaderTaxpayerId: uuidSchema.optional(),
       leaderName: z.string().min(3).max(150),
-      leaderPhone: z.string().min(8).max(20),
+      // Validated and stored canonically like every other phone the platform
+      // writes: the leader's attestation link is sent to it by SMS.
+      leaderPhone: phoneSchema,
       memberEstimate: z.number().int().min(1).max(100_000).optional(),
     }),
     async (req, res, data) => {
@@ -329,11 +331,11 @@ groupRouter.post(
       actorId: req.auth!.userId,
       actorRole: req.auth!.role,
     });
-    // The plaintext token is returned once so the caller can send or re-send
-    // the link; only its hash is stored.
+    // The link itself is not returned. It went to the leader's phone, and the
+    // caller may be the agent whose claims the leader is confirming.
     res.status(201).json({
       ...result,
-      message: 'Send this link to the group leader to confirm the membership list.',
+      message: `The confirmation link was sent to the group leader's phone (${result.sentTo}).`,
     });
   }),
 );

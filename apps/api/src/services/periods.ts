@@ -26,10 +26,12 @@
 
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
-import { badRequest, conflict, notFound } from '../lib/errors';
-import { REVENUE_STATES_SQL } from '../lib/revenue-states';
+import { AppError, badRequest, conflict, notFound } from '../lib/errors';
+import { AWAITING_SETTLEMENT_STATES_SQL, REVENUE_STATES_SQL } from '../lib/revenue-states';
 import { outstandingExceptionSql } from './reconciliation';
+import { CURRENT_FINDINGS_SQL } from '../lib/reconciliation-findings';
 import { recordAudit } from './audit';
+import { plateauDateSql } from '../lib/calendar-day';
 
 /** Revenue is recognised only after independent verification (PRD §17, §95). */
 
@@ -155,6 +157,7 @@ export async function periodFigures(
   transaction_count: string;
   unreconciled: string;
   pending_payments: string;
+  awaiting_settlement: string;
 }> {
   assertCalendarDay(periodStart, 'periodStart');
   assertCalendarDay(periodEnd, 'periodEnd');
@@ -166,20 +169,21 @@ export async function periodFigures(
     transaction_count: string;
     unreconciled: string;
     pending_payments: string;
+    awaiting_settlement: string;
   }>(
     db,
     `SELECT
        (SELECT COALESCE(SUM(amount_kobo),0)::text FROM transactions
          WHERE status IN ${REVENUE_STATES_SQL}
-           AND created_at::date BETWEEN $1::date AND $2::date) AS collected_kobo,
+           AND ${plateauDateSql('created_at')} BETWEEN $1::date AND $2::date) AS collected_kobo,
        (SELECT COALESCE(SUM(received_amount_kobo),0)::text FROM settlements
          WHERE settlement_date BETWEEN $1::date AND $2::date) AS settled_kobo,
        (SELECT COALESCE(SUM(amount_kobo),0)::text FROM commissions
-         WHERE created_at::date BETWEEN $1::date AND $2::date AND status <> 'REVERSED')
+         WHERE ${plateauDateSql('created_at')} BETWEEN $1::date AND $2::date AND status <> 'REVERSED')
          AS commission_kobo,
        (SELECT count(*)::text FROM transactions
          WHERE status IN ${REVENUE_STATES_SQL}
-           AND created_at::date BETWEEN $1::date AND $2::date) AS transaction_count,
+           AND ${plateauDateSql('created_at')} BETWEEN $1::date AND $2::date) AS transaction_count,
        /*
         * The two figures that say whether the month is ready to close.
         *
@@ -189,13 +193,30 @@ export async function periodFigures(
         * the close refuses unless the officer says in writing why they are
         * doing it anyway.
         */
-       (SELECT count(*)::text FROM reconciliation_records rr
+       -- The current finding per item, not every run's row. Counting rows,
+       -- a mismatch seen by two sweeps read 2, and resolving the one the
+       -- queue shows left 1 — so the close refused over finished work.
+       (SELECT count(*)::text FROM (${CURRENT_FINDINGS_SQL}) rr
          LEFT JOIN transactions t ON t.id = rr.transaction_id
         WHERE ${outstandingExceptionSql('rr')}
-          AND t.created_at::date BETWEEN $1::date AND $2::date) AS unreconciled,
+          AND ${plateauDateSql('t.created_at')} BETWEEN $1::date AND $2::date) AS unreconciled,
        (SELECT count(*)::text FROM payments
          WHERE status IN ('INITIATED','PENDING')
-           AND initiated_at::date BETWEEN $1::date AND $2::date) AS pending_payments`,
+           AND ${plateauDateSql('initiated_at')} BETWEEN $1::date AND $2::date) AS pending_payments,
+       /*
+        * And the money the month took that the bank has not yet paid in.
+        *
+        * A collection the gateway confirmed is counted as collected, and it is
+        * not an exception: settlement takes a day or two and the reconciliation
+        * sweep only calls it late after that. But the month's settled figure
+        * is frozen along with everything else, and so are the bank credits
+        * that would make it whole — a credit dated inside a closed month cannot
+        * be recorded without reopening it. So the close waits for these too,
+        * and an officer who cannot wait says why, as they do for the others.
+        */
+       (SELECT count(*)::text FROM transactions
+         WHERE status IN ${AWAITING_SETTLEMENT_STATES_SQL}
+           AND ${plateauDateSql('created_at')} BETWEEN $1::date AND $2::date) AS awaiting_settlement`,
     [periodStart, periodEnd],
   );
   return row!;
@@ -253,10 +274,10 @@ export async function openPeriod(
 /**
  * Close a period, freezing what it collected.
  *
- * Refuses over an unreconciled exception or a pending payment unless the
- * officer supplies an override reason — because closing over either freezes a
- * figure already known to be wrong, and the point of a closed month is a figure
- * somebody stands behind.
+ * Refuses over an unreconciled exception, a pending payment, or a collection
+ * the bank has not yet paid in, unless the officer supplies an override reason
+ * — because closing over any of them freezes a figure that is wrong or not yet
+ * whole, and the point of a closed month is a figure somebody stands behind.
  */
 export async function closePeriod(
   actor: Actor,
@@ -279,17 +300,36 @@ export async function closePeriod(
     );
     if (!period) throw notFound('That period');
     if (period.status === 'CLOSED') {
-      throw conflict('PERIOD_CLOSED', `${period.label} is already closed.`);
+      /*
+       * The month as a field, not only inside the English.
+       *
+       * The officer portal translates a refusal by its code, and its Hausa
+       * reads "An riga an rufe {{period}}" — so the month has to travel beside
+       * the sentence rather than be parsed back out of it. Closing a month is
+       * an act an officer's name goes on, and "already closed" read as "closed
+       * now" is an officer believing they have done something they have not,
+       * which is why `HAUSA-REVIEW-QUESTIONS.md` §7 puts this row in the tier.
+       */
+      throw new AppError({
+        statusCode: 409,
+        code: 'PERIOD_CLOSED',
+        message: `${period.label} is already closed.`,
+        details: [{ field: 'period', issue: period.label }],
+      });
     }
 
     const figures = await periodFigures(client, period.period_start, period.period_end);
-    const outstanding = Number(figures.unreconciled) + Number(figures.pending_payments);
+    const outstanding =
+      Number(figures.unreconciled) +
+      Number(figures.pending_payments) +
+      Number(figures.awaiting_settlement);
     if (outstanding > 0 && !input.overrideReason?.trim()) {
       throw conflict(
         'PERIOD_NOT_SETTLED',
-        `${period.label} has ${figures.unreconciled} unresolved exception(s) and ` +
-          `${figures.pending_payments} payment(s) still pending.`,
-        'Resolve them, or say in writing why the month is being closed over them.',
+        `${period.label} has ${figures.unreconciled} unresolved exception(s), ` +
+          `${figures.pending_payments} payment(s) still pending, and ` +
+          `${figures.awaiting_settlement} collection(s) not yet paid into a government account.`,
+        'Resolve them or wait for the bank, or say in writing why the month is being closed over them.',
       );
     }
 
@@ -326,6 +366,7 @@ export async function closePeriod(
         commissionKobo: figures.commission_kobo,
         unreconciledAtClose: figures.unreconciled,
         pendingAtClose: figures.pending_payments,
+        awaitingSettlementAtClose: figures.awaiting_settlement,
       },
       reason: input.overrideReason?.trim() || input.note.trim(),
     });
@@ -360,7 +401,12 @@ export async function reopenPeriod(
     );
     if (!period) throw notFound('That period');
     if (period.status === 'OPEN') {
-      throw conflict('PERIOD_OPEN', `${period.label} is already open.`);
+      throw new AppError({
+        statusCode: 409,
+        code: 'PERIOD_OPEN',
+        message: `${period.label} is already open.`,
+        details: [{ field: 'period', issue: period.label }],
+      });
     }
 
     await client.query(
@@ -399,7 +445,23 @@ export async function beginClosing(
     );
     if (!period) throw notFound('That period');
     if (period.status !== 'OPEN') {
-      throw conflict('PERIOD_NOT_OPEN', `${period.label} is ${period.status.toLowerCase()}.`);
+      /*
+       * Two fields, because the sentence names two things.
+       *
+       * The state goes as the value the schema holds rather than the lowercased
+       * form the English prints: the portal reads it through the shared enum
+       * table, which has a name for CLOSING and CLOSED in both languages, and
+       * `closing` is not a word that table can look up.
+       */
+      throw new AppError({
+        statusCode: 409,
+        code: 'PERIOD_NOT_OPEN',
+        message: `${period.label} is ${period.status.toLowerCase()}.`,
+        details: [
+          { field: 'period', issue: period.label },
+          { field: 'state', issue: period.status, code: 'STATE' },
+        ],
+      });
     }
 
     await client.query(

@@ -454,6 +454,33 @@ describe('Taxpayer onboarding and duplicate control (PRD §10, §11)', () => {
 
     assert.equal(response.status, 409);
     assert.equal(response.body.error.code, 'TAXPAYER_ALREADY_EXISTS');
+
+    /*
+     * And who they are already registered as, as a field.
+     *
+     * The agent application translates this refusal by its code and its Hausa
+     * reads "An riga an yi rajistar wannan mutumin a matsayin {{subject}}".
+     * Without this field the sentence arrives with a gap where the name goes,
+     * and the name is the whole of what the agent needs: it is how they find
+     * the record instead of making a second one.
+     *
+     * One field rather than a name and a TIN separately, because the TIN is
+     * conditional. A translation carrying "(TIN {{tin}})" would print that
+     * literally for everybody who has not got one, since the substitution
+     * leaves a placeholder the server did not send alone on purpose.
+     */
+    const subject = response.body.error.details?.find(
+      (detail: { field?: string }) => detail.field === 'subject',
+    );
+    assert.ok(subject, `no subject travelled with the refusal: ${JSON.stringify(response.body)}`);
+    // The name on the record that already exists — not the one just typed —
+    // and the TIN beside it, which is the half the conditional composes.
+    assert.match(subject.issue, /^Rahila Provisions Store \(TIN \d+\)$/);
+    assert.ok(
+      response.body.error.message.includes(subject.issue),
+      'the field and the English have to name the same record, or the Hausa reader and the ' +
+        'English reader are told about different ones',
+    );
   });
 
   it('warns on a weaker match and records the agent’s decision', async () => {
@@ -1039,7 +1066,8 @@ describe('Reconciliation and settlement (PRD §46, §47)', () => {
     const completed = await post(
       `/government/commissions/payouts/${payout.body.payoutId}/complete`,
       { bankReference: 'BANK-TRF-99001' },
-      { token: ctx.financeToken },
+      // Recorded by somebody other than the officer who approved it.
+      { token: ctx.adminToken },
     );
     assert.equal(completed.status, 200);
 
@@ -1256,13 +1284,60 @@ describe('Access control and audit integrity (PRD §36, §45, §67)', () => {
     );
   });
 
-  it('records who accessed a taxpayer record', async () => {
+  /*
+   * Renamed to what it tests.
+   *
+   * It was called "records who accessed a taxpayer record" and asserted that
+   * the endpoint returned at least one row. It passed — because registering the
+   * fixture taxpayer wrote an `audit_logs` row, and until migration 083 those
+   * change rows were the only thing this endpoint could return. So a test whose
+   * name asserted that reads are logged was satisfied by a write, on a platform
+   * where no read was recorded anywhere.
+   *
+   * That reads are now logged, and that this endpoint returns them, is held by
+   * `who-opened-this-persons-record.test.ts`, which looks at a record and then
+   * looks for the look. What is left here is the narrower thing this test
+   * actually did: the auditor's query answers.
+   */
+  it('answers an auditor asking what has happened to a taxpayer record', async () => {
+    /*
+     * Somebody looks at the record first, so there is a look to report.
+     *
+     * The answer unions two halves — who CHANGED the record, from the audit
+     * log, and who merely READ it, from `taxpayer_record_access_logs`. This
+     * test asserted only that every row was of a permitted kind, which it
+     * passed while returning nothing but CHANGE rows: registration writes an
+     * audit row and nobody here had opened the record, so the READ half was
+     * empty and the assertion could not tell.
+     */
+    const opened = await get(`/taxpayers/${ctx.taxpayerId}`, { token: ctx.auditorToken });
+    assert.equal(opened.status, 200, JSON.stringify(opened.body));
+
     const response = await get(
       `/government/audit/queries/taxpayer-access?taxpayerId=${ctx.taxpayerId}`,
       { token: ctx.auditorToken },
     );
     assert.equal(response.status, 200);
-    assert.ok(response.body.length >= 1);
+    // `{ rows, truncated, cap }`: this answer is capped at 500 and used to be a
+    // bare array, so 500 was indistinguishable from all of them.
+    assert.ok(response.body.rows.length >= 1);
+    assert.equal(response.body.truncated, false);
+    /*
+     * BOTH HALVES OF THE UNION, not merely rows of a permitted kind.
+     *
+     * This checked that every row's `kind` was READ or CHANGE, and its own
+     * comment claimed that held the two halves apart. It did not: if the
+     * CHANGE arm returned nothing the surviving rows would all be READ, each
+     * satisfying the disjunction, and the test would pass having lost half the
+     * answer an auditor asked for. The same shape as the two sweeps deleted
+     * earlier in this branch for being unfalsifiable.
+     */
+    const kinds = new Set<string>(response.body.rows.map((row: { kind: string }) => row.kind));
+    assert.deepEqual(
+      [...kinds].sort(),
+      ['CHANGE', 'READ'],
+      `the answer is missing a half: ${JSON.stringify(response.body.rows)}`,
+    );
   });
 });
 

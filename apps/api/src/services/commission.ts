@@ -890,13 +890,33 @@ export async function completePayout(params: {
       status: string;
       approval_id: string | null;
       bank_reference: string | null;
+      approved_by: string | null;
     }>(
       client,
-      `SELECT id, status, approval_id, bank_reference
+      `SELECT id, status, approval_id, bank_reference, approved_by
          FROM commission_payouts WHERE id = $1 FOR UPDATE`,
       [params.payoutId],
     );
     if (!payout) throw notFound('That payout');
+
+    /*
+     * Not the officer who approved it.
+     *
+     * The agent asks, a finance officer approves, and somebody records that
+     * the bank sent the money — and the last two could be one person, so a
+     * single officer could approve a payout and then declare it paid against
+     * a bank reference nobody else ever looked at. Every other release of
+     * money here already takes a second person: a reversal's requester,
+     * approver and executor are three, and a payout's requester may not
+     * approve it. Marking it paid is the step that closes the books on it.
+     */
+    if (payout.approved_by === params.actorId) {
+      throw conflict(
+        'SEGREGATION_OF_DUTIES',
+        'You approved this payout, so another officer has to record that it was paid.',
+        'Ask a colleague who manages commission to record the bank transfer.',
+      );
+    }
 
     /*
      * Already paid is not "not yet approved", and this said the second.

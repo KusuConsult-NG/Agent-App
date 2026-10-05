@@ -31,7 +31,7 @@ import type { PoolClient } from 'pg';
 import type { Db } from '../db/pool';
 import type { Permission } from '@psirs/shared';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
-import { badRequest, conflict, notFound } from '../lib/errors';
+import { AppError, badRequest, conflict, notFound } from '../lib/errors';
 import { REVENUE_STATES_SQL } from '../lib/revenue-states';
 import { currentYearInPlateau } from '../lib/calendar-day';
 import { canonicalJson, recordAudit } from './audit';
@@ -309,6 +309,13 @@ export async function recordFinding(
     );
     if (!item) throw notFound('Sample item');
     if (item.sample_status === 'COMPLETED') {
+      /*
+       * Examining a transaction in a sample that is closed. The advice is the
+       * point of this refusal: the findings are final, and looking again means
+       * a new sample. `completeSample` raises `SAMPLE_ALREADY_COMPLETE` for
+       * the same state reached with a different intent, where this advice
+       * would be wrong.
+       */
       throw conflict(
         'SAMPLE_COMPLETED',
         'This sample has been completed and its findings are final.',
@@ -379,7 +386,27 @@ export async function completeSample(
     );
     if (!sample) throw notFound('Sample');
     if (sample.status === 'COMPLETED') {
-      throw conflict('SAMPLE_COMPLETED', 'This sample is already complete.');
+      /*
+       * ITS OWN CODE, because it is its own refusal.
+       *
+       * This shared `SAMPLE_COMPLETED` with `recordFinding`, and the two were
+       * recorded as one code with two sentences that ought to be consolidated.
+       * Reading both call sites says otherwise: they are two refusals about
+       * one state, and the difference is what the auditor was trying to do.
+       *
+       * `recordFinding` is somebody trying to EXAMINE a transaction in a
+       * closed sample, and "Draw a new sample to examine these transactions
+       * again" is what they need. This is somebody trying to CLOSE a sample
+       * that is already closed, and that advice is wrong for them: they did
+       * not want to examine anything, and there is nothing left for them to
+       * do. Consolidating the sentences would have attached false advice to
+       * one screen or stripped true advice from the other.
+       *
+       * So the codes are split, and each now means one fixed thing — which is
+       * the test the translation map sets, and the reason neither could be
+       * said in Hausa before.
+       */
+      throw conflict('SAMPLE_ALREADY_COMPLETE', 'This sample is already complete.');
     }
     if (Number.parseInt(sample.pending, 10) > 0) {
       throw conflict(
@@ -408,24 +435,82 @@ export async function completeSample(
   });
 }
 
-export async function listSamples(db: Db, filters: { status?: string | null; limit?: number }) {
+/**
+ * The newest samples, and the size of the work they were taken from.
+ *
+ * WHY THE TOTALS COME FROM HERE AND NOT FROM THE BROWSER
+ *
+ * The workbench shows four figures above its table: samples drawn, items
+ * still to examine, exceptions found, reports on file. All four were added up
+ * in the browser over the rows this function returned — fifty of them, newest
+ * first — and presented as totals. Measured on three samples with a cap of
+ * two: the set held three samples, three exceptions and nine pending items,
+ * and the screen was in a position to say two, two and six.
+ *
+ * On a live register the cap is reached in months, and then "Exceptions
+ * found" is the exceptions of the newest fifty samples. That figure is the
+ * screen's whole purpose. An auditor reading a low one concludes the
+ * sampling programme is clean, which is the one conclusion a partial count
+ * must never be able to support.
+ *
+ * So the figures are computed over everything that matched and travel beside
+ * the page. `count(*) OVER ()` and `SUM(...) OVER ()` are evaluated before
+ * `LIMIT`, so one query answers both questions and the two cannot drift.
+ * `cap` is returned so the screen can say which lists stopped short without
+ * knowing this function's defaults.
+ *
+ * The windows sit outside a derived table because `exceptions` and `pending`
+ * are correlated subqueries: a window function cannot reference a select-list
+ * alias, and repeating the subqueries inside `SUM` would be the same count
+ * written twice with nothing keeping the two copies in step.
+ */
+export async function listSamples(
+  db: Db,
+  filters: { status?: string | null; limit?: number },
+): Promise<{
+  samples: Record<string, unknown>[];
+  matched: number;
+  exceptionsTotal: number;
+  pendingTotal: number;
+  cap: number;
+}> {
   const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
-  return query(
+  const rows = await query<{
+    matched: string;
+    exceptions_total: string | null;
+    pending_total: string | null;
+  }>(
     db,
-    `SELECT s.id, s.sample_number, s.title, s.method, s.criteria, s.seed,
-            s.population_size, s.sample_size, s.status, s.drawn_at, s.completed_at,
-            u.full_name AS drawn_by_name,
-            (SELECT count(*)::int FROM audit_sample_items i
-              WHERE i.sample_id = s.id AND i.outcome = 'EXCEPTION') AS exceptions,
-            (SELECT count(*)::int FROM audit_sample_items i
-              WHERE i.sample_id = s.id AND i.outcome = 'PENDING') AS pending
-       FROM audit_samples s
-       LEFT JOIN users u ON u.id = s.drawn_by
-      WHERE ($1::text IS NULL OR s.status = $1)
+    `SELECT s.*,
+            count(*) OVER ()::text AS matched,
+            SUM(s.exceptions) OVER ()::text AS exceptions_total,
+            SUM(s.pending) OVER ()::text AS pending_total
+       FROM (
+         SELECT s.id, s.sample_number, s.title, s.method, s.criteria, s.seed,
+                s.population_size, s.sample_size, s.status, s.drawn_at, s.completed_at,
+                u.full_name AS drawn_by_name,
+                (SELECT count(*)::int FROM audit_sample_items i
+                  WHERE i.sample_id = s.id AND i.outcome = 'EXCEPTION') AS exceptions,
+                (SELECT count(*)::int FROM audit_sample_items i
+                  WHERE i.sample_id = s.id AND i.outcome = 'PENDING') AS pending
+           FROM audit_samples s
+           LEFT JOIN users u ON u.id = s.drawn_by
+          WHERE ($1::text IS NULL OR s.status = $1)
+       ) s
       ORDER BY s.drawn_at DESC
       LIMIT $2`,
     [filters.status ?? null, limit],
   );
+
+  return {
+    samples: rows.map(
+      ({ matched: _m, exceptions_total: _e, pending_total: _p, ...sample }) => sample,
+    ),
+    matched: Number.parseInt(rows[0]?.matched ?? '0', 10),
+    exceptionsTotal: Number.parseInt(rows[0]?.exceptions_total ?? '0', 10),
+    pendingTotal: Number.parseInt(rows[0]?.pending_total ?? '0', 10),
+    cap: limit,
+  };
 }
 
 export async function getSample(db: Db, sampleId: string) {
@@ -626,14 +711,48 @@ export async function signReport(
   note: string,
 ): Promise<void> {
   await withTransaction(async (client) => {
+    /*
+     * `FOR UPDATE`, because the refusal below is decided on this status.
+     *
+     * Without it two officers who open the same unsigned report both read
+     * GENERATED and both go on to write. Nothing is overwritten — migration
+     * 062's trigger refuses the second write, "who signed an audit report, and
+     * when, cannot be rewritten" — but that is a sentence about rewriting a
+     * signature, and rewriting is not what the second officer did: they signed
+     * a report that was unsigned when they looked at it. The handler turns the
+     * P0001 into FINANCIAL_CONTROL_BLOCKED, which names neither the report nor
+     * what happened, carries a support reference they have no use for, and is
+     * not in the portal's translation map.
+     *
+     * `ALREADY_SIGNED` and `ALREADY_WITHDRAWN` say what happened and name the
+     * report. Locking the row is what lets the service say them.
+     *
+     * The fourth instance of one shape — read a status, refuse on it, write
+     * without having locked it — after the agent application, the department
+     * code and the KYC submission. `closePeriod` and `setTaxpayerStatus`, which
+     * decide the same kind of thing, have always locked.
+     */
     const report = await queryOne<{ id: string; status: string; report_number: string }>(
       client,
-      'SELECT id, status, report_number FROM audit_reports WHERE id = $1',
+      'SELECT id, status, report_number FROM audit_reports WHERE id = $1 FOR UPDATE',
       [reportId],
     );
     if (!report) throw notFound('Report');
     if (report.status === 'SIGNED') {
-      throw conflict('ALREADY_SIGNED', `${report.report_number} has already been signed.`);
+      /*
+       * The report number as a field, so the portal can name it in Hausa.
+       *
+       * `HAUSA-REVIEW-QUESTIONS.md` §7 puts this row in the tier with the
+       * revenue period, and for the same reason: signing an audit report is an
+       * act an officer's name goes on. The number has to travel beside the
+       * sentence rather than be parsed back out of it.
+       */
+      throw new AppError({
+        statusCode: 409,
+        code: 'ALREADY_SIGNED',
+        message: `${report.report_number} has already been signed.`,
+        details: [{ field: 'report', issue: report.report_number }],
+      });
     }
     if (report.status === 'WITHDRAWN') {
       throw conflict(
@@ -676,14 +795,22 @@ export async function withdrawReport(
   reason: string,
 ): Promise<void> {
   await withTransaction(async (client) => {
+    // `FOR UPDATE` for the reason given on `signReport`: the refusal below is
+    // decided on this status, and two officers withdrawing one report both
+    // read GENERATED without it.
     const report = await queryOne<{ id: string; status: string; report_number: string }>(
       client,
-      'SELECT id, status, report_number FROM audit_reports WHERE id = $1',
+      'SELECT id, status, report_number FROM audit_reports WHERE id = $1 FOR UPDATE',
       [reportId],
     );
     if (!report) throw notFound('Report');
     if (report.status === 'WITHDRAWN') {
-      throw conflict('ALREADY_WITHDRAWN', `${report.report_number} is already withdrawn.`);
+      throw new AppError({
+        statusCode: 409,
+        code: 'ALREADY_WITHDRAWN',
+        message: `${report.report_number} is already withdrawn.`,
+        details: [{ field: 'report', issue: report.report_number }],
+      });
     }
 
     await client.query(
@@ -726,9 +853,27 @@ export async function withdrawReport(
  * one: nobody clicks "verify" on the report they have no reason to suspect,
  * which leaves the tampered one exactly as invisible as it was before.
  */
-export async function listReports(db: Db, filters: { reportType?: string | null; limit?: number }) {
+/**
+ * The newest reports, with their checksums recomputed, and how many there are.
+ *
+ * `matched` matters more here than on any other capped list in the platform.
+ * `checksumMatches` is recomputed per row, and the screen raises an alarm when
+ * a stored report no longer hashes to the checksum signed with it — a signed
+ * government report whose figures were changed underneath the signature. That
+ * check only ever looks at the rows this function returns. Fifty of them,
+ * newest first, out of however many exist.
+ *
+ * The screen was honest about the shape of what it had: its alert says "a
+ * report on this page". What it could not say was how much it had not looked
+ * at, because nothing told it. Now it can, and an alarm that reports the
+ * limits of its own reach is the only kind worth having on this screen.
+ */
+export async function listReports(
+  db: Db,
+  filters: { reportType?: string | null; limit?: number },
+): Promise<{ reports: Record<string, unknown>[]; matched: number; cap: number }> {
   const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
-  const rows = await query<StoredReport>(
+  const rows = await query<StoredReport & { matched: string }>(
     db,
     `SELECT r.id, r.report_number, r.report_type, r.title, r.parameters,
             r.period_start, r.period_end, r.row_count, r.checksum, r.coverage_complete,
@@ -736,7 +881,8 @@ export async function listReports(db: Db, filters: { reportType?: string | null;
             r.generated_at, r.signed_at, r.signature_note, r.withdrawn_reason,
             r.payload,
             g.full_name AS generated_by_name,
-            s.full_name AS signed_by_name
+            s.full_name AS signed_by_name,
+            count(*) OVER ()::text AS matched
        FROM audit_reports r
        LEFT JOIN users g ON g.id = r.generated_by
        LEFT JOIN users s ON s.id = r.signed_by
@@ -746,10 +892,14 @@ export async function listReports(db: Db, filters: { reportType?: string | null;
     [filters.reportType ?? null, limit],
   );
 
-  return rows.map(({ payload, ...row }) => ({
-    ...row,
-    checksumMatches: reportChecksum(row.parameters, payload) === row.checksum,
-  }));
+  return {
+    reports: rows.map(({ payload, matched: _matched, ...row }) => ({
+      ...row,
+      checksumMatches: reportChecksum(row.parameters, payload) === row.checksum,
+    })),
+    matched: Number.parseInt(rows[0]?.matched ?? '0', 10),
+    cap: limit,
+  };
 }
 
 /**

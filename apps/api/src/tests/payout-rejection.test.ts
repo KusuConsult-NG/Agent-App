@@ -403,7 +403,8 @@ describe('a payout the bank would not make', () => {
     await post(
       `/government/commissions/payouts/${payoutId}/complete`,
       { bankReference: 'BNK-PAID-0001' },
-      { token: financeToken },
+      // Recorded by somebody other than the officer who approved it.
+      { token: adminToken },
     );
 
     const response = await post(

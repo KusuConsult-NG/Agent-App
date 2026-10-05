@@ -21,7 +21,7 @@
 import type { PoolClient } from 'pg';
 import type { RefereeCategory } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { pool, query, queryOne, withTransaction } from '../db/pool';
+import { advisoryLock, LOCK_NAMESPACE, pool, query, queryOne, withTransaction } from '../db/pool';
 import { generateToken, hashIdentityNumber, maskIdentityNumber, sha256 } from '../lib/crypto';
 import { badRequest, conflict, notFound, AppError } from '../lib/errors';
 import { nextRefereeCode } from '../lib/references';
@@ -68,6 +68,22 @@ export async function nominateReferee(params: {
   const { input } = params;
 
   return withTransaction(async (client) => {
+    /*
+     * One nomination into this application's referee slot at a time.
+     *
+     * The active-referee read below decides a refusal on a row that does not
+     * exist yet, so no `FOR UPDATE` can order two callers. Two nominations
+     * submitted together both found nothing and both inserted — two
+     * outstanding invitations for one slot, with no replacement recorded
+     * against either, which is two attempts at a clearance PRD §29 means an
+     * applicant to make one at a time.
+     *
+     * 087 holds the rule at the database. This is what keeps the service's own
+     * sentence — "A referee request is already outstanding" — rather than
+     * handing the applicant a constraint violation.
+     */
+    await advisoryLock(client, LOCK_NAMESPACE.AGENT_REFEREE, params.agentId);
+
     const applicant = await queryOne<{
       phone: string;
       alternate_phone: string | null;
@@ -107,6 +123,10 @@ export async function nominateReferee(params: {
         [{ field: 'phone', issue: 'Referee contact details match the applicant' }],
       );
     }
+
+    // A request that lapsed unanswered is not outstanding, and must not be
+    // what refuses the next one: see `expireLapsedRefereeRequests`.
+    await expireLapsedRefereeRequests(client, params.agentId);
 
     const activeReferee = await queryOne<{ id: string; status: string }>(
       client,
@@ -276,6 +296,7 @@ export async function openInvitation(db: Db, token: string): Promise<RefereeInvi
     referee_id: string;
     expires_at: Date;
     status: string;
+    agent_id: string;
     referee_name: string;
     reference_code: string;
     relationship: string;
@@ -285,7 +306,7 @@ export async function openInvitation(db: Db, token: string): Promise<RefereeInvi
     applicant_lga: string | null;
   }>(
     db,
-    `SELECT i.id, i.referee_id, i.expires_at, i.status,
+    `SELECT i.id, i.referee_id, i.expires_at, i.status, r.agent_id,
             r.full_name AS referee_name, r.reference_code, r.relationship, r.category,
             r.status AS referee_status,
             u.full_name AS applicant_name, l.name AS applicant_lga
@@ -307,14 +328,9 @@ export async function openInvitation(db: Db, token: string): Promise<RefereeInvi
   }
 
   if (invitation.expires_at.getTime() < Date.now()) {
-    await query(
-      db,
-      `UPDATE referee_invitations SET status = 'EXPIRED' WHERE id = $1 AND status <> 'RESPONDED'`,
-      [invitation.id],
-    );
-    await query(db, `UPDATE referees SET status = 'EXPIRED' WHERE id = $1 AND status = 'INVITED'`, [
-      invitation.referee_id,
-    ]);
+    // Through the shared expiry, which also covers a referee who opened the
+    // link in time (ACCEPTED) and keeps the agent's derived status in line.
+    await withTransaction((client) => expireLapsedRefereeRequests(client, invitation.agent_id));
     throw new AppError({
       statusCode: 410,
       code: 'INVITATION_EXPIRED',
@@ -909,8 +925,72 @@ export async function syncAgentRefereeStatus(client: PoolClient, agentId: string
   );
 }
 
+/**
+ * Expire referee requests whose deadline passed with no response.
+ *
+ * An invitation is good for fourteen days, and one path ever wrote EXPIRED:
+ * `openInvitation`, when the referee opened the link after the deadline. A
+ * referee who never opened it — the ordinary way a request goes unanswered,
+ * an SMS nobody acted on — left the request INVITED for good. Measured,
+ * fourteen days on with the link never opened: the applicant's own screen
+ * still read "waiting for your referee" and offered no way to name another;
+ * nominating somebody else was refused with "A referee request is already
+ * outstanding. Wait for a response", to a link that could no longer be
+ * answered; and the referee dashboard counted it pending, with expired at
+ * zero. `a-referee-who-does-not-clear.test.ts` already said "expired is not
+ * outstanding, so the applicant may nominate somebody else" — and reached it
+ * only by having the referee turn up late.
+ *
+ * The open path had a second gap of the same shape. It expired a referee only
+ * from INVITED, and opening the link is what moves a referee to ACCEPTED, so
+ * one who opened the request in time and never answered stayed outstanding
+ * however often the dead link was opened again. Nor did it bring the agent's
+ * derived `referee_status` back into line, which the officer's pipeline reads.
+ *
+ * So every reader that decides something from a referee's status expires
+ * what has lapsed first, through this, and the derived status follows in the
+ * same transaction. Scoped to one application when the caller has one, and
+ * to all of them for the dashboards and lists.
+ *
+ * The second statement does not depend on the first having just expired the
+ * invitation: it also catches a referee left ACCEPTED behind an invitation the
+ * open path had already marked EXPIRED, which is what that gap left on disk.
+ */
+export async function expireLapsedRefereeRequests(
+  client: PoolClient,
+  agentId: string | null,
+): Promise<void> {
+  await client.query(
+    `UPDATE referee_invitations i
+        SET status = 'EXPIRED'
+       FROM referees r
+      WHERE r.id = i.referee_id
+        AND i.status IN ('SENT', 'OPENED')
+        AND i.expires_at < now()
+        AND ($1::uuid IS NULL OR r.agent_id = $1::uuid)`,
+    [agentId],
+  );
+  const expired = await query<{ agent_id: string }>(
+    client,
+    `UPDATE referees r
+        SET status = 'EXPIRED'
+      WHERE r.status IN ('INVITED', 'ACCEPTED')
+        AND ($1::uuid IS NULL OR r.agent_id = $1::uuid)
+        AND EXISTS (SELECT 1 FROM referee_invitations i
+                     WHERE i.referee_id = r.id AND i.status = 'EXPIRED')
+        AND NOT EXISTS (SELECT 1 FROM referee_invitations i
+                         WHERE i.referee_id = r.id AND i.status IN ('SENT', 'OPENED', 'RESPONDED'))
+      RETURNING r.agent_id`,
+    [agentId],
+  );
+  for (const agent of new Set(expired.map((row) => row.agent_id))) {
+    await syncAgentRefereeStatus(client, agent);
+  }
+}
+
 /** Government referee dashboard (Addendum §46). */
 export async function refereeDashboard(db: Db) {
+  await withTransaction((client) => expireLapsedRefereeRequests(client, null));
   const [counts, suspicious, multiAgent] = await Promise.all([
     queryOne(
       db,

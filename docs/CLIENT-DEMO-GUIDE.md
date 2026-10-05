@@ -69,8 +69,12 @@ auditor, 26 for the finance officer, 22 for the supervisor — all at the same
 address.
 
 See *One URL for both apps* in `docs/DEPLOYMENT.md` for the switch, and in
-particular for `VERIFICATION_BASE_URL`, which has to carry the `/portal`
-subpath or every receipt QR code points at the agent app's sign-in form.
+particular for the two verification variables, which both have to carry the
+`/portal` subpath: `VERIFICATION_BASE_URL` on the API service, or every
+certificate QR code points at the agent app's sign-in form, and
+`VITE_VERIFICATION_BASE_URL` on the front-end service, or a thermal paper
+receipt prints with its code and no QR code at all. The second is read when
+the image is built, so it needs a redeploy rather than a restart.
 
 Sign-in details, all on the demonstration database only:
 

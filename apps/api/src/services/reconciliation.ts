@@ -26,6 +26,7 @@ import { reverseCommissionForTransaction } from './commission';
 import { transitionTransaction } from './revenue';
 import { queueNotification } from './notifications';
 import { raiseFlag } from './fraud';
+import { CURRENT_FINDINGS_SQL } from '../lib/reconciliation-findings';
 import { log } from '../lib/logger';
 
 /**
@@ -1165,15 +1166,7 @@ export async function exceptionQueue(
 ) {
   return query(
     db,
-    `WITH newest AS (
-       SELECT DISTINCT ON (COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text))
-              r.id, r.run_id, r.status, r.expected_amount_kobo, r.received_amount_kobo,
-              r.variance_kobo, r.gateway_reference, r.settlement_reference, r.detail,
-              r.created_at, r.transaction_id, r.payment_id
-         FROM reconciliation_records r
-        ORDER BY COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text),
-                 r.created_at DESC, r.id DESC
-     )
+    `WITH newest AS (${CURRENT_FINDINGS_SQL})
      SELECT n.id, n.run_id, n.status, n.expected_amount_kobo, n.received_amount_kobo,
             n.variance_kobo, n.gateway_reference, n.settlement_reference, n.detail, n.created_at,
             t.transaction_reference, t.status AS transaction_status,
@@ -1240,14 +1233,7 @@ export async function awaitingSettlement(
 ) {
   return query(
     db,
-    `WITH newest AS (
-       SELECT DISTINCT ON (COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text))
-              r.id, r.status, r.expected_amount_kobo, r.gateway_reference, r.created_at,
-              r.reconciled_at, r.transaction_id, r.payment_id
-         FROM reconciliation_records r
-        ORDER BY COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text),
-                 r.created_at DESC, r.id DESC
-     )
+    `WITH newest AS (${CURRENT_FINDINGS_SQL})
      SELECT n.id, n.expected_amount_kobo, n.gateway_reference, n.created_at,
             ROUND(EXTRACT(EPOCH FROM (now() - money.at)) / 3600)::int AS age_hours,
             (money.at < now() - ($2 || ' hours')::interval) AS overdue,
@@ -1487,11 +1473,40 @@ async function markRefund(
 }
 
 /** Refunds a taxpayer is still owed, oldest first. */
-export async function outstandingRefunds(db: Db, limit = 100) {
-  return query(
+/**
+ * Refunds the taxpayer has not had, and how much is owed in total.
+ *
+ * The total is counted and summed over everything that matches, not over the
+ * hundred rows this returns. `Outstanding.tsx` summed the rows it received
+ * into "Owed to taxpayers" and counted their length for "Refunds not made", so
+ * on a backlog past the cap both figures were subtotals presented as totals —
+ * on the screen whose job is to say what the State owes citizens, and in the
+ * direction that understates it.
+ *
+ * `count(*) OVER ()` and `SUM(...) OVER ()` are evaluated before LIMIT, so one
+ * query answers both the page and the size of what it came from. The window
+ * functions ride on the rows and are lifted off here rather than shipped to
+ * the client on every row.
+ *
+ * The same shape was found on the agent performance screen and answered there
+ * by saying what the figures covered — "the endpoint answers with a bare array
+ * and no count of what it matched", which is the part fixed here instead.
+ */
+export async function outstandingRefunds(
+  db: Db,
+  limit = 100,
+): Promise<{
+  refunds: Record<string, unknown>[];
+  matched: number;
+  owedKobo: string;
+  cap: number;
+}> {
+  const rows = await query<{ matched: string; owed_kobo: string | null }>(
     db,
     `SELECT r.id, r.refund_reference, r.amount_kobo, r.status, r.attempts, r.failure_reason,
-            r.last_attempt_at, r.created_at, t.transaction_reference, p.gateway_reference
+            r.last_attempt_at, r.created_at, t.transaction_reference, p.gateway_reference,
+            count(*) OVER ()::text AS matched,
+            SUM(r.amount_kobo) OVER ()::text AS owed_kobo
        FROM refunds r
        JOIN transactions t ON t.id = r.transaction_id
        LEFT JOIN payments p ON p.id = r.payment_id
@@ -1500,6 +1515,13 @@ export async function outstandingRefunds(db: Db, limit = 100) {
       LIMIT $1`,
     [limit],
   );
+
+  return {
+    refunds: rows.map(({ matched: _matched, owed_kobo: _owed, ...refund }) => refund),
+    matched: Number.parseInt(rows[0]?.matched ?? '0', 10),
+    owedKobo: rows[0]?.owed_kobo ?? '0',
+    cap: limit,
+  };
 }
 
 /**
@@ -1655,6 +1677,25 @@ async function recordReversal(params: {
       throw conflict(
         'SEGREGATION_OF_DUTIES',
         'The officer who approved a reversal may not also execute it.',
+      );
+    }
+    /*
+     * Nor the officer who asked for it.
+     *
+     * Three people, none doing two of the jobs, is the control the reversal
+     * path describes itself by. The table refuses a requester approving, and
+     * the check above refuses an approver executing; nothing refused the
+     * requester executing. The seeded roles happened to keep those apart —
+     * no role both asks and executes — but since migration 059 which role
+     * holds what is PSIRS's to change, and the rule must not depend on how
+     * they change it. Measured: finance officers granted approval:request,
+     * one asked, a colleague approved, and the first executed it; the money
+     * went back on two people's word.
+     */
+    if (approval.requested_by === params.actorId) {
+      throw conflict(
+        'SEGREGATION_OF_DUTIES',
+        'The officer who asked for a reversal may not also execute it.',
       );
     }
 
@@ -1840,8 +1881,9 @@ async function recordReversal(params: {
     // able to appear successful.
     //
     // Only documents that assert payment succeeded are revoked. An invoice is
-    // a demand notice, not evidence of payment, and the reversal puts the
-    // invoice back to UNPAID — it remains a legitimate thing to present.
+    // a demand notice, not evidence of payment, so its document stands; what
+    // becomes of the demand itself is decided below, by whose doing the
+    // reversal was.
     //
     // The acknowledgement is in that set now, and it is the one that matters
     // most in the window this reversal is most likely to be used in. Before
@@ -1875,12 +1917,34 @@ async function recordReversal(params: {
       [transactionId],
     );
 
+    /*
+     * The bill, by whose doing the reversal was.
+     *
+     * Every reversal used to put it back to UNPAID. For one the State caused —
+     * a duplicate assessment, a bill raised against the wrong record, which
+     * is what `attributable_to` defaults to — that refunded the money and then
+     * demanded it again. Measured on a reversed duplicate: the invoice back at
+     * UNPAID, listed on the agent's collection screen with "Take this payment",
+     * which led to TRANSACTION_NOT_PAYABLE because the transaction is REVERSED
+     * and nothing creates another; the taxpayer on the arrears call list; and
+     * their compliance score docked for "₦3,000.00 outstanding". The remedy
+     * this function offers for a wrong amount — "reverse the payment in full
+     * and re-assess" — then billed them a second time beside the first.
+     *
+     * So a reversal the State caused withdraws the demand, as an upheld
+     * objection does. One the taxpayer's bank or the gateway caused leaves it
+     * owed, because it is: the money never stayed with the State. That debt
+     * cannot be paid against this transaction, which is REVERSED for good;
+     * it is collected by issuing the bill again (`reissueInvoice`), which
+     * gives it a fresh transaction against the same assessment and amount.
+     */
     await client.query(
       `UPDATE invoices i
-          SET amount_paid_kobo = 0, status = 'UNPAID'
+          SET amount_paid_kobo = 0,
+              status = CASE WHEN $2::text = 'GOVERNMENT' THEN 'CANCELLED' ELSE 'UNPAID' END
          FROM transactions t
         WHERE t.id = $1 AND i.id = t.invoice_id`,
-      [transactionId],
+      [transactionId, attributableTo],
     );
 
     const commission = await reverseCommissionForTransaction(client, {

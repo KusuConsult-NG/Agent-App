@@ -44,6 +44,7 @@ import {
   resetDatabase,
   startTestServer,
   stopTestServer,
+  leaderAttestationToken,
 } from './helpers';
 import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
@@ -120,7 +121,7 @@ async function groupWithPendingMember(suffix: string): Promise<{
 
   const invite = await post(`/groups/${groupId}/attestation-request`, {}, { token: officerToken });
   assert.equal(invite.status, 201, JSON.stringify(invite.body));
-  const token = (invite.body.invitationUrl as string).split('/group-attestation/')[1]!;
+  const token = await leaderAttestationToken(groupId);
 
   const view = await get(`/group-attestation/${token}`);
   assert.equal(view.status, 200, JSON.stringify(view.body));

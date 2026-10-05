@@ -123,6 +123,31 @@ const PHRASING: Record<string, { done: keyof TranslationDictionary; partly: keyo
 export function OutstandingScreen() {
   const { t } = usePortalI18n();
   const [refunds, setRefunds] = useState<Refund[] | null>(null);
+  /*
+   * How big each queue is, as opposed to how much of it arrived.
+   *
+   * These lists are capped at a hundred rows. The figures above them used to
+   * be `reduce` and `.length` over whatever came back, so past the cap every
+   * one was a subtotal presented as a total — on the screen that says what the
+   * State owes citizens, in the direction that understates it. The endpoints
+   * now count and sum over everything that matched, so the numbers are right
+   * and only the lists are partial.
+   *
+   * Every read below falls back through the page length to zero. A response
+   * without the field has to produce a number rather than throw: these
+   * figures are added up to decide whether to say "nothing is outstanding",
+   * and a fetch that threw would be caught as an unreadable queue — which is
+   * a different claim, on a screen whose whole point is telling those two
+   * apart.
+   */
+  const [size, setSize] = useState<{
+    refunds: number;
+    owedKobo: string;
+    tins: number;
+    ended: number;
+    renewals: number;
+    vehicles: number;
+  }>({ refunds: 0, owedKobo: '0', tins: 0, ended: 0, renewals: 0, vehicles: 0 });
   const [tins, setTins] = useState<AwaitingTin[] | null>(null);
   const [renewals, setRenewals] = useState<AuthorityRenewal[] | null>(null);
   const [vehicles, setVehicles] = useState<AwaitingAuthority[] | null>(null);
@@ -159,30 +184,69 @@ export function OutstandingScreen() {
 
     if (readsRefunds) {
       api
-        .get<{ refunds: Refund[] }>('/government/refunds/outstanding')
-        .then((data) => setRefunds(data.refunds))
+        .get<{ refunds: Refund[]; matched: number; owedKobo: string }>(
+          '/government/refunds/outstanding',
+        )
+        .then((data) => {
+          setRefunds(data.refunds);
+          setSize((current) => ({
+            ...current,
+            // Falling back to the page rather than to NaN: a response without
+            // the field still has to produce a number, because "nothing is
+            // outstanding" is decided by adding these up.
+            refunds: data.matched ?? data.refunds?.length ?? 0,
+            owedKobo:
+              data.owedKobo ??
+              (data.refunds ?? [])
+                .reduce((total, row) => total + BigInt(row.amount_kobo), 0n)
+                .toString(),
+          }));
+        })
         .catch(failed('refunds'));
     }
     if (readsTins) {
       api
-        .get<{ taxpayers: AwaitingTin[] }>('/taxpayers/tin-outstanding')
-        .then((data) => setTins(data.taxpayers))
+        .get<{ taxpayers: AwaitingTin[]; matched: number }>('/taxpayers/tin-outstanding')
+        .then((data) => {
+          setTins(data.taxpayers);
+          setSize((current) => ({
+            ...current,
+            tins: data.matched ?? data.taxpayers?.length ?? 0,
+          }));
+        })
         .catch(failed('tins'));
     }
     if (readsTaxpayers) {
       api
-        .get<{ taxpayers: EndedWithArrears[] }>('/taxpayers/ended-with-arrears')
-        .then((data) => setEnded(data.taxpayers))
+        .get<{ taxpayers: EndedWithArrears[]; matched: number }>('/taxpayers/ended-with-arrears')
+        .then((data) => {
+          setEnded(data.taxpayers);
+          setSize((current) => ({
+            ...current,
+            ended: data.matched ?? data.taxpayers?.length ?? 0,
+          }));
+        })
         .catch(failed('ended'));
     }
     if (readsVehicles) {
       api
-        .get<{ renewals: AuthorityRenewal[]; vehiclesAwaitingAuthority: AwaitingAuthority[] }>(
-          '/vehicles/renewals/authority-outstanding',
-        )
+        .get<{
+          renewals: AuthorityRenewal[];
+          renewalsMatched?: number;
+          vehiclesAwaitingAuthority: AwaitingAuthority[];
+          vehiclesAwaitingAuthorityMatched?: number;
+        }>('/vehicles/renewals/authority-outstanding')
         .then((data) => {
           setRenewals(data.renewals);
           setVehicles(data.vehiclesAwaitingAuthority);
+          setSize((current) => ({
+            ...current,
+            renewals: data.renewalsMatched ?? data.renewals?.length ?? 0,
+            vehicles:
+              data.vehiclesAwaitingAuthorityMatched ??
+              data.vehiclesAwaitingAuthority?.length ??
+              0,
+          }));
         })
         .catch(failed('vehicles'));
     }
@@ -227,9 +291,19 @@ export function OutstandingScreen() {
     }
   }
 
-  const owedKobo = (refunds ?? []).reduce((total, row) => total + BigInt(row.amount_kobo), 0n);
-  const waiting =
-    (refunds?.length ?? 0) + (tins?.length ?? 0) + (renewals?.length ?? 0) + (vehicles?.length ?? 0);
+  const waiting = size.refunds + size.tins + size.renewals + size.vehicles;
+
+  /*
+   * Which lists arrived short. The figures beside them are whole; these are
+   * the ones a reader would otherwise scroll to the bottom of and believe.
+   */
+  const partial = [
+    refunds && size.refunds > refunds.length ? t.ofcOsRefundsNotMade : null,
+    tins && size.tins > tins.length ? t.ofcOsWaitingForTin : null,
+    ended && size.ended > ended.length ? t.ofcOsEndedOwingTitle : null,
+    renewals && size.renewals > renewals.length ? t.ofcOsRenewalsUnacknowledged : null,
+    vehicles && size.vehicles > vehicles.length ? t.ofcOsVehiclesUncheckedTitle : null,
+  ].filter((label): label is string => label !== null);
 
   // "Nothing is outstanding" may only be said once every queue this officer can
   // read has actually answered. Saying it while a fetch is in flight — or
@@ -246,6 +320,19 @@ export function OutstandingScreen() {
         <Alert kind="warning" title="ofcOsQueueUnreadable">
           <p style={{ margin: 0 }}>
             {t.ofcOsQueueUnreadableBody.replace('{{n}}', String(unreadable.size))}
+          </p>
+        </Alert>
+      )}
+      {/*
+        * The figures above are whole; some of the lists below are not.
+        *
+        * Said rather than left to be noticed, because a list that stops at a
+        * hundred rows looks exactly like a list that ends.
+        */}
+      {partial.length > 0 && (
+        <Alert kind="info" title="ofcOsListsArePartial">
+          <p style={{ margin: 0 }}>
+            {t.ofcOsListsArePartialBody.replace('{{queues}}', partial.join(', '))}
           </p>
         </Alert>
       )}
@@ -267,10 +354,10 @@ export function OutstandingScreen() {
         </Alert>
       ) : (
         <div className="stat-grid">
-          <Stat label="ofcOsOwedToTaxpayers" value={<Money kobo={owedKobo.toString()} />} />
-          <Stat label="ofcOsRefundsNotMade" value={String(refunds?.length ?? 0)} />
-          <Stat label="ofcOsWaitingForTin" value={String(tins?.length ?? 0)} />
-          <Stat label="ofcOsRenewalsUnacknowledged" value={String(renewals?.length ?? 0)} />
+          <Stat label="ofcOsOwedToTaxpayers" value={<Money kobo={size.owedKobo} />} />
+          <Stat label="ofcOsRefundsNotMade" value={String(size.refunds)} />
+          <Stat label="ofcOsWaitingForTin" value={String(size.tins)} />
+          <Stat label="ofcOsRenewalsUnacknowledged" value={String(size.renewals)} />
         </div>
       )}
 

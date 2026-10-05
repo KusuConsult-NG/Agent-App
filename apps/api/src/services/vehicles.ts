@@ -13,7 +13,7 @@
 
 import { REVENUE_RECOGNISED_STATES, parseKobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { pool, query, queryOne, withTransaction } from '../db/pool';
+import { advisoryLock, LOCK_NAMESPACE, pool, query, queryOne, withTransaction } from '../db/pool';
 import { conflict, notFound, badRequest } from '../lib/errors';
 import { generateVerificationCode } from '../lib/crypto';
 import { endOfDay } from '../lib/calendar-day';
@@ -22,6 +22,7 @@ import { vehicleRegistry, type VehicleLookupOutcome } from '../integrations';
 import { recordAudit } from './audit';
 import { registerDocument, renderVehicleDocumentPdf } from './documents';
 import { createAssessment } from './revenue';
+import { VEHICLE_RENEWAL_ITEM_CODES } from '../lib/vehicle-renewal-items';
 import { queueNotification } from './notifications';
 import { log } from '../lib/logger';
 import { escapeLike } from '../lib/like';
@@ -161,6 +162,32 @@ export async function upsertVehicle(params: {
   const authority = await vehicleRegistry.lookup(normalised);
 
   return withTransaction(async (client) => {
+    /*
+     * One capture of this plate at a time.
+     *
+     * What follows reads the vehicle and then either updates it or inserts it,
+     * which is a merge when one caller does it and a race when two do. A plain
+     * SELECT takes no lock, and there is no row to lock when the vehicle is new
+     * — so two agents capturing the same vehicle both found nothing, both
+     * inserted, and the second was refused by
+     * `vehicles_registration_number_key`.
+     *
+     * The refusal is the smaller half of that. The capture it refused was
+     * MEANT to be a merge: the code above exists to fold a second sighting into
+     * the record rather than reject it, and the loser's details — the owner's
+     * phone, the expiry the registry returned — were dropped on the floor along
+     * with the request. Two agents at one motor park is not an unusual Tuesday,
+     * and the same window is open between a live capture and an offline draft
+     * syncing the same plate.
+     *
+     * An advisory lock rather than making the two statements one upsert: the
+     * update is selective — `COALESCE` on six columns, and a rule that an
+     * authority outage must not overwrite a confirmed lookup — and the two
+     * branches answer with different `source` values. Reproducing that inside
+     * `ON CONFLICT DO UPDATE` would move the logic into SQL to save a lock.
+     */
+    await advisoryLock(client, LOCK_NAMESPACE.VEHICLE, normalised);
+
     const found = authority.outcome === 'FOUND';
     const record = authority.vehicle;
     const source = found ? 'AUTHORITY_LOOKUP' : 'MANUAL_ENTRY';
@@ -285,6 +312,42 @@ function captureMessage(outcome: VehicleLookupOutcome): string {
  * machinery as a market levy.
  */
 
+/**
+ * The period a renewal of N months grants, counted from wherever cover now ends.
+ *
+ * An early renewal carries the unexpired time forward: a motorist renewing a
+ * month before their papers run out would otherwise pay for twelve months and
+ * receive eleven, and it compounds over a vehicle's life. A vehicle that has
+ * lapsed, or that this platform has never renewed, starts today — back-dating
+ * cover across a period the vehicle was driving unlicensed is a worse answer.
+ *
+ * ONE PLACE, because it is applied twice and the two used to disagree. The
+ * dates worked out when a renewal is RAISED are an estimate: they are computed
+ * from the vehicle's expiry at that moment, and nothing refuses a second
+ * renewal raised beside the first — reasonably, since a motorist may want to
+ * change twelve months to twenty-four. Completion used to write the stored
+ * estimate straight onto the vehicle, so two twelve-month renewals raised
+ * together and both paid granted twelve months of cover for twenty-four months
+ * of money, and a six-month one completed after a twelve-month one moved the
+ * expiry BACKWARDS.
+ *
+ * So the grant recomputes from the live expiry, under a lock, and the estimate
+ * stays what it is. Having one function say what a renewal of N months means
+ * is what stops the two answers drifting again.
+ */
+export function renewalPeriod(
+  currentExpiry: Date | null,
+  months: number,
+  now: Date = new Date(),
+): { periodStart: Date; expiryDate: Date } {
+  const unexpired =
+    currentExpiry && currentExpiry.getTime() > now.getTime() ? new Date(currentExpiry) : null;
+  const periodStart = unexpired ?? now;
+  const expiryDate = new Date(periodStart);
+  expiryDate.setMonth(expiryDate.getMonth() + months);
+  return { periodStart, expiryDate };
+}
+
 export async function initiateRenewal(params: {
   vehicleId: string;
   revenueItemId: string;
@@ -300,6 +363,18 @@ export async function initiateRenewal(params: {
 }) {
   if (![6, 12, 24].includes(params.renewalPeriodMonths)) {
     throw badRequest('Vehicle particulars can be renewed for 6, 12 or 24 months.');
+  }
+
+  const item = await queryOne<{ code: string }>(
+    pool,
+    'SELECT code FROM revenue_items WHERE id = $1',
+    [params.revenueItemId],
+  );
+  if (!item || !VEHICLE_RENEWAL_ITEM_CODES.includes(item.code)) {
+    throw badRequest(
+      'That is not a vehicle renewal. Choose the private or the commercial vehicle particulars renewal.',
+      [{ field: 'revenueItemId', issue: 'Not a vehicle renewal item' }],
+    );
   }
 
   const vehicle = await withTransaction(async (client) =>
@@ -374,14 +449,10 @@ export async function initiateRenewal(params: {
    * across a period the vehicle was driving unlicensed would be a worse answer
    * than starting now.
    */
-  const now = new Date();
-  const unexpired =
-    vehicle.current_expiry_date && vehicle.current_expiry_date.getTime() > now.getTime()
-      ? new Date(vehicle.current_expiry_date)
-      : null;
-  const periodStart = unexpired ?? now;
-  const expiryDate = new Date(periodStart);
-  expiryDate.setMonth(expiryDate.getMonth() + params.renewalPeriodMonths);
+  const { periodStart, expiryDate } = renewalPeriod(
+    vehicle.current_expiry_date,
+    params.renewalPeriodMonths,
+  );
 
   /*
    * Worked out before the assessment, not after, so both carry the same dates.
@@ -540,6 +611,44 @@ export async function completeRenewal(params: {
       );
     }
 
+    /*
+     * THE PERIOD IS DECIDED HERE, not when the renewal was raised.
+     *
+     * The dates on the renewal row were computed from the vehicle's expiry at
+     * the moment it was raised, and nothing refuses a second renewal raised
+     * beside the first. Writing the stored date onto the vehicle therefore
+     * granted whichever estimate landed last: two twelve-month renewals both
+     * paid gave twelve months of cover for twenty-four months of money, and a
+     * six-month renewal completed after a twelve-month one moved the expiry
+     * backwards. Both are in `vehicle-renewal.test.ts`, with the dates.
+     *
+     * `FOR UPDATE` on the vehicle, because this reads its expiry in order to
+     * change it, and two renewals settling at once would otherwise read the
+     * same base again — the same fault one level down.
+     */
+    const live = await queryOne<{ current_expiry_date: Date | null }>(
+      client,
+      'SELECT current_expiry_date FROM vehicles WHERE id = $1 FOR UPDATE',
+      [renewal.vehicle_id],
+    );
+    const granted = renewalPeriod(
+      live?.current_expiry_date ?? null,
+      renewal.renewal_period_months,
+    );
+
+    /*
+     * And the row is corrected to what was granted.
+     *
+     * Otherwise the certificate prints one period and the renewal record keeps
+     * another, which is the disagreement that `expires_at` versus `expiry_date`
+     * already caused once on this table — "neither side knew there was a
+     * disagreement, because neither knew the other's convention".
+     */
+    await client.query(
+      'UPDATE vehicle_renewals SET period_start = $2, expiry_date = $3 WHERE id = $1',
+      [renewal.id, granted.periodStart, granted.expiryDate],
+    );
+
     const verificationCode = generateVerificationCode();
     const issuedAt = new Date();
 
@@ -554,8 +663,8 @@ export async function completeRenewal(params: {
       vehicleType: renewal.vehicle_type,
       colour: renewal.colour,
       renewalPeriodMonths: renewal.renewal_period_months,
-      periodStart: renewal.period_start,
-      expiryDate: renewal.expiry_date,
+      periodStart: granted.periodStart,
+      expiryDate: granted.expiryDate,
       issuedAt,
       transactionReference: renewal.transaction_reference ?? '',
       verificationCode,
@@ -579,7 +688,7 @@ export async function completeRenewal(params: {
        * side knew there was a disagreement, because neither knew the other's
        * convention.
        */
-      expiresAt: endOfDay(renewal.expiry_date),
+      expiresAt: endOfDay(granted.expiryDate),
     });
 
     await client.query(
@@ -591,7 +700,7 @@ export async function completeRenewal(params: {
 
     await client.query('UPDATE vehicles SET current_expiry_date = $2 WHERE id = $1', [
       renewal.vehicle_id,
-      renewal.expiry_date,
+      granted.expiryDate,
     ]);
 
     await recordAudit(client, {
@@ -602,7 +711,7 @@ export async function completeRenewal(params: {
       entityId: renewal.id,
       newValue: {
         documentNumber: document.documentNumber,
-        expiryDate: renewal.expiry_date.toISOString().slice(0, 10),
+        expiryDate: granted.expiryDate.toISOString().slice(0, 10),
         registrationNumber: renewal.registration_number,
       },
     });
@@ -613,7 +722,10 @@ export async function completeRenewal(params: {
         taxpayerId: renewal.taxpayer_id,
         variables: {
           registration: renewal.registration_number,
-          expiry: renewal.expiry_date.toISOString().slice(0, 10),
+          // The granted date, not the estimate the renewal was raised with.
+          // A motorist told one date by text and shown another on the
+          // certificate has no way to know which is theirs.
+          expiry: granted.expiryDate.toISOString().slice(0, 10),
         },
         entityType: 'vehicle_renewal',
         entityId: renewal.id,
@@ -624,7 +736,7 @@ export async function completeRenewal(params: {
       documentId: document.documentId,
       documentNumber: document.documentNumber,
       verificationCode: document.verificationCode,
-      expiryDate: renewal.expiry_date,
+      expiryDate: granted.expiryDate,
       // Carried out of the transaction so the authority can be told once the
       // renewal is durably recorded, rather than while its rows are locked.
       announce: {
@@ -848,12 +960,24 @@ export async function retryAuthorityNotifications(params: {
 }
 
 /** Completed renewals the vehicle authority has not acknowledged. */
-export async function outstandingAuthorityNotifications(db: Db, limit = 100) {
-  return query(
+/**
+ * Renewals the authority has not acknowledged, and how many there are.
+ *
+ * The count is over everything that matches rather than the page returned, for
+ * the reason the refunds queue beside it on `Outstanding.tsx` gives: the screen
+ * showed the array's length, so past the cap the queue reported its own page
+ * size. `count(*) OVER ()` is evaluated before LIMIT.
+ */
+export async function outstandingAuthorityNotifications(
+  db: Db,
+  limit = 100,
+): Promise<{ renewals: Record<string, unknown>[]; matched: number; cap: number }> {
+  const rows = await query<{ matched: string }>(
     db,
     `SELECT r.id, v.registration_number, r.document_number, r.expiry_date,
             r.authority_notification_status, r.authority_notification_reason,
-            r.authority_notification_attempts, r.created_at
+            r.authority_notification_attempts, r.created_at,
+            count(*) OVER ()::text AS matched
        FROM vehicle_renewals r JOIN vehicles v ON v.id = r.vehicle_id
       WHERE r.authority_notification_status <> 'ACCEPTED'
         AND r.status = 'COMPLETED'
@@ -861,6 +985,12 @@ export async function outstandingAuthorityNotifications(db: Db, limit = 100) {
       LIMIT $1`,
     [limit],
   );
+
+  return {
+    renewals: rows.map(({ matched: _matched, ...renewal }) => renewal),
+    matched: Number.parseInt(rows[0]?.matched ?? '0', 10),
+    cap: limit,
+  };
 }
 
 /**
@@ -870,17 +1000,28 @@ export async function outstandingAuthorityNotifications(db: Db, limit = 100) {
  * as vehicles the authority confirmed it holds no record of, and this is the
  * list that exists so nobody has to remember the difference.
  */
-export async function vehiclesAwaitingAuthority(db: Db, limit = 100) {
-  return query(
+export async function vehiclesAwaitingAuthority(
+  db: Db,
+  limit = 100,
+): Promise<{ vehicles: Record<string, unknown>[]; matched: number; cap: number }> {
+  // Counted over all of them, as above.
+  const rows = await query<{ matched: string }>(
     db,
     `SELECT v.id, v.registration_number, v.owner_name, v.make, v.model,
-            v.created_at, v.source
+            v.created_at, v.source,
+            count(*) OVER ()::text AS matched
        FROM vehicles v
       WHERE v.authority_lookup_outcome = 'UNAVAILABLE'
       ORDER BY v.created_at
       LIMIT $1`,
     [limit],
   );
+
+  return {
+    vehicles: rows.map(({ matched: _matched, ...vehicle }) => vehicle),
+    matched: Number.parseInt(rows[0]?.matched ?? '0', 10),
+    cap: limit,
+  };
 }
 
 export { parseKobo };

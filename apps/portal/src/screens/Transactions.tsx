@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
-import { Badge, ErrorAlert, ExportButtons, Loading, Money, ReferenceListFailure, Table, formatDateTime } from '../ui';
+import { Alert, Badge, ErrorAlert, ExportButtons, Loading, Money, ReferenceListFailure, Table, formatDateTime } from '../ui';
 import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
 import { useFilters } from '../lib/filters';
@@ -62,6 +62,9 @@ export function TransactionsScreen() {
     to: '',
   });
 
+  /** The cap this answer hit, or null when the list is all of it. */
+  const [cap, setCap] = useState<number | null>(null);
+
   const buildQuery = useCallback(() => {
     const params = new URLSearchParams({ limit: '200' });
     if (filters.status) params.set('status', filters.status);
@@ -73,10 +76,27 @@ export function TransactionsScreen() {
 
   useEffect(() => {
     setRows(null);
+    setCap(null);
     setRowsError(null);
     api
-      .get<TransactionRow[]>(`/government/transactions?${buildQuery().toString()}`)
-      .then(setRows)
+      .get<TransactionRow[] | { rows: TransactionRow[]; truncated: boolean; cap: number | null }>(
+        `/government/transactions?${buildQuery().toString()}`,
+      )
+      /*
+       * An array or an envelope.
+       *
+       * The endpoint answers `{ rows, truncated, cap }` now, because it had
+       * always computed whether the list was complete and thrown that away for
+       * the one caller that is a person looking at a screen — the export beside
+       * this list has said `-PARTIAL` in its filename since `f24a1f6`, and the
+       * list said nothing. Accepting both shapes keeps an officer on a stale
+       * build looking at a list rather than an error.
+       */
+      .then((answer) => {
+        const list = Array.isArray(answer) ? answer : answer.rows;
+        setRows(list);
+        setCap(Array.isArray(answer) ? null : answer.truncated ? (answer.cap ?? null) : null);
+      })
       /*
        * Its own state, because `rows` stays null on a failure and null renders
        * the skeleton. The officer was shown the refusal at the top of the
@@ -153,6 +173,10 @@ export function TransactionsScreen() {
       </div>
 
       <ErrorAlert error={error} />
+
+      {cap !== null && (
+        <Alert kind="warning">{t.ofcListStoppedAtCap.replace('{{n}}', String(cap))}</Alert>
+      )}
 
       <div className="card card--flush">
         {rowsError ? (

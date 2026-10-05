@@ -56,6 +56,11 @@ import { queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
 import { promoteEligibleCommissions } from '../services/commission';
+import {
+  commissionByPlaceAndPeriod,
+  executiveDashboard,
+  financeOfficerHome,
+} from '../services/reports';
 
 let officerToken = '';
 let secondOfficerToken = '';
@@ -184,6 +189,124 @@ async function attemptPayout() {
     { token: agent.token, deviceId: agent.device, idempotencyKey: `fr-po-${Date.now()}` },
   );
 }
+
+/**
+ * What the State owes, while it decides whether to pay it.
+ *
+ * `commission_liability_kobo` is a tile on two screens, labelled "Commission
+ * liability" over the hint "Accrued and not yet paid". It counted
+ * PENDING, ELIGIBLE and APPROVED.
+ *
+ * ON_HOLD is none of those and is every bit as accrued. A hold moves PENDING
+ * and ELIGIBLE rows to ON_HOLD and a release moves them back to PENDING, so
+ * the only thing that changes when an investigation opens is whether the money
+ * may be paid yet — not whether it is owed. Confirming a fraud flag therefore
+ * reduced the State's stated commission liability by exactly the amount under
+ * investigation, and dismissing the flag put it back. A commission that turns
+ * out to be fraudulent is REVERSED, and leaves the figure then, for a reason.
+ *
+ * Understating a liability is the direction that matters in public finance,
+ * and the amount understated is the amount an officer would most want to see.
+ */
+describe('the commission liability, while a hold is on it', () => {
+  const liabilities = async () => ({
+    executive: (await executiveDashboard(pool)).counts!.commission_liability_kobo as string,
+    finance: (await financeOfficerHome(pool))!.commission_liability_kobo as string,
+  });
+
+  it('does not fall because an investigation opened', async () => {
+    const commissionId = await collect();
+    const before = await liabilities();
+    assert.ok(
+      Number(before.executive) > 0 && Number(before.finance) > 0,
+      `a commission accrued and both tiles show it: ${JSON.stringify(before)}`,
+    );
+
+    const flagId = await flag('HIGH', 'AGENT', agentId);
+    await review(flagId, 'CONFIRMED');
+    assert.equal(await statusOf(commissionId), 'ON_HOLD', 'the hold went on');
+
+    const after = await liabilities();
+    assert.deepEqual(
+      after,
+      before,
+      'opening an investigation moved what the State says it owes in commission. ' +
+        'The money is still accrued and still unpaid, which is what the tile says ' +
+        'it counts',
+    );
+  });
+
+  it('leaves no commission out of the report a Council reads', async () => {
+    /*
+     * `commissionByPlaceAndPeriod` answers "what did Jos North cost us in
+     * commission last quarter" with four columns: accrued, paid, outstanding
+     * and reversed. Those have to add up, and with ON_HOLD in none of them
+     * they did not: the remainder had no column and was exactly the amount an
+     * open investigation had frozen.
+     *
+     * Asserted as the sum rather than as a figure, because the sum is the
+     * property that matters and it cannot be satisfied by a number that
+     * happens to be right once.
+     *
+     * The by-period grouping carries no reversed column, so the identity only
+     * holds there while nothing is reversed. That is a limit of that report
+     * rather than of this test, so the precondition is asserted below instead
+     * of being leaned on quietly.
+     */
+    const commissionId = await collect();
+    const flagId = await flag('HIGH', 'AGENT', agentId);
+    await review(flagId, 'CONFIRMED');
+    assert.equal(await statusOf(commissionId), 'ON_HOLD', 'there is held money to account for');
+
+    const reversed = await queryOne<{ n: string }>(
+      pool,
+      "SELECT count(*)::text AS n FROM commissions WHERE status = 'REVERSED'",
+    );
+    assert.equal(reversed!.n, '0', 'nothing is reversed here, which is what makes the sum below well posed');
+
+    const report = await commissionByPlaceAndPeriod(pool);
+    const rows = [...report.byLga, ...report.byPeriod] as {
+      accrued_kobo: string;
+      paid_kobo: string;
+      outstanding_kobo: string;
+      reversed_kobo?: string;
+    }[];
+    assert.ok(rows.length >= 2, `both groupings returned a row: ${JSON.stringify(report)}`);
+
+    for (const row of rows) {
+      const accounted =
+        BigInt(row.paid_kobo) + BigInt(row.outstanding_kobo) + BigInt(row.reversed_kobo ?? '0');
+      assert.equal(
+        accounted,
+        BigInt(row.accrued_kobo),
+        'the columns do not account for everything accrued, and the remainder ' +
+          `is commission nobody can see: ${JSON.stringify(row)}`,
+      );
+    }
+  });
+
+  it('still leaves the figure when the commission is reversed', async () => {
+    /*
+     * The other half, and the reason this is not simply "count everything
+     * unpaid": a commission on a reversed transaction is not owed, and has to
+     * leave. Without this, including ON_HOLD could have been written as
+     * `status <> 'PAID'` and nothing here would have noticed.
+     */
+    const commissionId = await collect();
+    const before = await liabilities();
+    assert.ok(Number(before.finance) > 0);
+
+    await pool.query(
+      `UPDATE commissions SET status = 'REVERSED', reversal_reason = 'Transaction reversed'
+        WHERE id = $1`,
+      [commissionId],
+    );
+
+    const after = await liabilities();
+    assert.equal(Number(after.finance), 0, 'a reversed commission is still counted as owed');
+    assert.equal(Number(after.executive), 0, 'and on the executive tile too');
+  });
+});
 
 describe('an agent whose fraud was upheld is not paid', () => {
   it('does not make commission earned after the confirmation payable', async () => {

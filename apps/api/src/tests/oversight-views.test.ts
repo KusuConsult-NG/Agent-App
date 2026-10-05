@@ -121,7 +121,11 @@ describe('The parameterised audit questions', () => {
       token: TOKENS.auditor!,
     });
     assert.equal(response.status, 200, JSON.stringify(response.body));
-    assert.ok(Array.isArray(response.body));
+    // `{ rows, truncated, cap }`: this answer is capped at a thousand receipts
+    // and used to be a bare array, so a thousand was indistinguishable from all
+    // of them.
+    assert.ok(Array.isArray(response.body.rows), JSON.stringify(response.body).slice(0, 200));
+    assert.equal(response.body.truncated, false);
   });
 
   it('gives whoever can ask the question the lists it needs to be asked with', async () => {

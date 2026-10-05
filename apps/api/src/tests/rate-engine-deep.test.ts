@@ -192,6 +192,58 @@ describe('FORMULA rate — safe arithmetic evaluator', () => {
     assert.equal(evaluateFormula('10000 / 2', {}), 5000n);
   });
 
+  it('gives one bill for one rate, however the formula is written', () => {
+    // Each division used to round on the spot, and whatever followed
+    // multiplied the rounding: "₦500 per ten square metres" charged a 15 m²
+    // shop ₦1,000 written one way and ₦750 written the other.
+    assert.equal(evaluateFormula('area / 10 * 50000', { area: 15 }), 75000n);
+    assert.equal(evaluateFormula('area * 50000 / 10', { area: 15 }), 75000n);
+    assert.equal(evaluateFormula('(rooms / 3) * 3', { rooms: 4 }), 4n);
+    assert.equal(evaluateFormula('1 / 3 + 1 / 3 + 1 / 3', {}), 1n);
+  });
+
+  it('rounds the final value half-up, and symmetrically below zero', () => {
+    assert.equal(evaluateFormula('5 / 2 - 0', {}), 3n);
+    assert.equal(evaluateFormula('0 - 5 / 2', {}), -3n);
+    assert.equal(evaluateFormula('7 / 3', {}), 2n);
+  });
+
+  it('checks each formula input the way the other rate types check theirs', () => {
+    // A bare money parser read these: "15.5" was a 422 about kobo naming no
+    // field, and "-3" was accepted, so `area * 5` came to -15.
+    const refusal = (value: unknown) => {
+      try {
+        evaluateFormula('area * 5', { area: value as string });
+      } catch (error) {
+        return error as { statusCode?: number; message: string; details?: { field: string }[] };
+      }
+      return null;
+    };
+    for (const value of ['abc', '1,500', '1e3', '']) {
+      const error = refusal(value);
+      assert.equal(error?.statusCode, 400, `${JSON.stringify(value)} was not refused as a bad input`);
+      assert.equal(error?.details?.[0]?.field, 'area');
+    }
+    assert.match(refusal('abc')!.message, /"area" must be a number/);
+    const negative = refusal('-3');
+    assert.equal(negative?.statusCode, 400, 'a negative area was accepted and lowered the bill');
+    assert.equal(negative?.details?.[0]?.field, 'area');
+    assert.match(negative!.message, /cannot be negative/);
+    // And the ones that were always fine still are.
+    assert.equal(evaluateFormula('area * 5', { area: '15' }), 75n);
+    assert.equal(evaluateFormula('area * 5', { area: 0 }), 0n);
+    assert.equal(evaluateFormula('extra * 500', { extra: true }), 500n);
+  });
+
+  it('reads a measurement that is not whole exactly, and rounds only the bill', () => {
+    // A shop is often 15.5 m². Read exactly, 15.5 × 5 is 77.5, rounded once
+    // to 78 — not refused, and not rounded to 16 on the way in.
+    assert.equal(evaluateFormula('area * 5', { area: '15.5' }), 78n);
+    assert.equal(evaluateFormula('area * 5', { area: 15.5 }), 78n);
+    assert.equal(evaluateFormula('area * 50000', { area: '12.25' }), 612500n);
+    assert.equal(evaluateFormula('rate * 3 * 10', { rate: '0.1' }), 3n);
+  });
+
   it('throws 400 on division by zero', () => {
     assert.throws(
       () => computeAmount(baseRate({ rate_type: 'FORMULA', formula: 'baseAmountKobo / 0' }), { baseAmountKobo: '100000' }),

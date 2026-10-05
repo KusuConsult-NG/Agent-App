@@ -65,6 +65,8 @@ interface PaidRow {
 }
 
 interface PaidHistory {
+  /** True when the window holds more payments than `rows` carries. */
+  truncated: boolean;
   summary: { payments: number; totalKobo: string; returnedKobo: string; byItem: ByItem[] };
   rows: PaidRow[];
 }
@@ -455,6 +457,21 @@ function PaymentHistory({ taxpayerId }: { taxpayerId: string }) {
           ) : null}
 
           <p className="section-title">{t.ofcPhEachPayment}</p>
+
+          {/*
+            * An officer answering "what have I paid" reads this list out, and
+            * the panel is introduced as an answer the taxpayer can check
+            * against their receipts. A capped list read out as a complete one
+            * is the officer unknowingly contradicting the paper in somebody's
+            * hand, so the cap is said here rather than inferred from a row
+            * count matching a round number.
+            */}
+          {history.truncated ? (
+            <Alert kind="info">
+              {t.ofcPhPartial.replace(/\{\{n\}\}/g, String(history.rows.length))}
+            </Alert>
+          ) : null}
+
           <Table
             columns={[
               {

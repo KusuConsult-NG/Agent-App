@@ -30,11 +30,13 @@ export type TransactionState = (typeof TRANSACTION_STATES)[number];
 
 /**
  * The happy path is a straight line; every branch off it is terminal or
- * requires an approved workflow to leave.
+ * requires an approved workflow to leave — except a failed payment attempt,
+ * which may be tried again (see FAILED below).
  *
  * Two properties are load-bearing and enforced here rather than in prose:
  *   1. Nothing reaches PAYMENT_SUCCESSFUL except from a payment-in-flight
- *      state, and only the gateway verification path may drive it (PRD §95).
+ *      state — including one held UNDER_REVIEW, see below — and only the
+ *      gateway verification path may drive it (PRD §95).
  *   2. RECEIPT_GENERATED is reachable only from RECONCILIATION_PENDING, so a
  *      failed payment, an unverified one, or one the gateway confirmed and
  *      never handed over can never produce a valid receipt (PRD §84, §88.26).
@@ -62,8 +64,59 @@ export const TRANSACTION_TRANSITIONS: Record<TransactionState, readonly Transact
   RECONCILIATION_PENDING: ['RECEIPT_GENERATED', 'SETTLED', 'UNDER_REVIEW', 'REVERSED', 'REFUNDED'],
   RECEIPT_GENERATED: ['SETTLED', 'UNDER_REVIEW', 'REVERSED', 'REFUNDED'],
   SETTLED: ['REVERSED', 'REFUNDED', 'UNDER_REVIEW'],
-  UNDER_REVIEW: ['SETTLED', 'RECONCILIATION_PENDING', 'REVERSED', 'REFUNDED', 'RECEIPT_GENERATED'],
-  FAILED: ['CANCELLED'],
+  /*
+   * A payment held for review is settled by the gateway's next answer.
+   *
+   * The one thing that puts a transaction here is the gateway confirming a
+   * payment for an amount that is not the bill's: the payment is held, a
+   * CRITICAL flag raised, and the agent told it is under review. Nothing led
+   * out. Measured: the gateway corrected its figure and Confirm was refused
+   * with "Transaction cannot move from UNDER_REVIEW to PAYMENT_SUCCESSFUL";
+   * the gateway returned the money and its webhook was acknowledged with
+   * "cannot move from UNDER_REVIEW to FAILED". The bill could then not be
+   * paid, issued again, withdrawn or have an objection to it upheld — every
+   * one of those waits for a payment to finish, and this one never could.
+   *
+   * So the gateway verification path may take it on, as it would have from
+   * PAYMENT_PENDING: to PAYMENT_SUCCESSFUL when the gateway now reports the
+   * bill's amount, which is still checked before anything is recorded; to
+   * FAILED when it reports the payment failed or the money went back. Both
+   * are moves for a payment still in flight — a payment already VERIFIED is
+   * answered before either is considered — so property 1 above holds.
+   *
+   * RECEIPT_GENERATED is no longer reachable from here. Property 2 says the
+   * only door into a receipt is RECONCILIATION_PENDING, and this edge was a
+   * second one; with a held payment now able to become successful, it would
+   * have been a way to a receipt that skipped verification altogether.
+   */
+  UNDER_REVIEW: [
+    'PAYMENT_SUCCESSFUL',
+    'FAILED',
+    'SETTLED',
+    'RECONCILIATION_PENDING',
+    'REVERSED',
+    'REFUNDED',
+  ],
+  /*
+   * A failed attempt is not a failed debt.
+   *
+   * FAILED used to lead only to CANCELLED, and nothing ever made that move,
+   * so a declined card — or a USSD session the citizen walked away from,
+   * which the gateway reports as ABANDONED and this machine records as
+   * FAILED — ended the bill's life as something that could be paid. The
+   * payment path refused every later attempt with TRANSACTION_NOT_PAYABLE,
+   * no transaction is ever raised beside the first, and the agent's screen
+   * said "You can start the payment again" over a button it did not draw.
+   * Measured: one declined attempt, and the invoice stayed UNPAID and listed
+   * with "Take this payment" until the day it lapsed, unpayable throughout.
+   *
+   * So another attempt is a legal move. It goes through PAYMENT_INITIATED
+   * like the first, so the property above holds: nothing reaches
+   * PAYMENT_SUCCESSFUL except from a payment in flight. The failed attempt
+   * keeps its own payment row and its journal entry; only one attempt can be
+   * in flight at once, which `idx_payments_one_active` enforces underneath.
+   */
+  FAILED: ['PAYMENT_INITIATED', 'CANCELLED'],
   CANCELLED: [],
   EXPIRED: [],
   REVERSED: [],
@@ -77,6 +130,22 @@ export const REVENUE_RECOGNISED_STATES: readonly TransactionState[] = [
   'RECONCILIATION_PENDING',
   'SETTLED',
 ];
+
+/**
+ * States that mean money the State had went back to the payer.
+ *
+ * A subset of `TERMINAL_STATES`, which also holds CANCELLED and EXPIRED —
+ * and the distinction is the whole point of having this. A cancelled
+ * assessment is money that was never taken; a reversed one is money that was
+ * taken and returned. Anything measuring how much came back has to tell those
+ * apart, and `TERMINAL_STATES` cannot.
+ *
+ * Declared here because four modules in the API had written the pair out by
+ * hand. That is the same drift `lib/revenue-states.ts` was written to stop,
+ * for the same reason: a hand-written copy of a definition reads as plausible
+ * whatever it says.
+ */
+export const RETURNED_STATES: readonly TransactionState[] = ['REVERSED', 'REFUNDED'];
 
 /** States from which no further financial movement is expected. */
 export const TERMINAL_STATES: readonly TransactionState[] = [
@@ -181,12 +250,24 @@ export const RECONCILIATION_EXCEPTIONS: readonly ReconciliationState[] = [
 ];
 
 export class IllegalTransitionError extends Error {
+  /**
+   * Which state machine refused, kept rather than only interpolated.
+   *
+   * It was in the message and nowhere else, so the one caller that needs it —
+   * the API's error handler, deciding what the refusal may claim about a
+   * taxpayer's money — would have had to parse the sentence back. A
+   * commission's refusal and a transaction's are not the same answer to that
+   * question: one is the agent's fee and the other is the money a citizen
+   * handed over.
+   */
+  readonly entity: string;
   readonly from: string;
   readonly to: string;
 
   constructor(entity: string, from: string, to: string) {
     super(`${entity} cannot move from ${from} to ${to}`);
     this.name = 'IllegalTransitionError';
+    this.entity = entity;
     this.from = from;
     this.to = to;
   }

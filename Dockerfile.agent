@@ -58,6 +58,34 @@ COPY apps/agent ./apps/agent
 COPY apps/portal ./apps/portal
 
 RUN npm run build --workspace @psirs/shared
+# ---------------------------------------------------------------------------
+# The one build-time setting either client has, and the reason it is declared.
+#
+# apps/agent/src/lib/verification-url.ts reads
+# `import.meta.env.VITE_VERIFICATION_BASE_URL`: the public address printed and
+# QR-encoded onto a thermal paper receipt. Vite picks prefixed names out of the
+# build environment and bakes the value into the bundle.
+#
+# In a Docker build a name reaches `RUN` only if the stage declares it. Without
+# this line the variable is unreachable in the only front-end image this
+# repository ships — `--build-arg` is dropped with a warning, a platform's
+# service variable never arrives, and the bundle is built with the value
+# absent. packages/shared/src/escpos.ts emits the QR block only when a URL is
+# supplied, so every receipt then prints with no QR code and no link at all,
+# while nothing fails and no log says so.
+#
+# Absent stays a legitimate value — the note at the top of verification-url.ts
+# explains why a missing link beats a wrong one — so there is no default and
+# no startup check. What this declaration changes is only that an operator who
+# sets it gets it.
+#
+# It is NOT the API's `VERIFICATION_BASE_URL`. That one is read at runtime by
+# apps/api/src/lib/public-urls.ts and governs the QR on PDF certificates and
+# the referee, attestation and citizen links. The two cover different paper
+# and both have to be set; on a single-origin deployment both carry the
+# `/portal` subpath.
+# ---------------------------------------------------------------------------
+ARG VITE_VERIFICATION_BASE_URL
 RUN npm run build --workspace @psirs/agent
 
 # ---------------------------------------------------------------------------
@@ -70,8 +98,8 @@ RUN npm run build --workspace @psirs/agent
 # names the cause.
 #
 # `--base=/portal/` on the command line rather than `base` in
-# vite.config.ts, so the same source still builds for `/` in
-# Dockerfile.portal and in `npm run dev`. Verified: the emitted index.html
+# vite.config.ts, so the same source still builds for `/` under `npm run dev`,
+# where the portal is served on its own port. Verified: the emitted index.html
 # names /portal/assets/... and /portal/icon.svg.
 #
 # This rewrites build-time asset URLs only. `API_BASE = '/api/v1'` in
@@ -92,6 +120,33 @@ FROM nginx:1.27-alpine AS runner
 # image exists to provide never in effect.
 RUN rm -rf /etc/nginx/conf.d/default.conf
 
+# ---------------------------------------------------------------------------
+# The security headers, written once because nginx will not merge them.
+#
+# `add_header` does not accumulate across scopes. A location declaring any
+# `add_header` of its own REPLACES the inherited set instead of adding to it,
+# so these four written once at server scope were served on `/`, `/index.html`
+# and `/portal/` and on nothing else: every location that sets a
+# `Cache-Control` — /sw.js, both /assets/ prefixes, the manifest and the icon
+# regex — answered with none of them.
+#
+# The documents keeping them is why it went unnoticed. Clickjacking and
+# referrer leakage are document concerns, and the documents were covered. What
+# was lost is `nosniff` on every static asset, which is the one of the four
+# that means something on a script, a stylesheet or an SVG.
+#
+# One file included at every scope that needs it, rather than four lines
+# repeated six times, so the set cannot drift between locations. It carries no
+# `${...}` names and is therefore not a template — `NGINX_ENVSUBST_FILTER`
+# does not reach it and does not need to.
+# ---------------------------------------------------------------------------
+COPY <<'EOF' /etc/nginx/snippets/psirs-security-headers.conf
+add_header X-Frame-Options "DENY" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Permissions-Policy "geolocation=(self), camera=(self), microphone=()" always;
+EOF
+
 COPY <<'EOF' /etc/nginx/templates/default.conf.template
 server {
     listen ${PORT} default_server;
@@ -99,10 +154,7 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
-    add_header X-Frame-Options "DENY" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Permissions-Policy "geolocation=(self), camera=(self), microphone=()" always;
+    include /etc/nginx/snippets/psirs-security-headers.conf;
 
     gzip on;
     gzip_vary on;
@@ -113,6 +165,7 @@ server {
     # decides what an agent may be shown offline, so a stale copy is a
     # correctness problem and not just a slow update.
     location = /sw.js {
+        include /etc/nginx/snippets/psirs-security-headers.conf;
         add_header Cache-Control "no-cache, no-store, must-revalidate";
         expires 0;
     }
@@ -183,6 +236,7 @@ server {
     # block below.
     # --------------------------------------------------------------------
     location ^~ /portal/assets/ {
+        include /etc/nginx/snippets/psirs-security-headers.conf;
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
@@ -213,6 +267,7 @@ server {
 
     # The agent's hashed assets.
     location ^~ /assets/ {
+        include /etc/nginx/snippets/psirs-security-headers.conf;
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
@@ -248,6 +303,7 @@ server {
     # always, and reaches nothing else.
     # ------------------------------------------------------------------
     location = /manifest.webmanifest {
+        include /etc/nginx/snippets/psirs-security-headers.conf;
         default_type application/manifest+json;
         expires 7d;
         add_header Cache-Control "public";
@@ -259,6 +315,7 @@ server {
     # disk is the right answer, and a missing one should 404 rather than
     # fall back to an HTML shell.
     location ~* \.(?:manifest|webmanifest|svg|png|ico)$ {
+        include /etc/nginx/snippets/psirs-security-headers.conf;
         expires 7d;
         add_header Cache-Control "public";
     }
@@ -348,7 +405,7 @@ RUN chmod +x /docker-entrypoint.d/10-default-port.envsh
 # while serving the agent service's hostname is how a service pointed at the
 # wrong image came to light. `agent+portal` distinguishes this file from
 # `Dockerfile.portal`, which is the portal alone.
-ENV PSIRS_APP=agent+portal
+ENV PSIRS_APP=from-Dockerfile.agent
 
 # Refuse to start rather than serve a front end that cannot reach its API.
 # An empty API_ORIGIN substitutes to `proxy_pass http://;`, which nginx
@@ -358,7 +415,7 @@ ENV PSIRS_APP=agent+portal
 COPY <<'SH' /docker-entrypoint.d/05-require-api-origin.sh
 #!/bin/sh
 set -e
-echo "05-require-api-origin.sh: this is the ${PSIRS_APP:-unknown} front-end image"
+echo "05-require-api-origin.sh: this image was built ${PSIRS_APP:-from an unknown Dockerfile}"
 echo "05-require-api-origin.sh: agent at /, officer portal and public verification at /portal/"
 if [ -z "${API_ORIGIN:-}" ]; then
   echo "FATAL: API_ORIGIN is not set." >&2

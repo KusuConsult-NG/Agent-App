@@ -365,18 +365,26 @@ referee who later fails verification automatically withdraws
 ```
 INITIATED → ASSESSMENT_CREATED → INVOICE_GENERATED → PAYMENT_INITIATED
    → PAYMENT_PENDING → PAYMENT_SUCCESSFUL → PAYMENT_VERIFIED
-   → RECEIPT_GENERATED → RECONCILIATION_PENDING → SETTLED
+   → RECONCILIATION_PENDING → RECEIPT_GENERATED → SETTLED
 
 branches: FAILED · CANCELLED · EXPIRED · UNDER_REVIEW · REVERSED · REFUNDED
+FAILED → PAYMENT_INITIATED   (another attempt, while the bill is still in date)
 ```
 
 Transitions are data (`TRANSACTION_TRANSITIONS`), not scattered conditionals, so
 every state change passes one guard and every illegal transition is a loud,
 audited failure. Two properties are load-bearing:
 
-1. nothing reaches `PAYMENT_SUCCESSFUL` except through the gateway verification
-   path;
-2. `RECEIPT_GENERATED` is reachable only from `PAYMENT_VERIFIED`.
+1. nothing reaches `PAYMENT_SUCCESSFUL` except from a payment in flight, through
+   the gateway verification path;
+2. `RECEIPT_GENERATED` is reachable only from `RECONCILIATION_PENDING` — the
+   gateway confirming a payment earns the taxpayer an acknowledgement, and the
+   receipt waits for the money to reach a government account.
+
+A failed attempt ends that attempt, not the bill: a declined card or an
+abandoned USSD session leaves the transaction FAILED, and the next attempt
+starts again at `PAYMENT_INITIATED`. Each attempt keeps its own payment row, and
+only one can be in flight at a time (`idx_payments_one_active`).
 
 ## Reconciliation
 
