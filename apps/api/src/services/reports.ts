@@ -472,6 +472,25 @@ export async function geographicIntelligence(
   const { statewide, territoryIds, lgaIds } = scopeParams(scope);
 
   /*
+   * Whether "registered here" can be counted for this caller at all.
+   *
+   * A territory is the area an agent collects in, and every transaction
+   * carries one — but a taxpayer does not. The register is kept by LGA, ward
+   * and community, and nothing records which registered taxpayers belong to
+   * a territory (`territories.ward_ids` exists and nothing reads it). So for a
+   * supervisor the figure divided their territory's payers by the whole
+   * place's register: measured with two territories in one LGA, a supervisor
+   * whose one trader paid was shown 25% (1 of 4) where an administrator
+   * looking at the same LGA, where all four had paid, was shown 100%.
+   * Every level had the same mismatch.
+   *
+   * Until a territory's register is defined, a territory view says the share
+   * is unknown rather than showing one that is wrong, and does not show the
+   * place's whole register either, which is not the supervisor's figure.
+   */
+  const registerKnown = statewide;
+
+  /*
    * A drill-down is a filter the caller supplies, and a scope is a filter they
    * do not get to supply. Asking for an LGA outside the scope must return that
    * LGA's rows filtered to nothing rather than the LGA's real figures — which
@@ -503,7 +522,7 @@ export async function geographicIntelligence(
           AND ${transactionScopeSql('t', 4, 5)}
         GROUP BY tp.community ORDER BY SUM(t.amount_kobo) DESC`,
       [params.wardId, from, to, statewide, territoryIds, previousFrom, previousTo],
-    ).then((rows) => rows.map(withGrowthAndCompliance));
+    ).then((rows) => rows.map((row) => withGrowthAndCompliance(row, registerKnown)));
   }
 
   if (params.lgaId) {
@@ -529,7 +548,7 @@ export async function geographicIntelligence(
         WHERE w.lga_id = $1 AND ($4 OR w.lga_id = ANY($6::uuid[]))
         GROUP BY w.name, w.id ORDER BY COALESCE(SUM(t.amount_kobo),0) DESC`,
       [params.lgaId, from, to, statewide, territoryIds, lgaIds, previousFrom, previousTo],
-    ).then((rows) => rows.map(withGrowthAndCompliance));
+    ).then((rows) => rows.map((row) => withGrowthAndCompliance(row, registerKnown)));
   }
 
   /*
@@ -574,7 +593,7 @@ export async function geographicIntelligence(
       WHERE ${lgaScopeSql('l', 3, 5)}
       GROUP BY l.name, l.id, l.zone ORDER BY COALESCE(SUM(t.amount_kobo),0) DESC`,
     [from, to, statewide, territoryIds, lgaIds, previousFrom, previousTo],
-  ).then((rows) => rows.map(withGrowthAndCompliance));
+  ).then((rows) => rows.map((row) => withGrowthAndCompliance(row, registerKnown)));
 }
 
 /**
@@ -603,16 +622,23 @@ function precedingWindow(from: Date, to: Date): { previousFrom: Date; previousTo
  * divide by — "grew 0%" and "there was nothing here before" are different
  * answers, and only one is true of a newly deployed ward.
  */
-function withGrowthAndCompliance(row: Record<string, unknown>): Record<string, unknown> {
+function withGrowthAndCompliance(
+  row: Record<string, unknown>,
+  registerKnown: boolean,
+): Record<string, unknown> {
   const current = BigInt((row.amount_kobo as string) ?? '0');
   const previous = BigInt((row.previous_amount_kobo as string) ?? '0');
   const registered = Number((row.registered_taxpayers as string) ?? '0');
   const paying = Number((row.taxpayers as string) ?? '0');
+  const growth_bp =
+    previous > 0n ? Number(((current - previous) * 10_000n) / previous) : null;
 
+  if (!registerKnown) {
+    return { ...row, growth_bp, registered_taxpayers: null, compliance_bp: null };
+  }
   return {
     ...row,
-    growth_bp:
-      previous > 0n ? Number(((current - previous) * 10_000n) / previous) : null,
+    growth_bp,
     compliance_bp: registered > 0 ? Math.round((paying / registered) * 10_000) : null,
   };
 }

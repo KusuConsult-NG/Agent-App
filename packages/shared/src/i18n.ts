@@ -2405,6 +2405,7 @@ export interface TranslationDictionary {
   ofcDbShareOfMonth: string;
   ofcRvAverageTransaction: string;
   ofcRvCompliance: string;
+  ofcRvComplianceTerritory: string;
   ofcRvComplianceHint: string;
   ofcPfGrowth: string;
   ofcPfCategories: string;
@@ -6270,6 +6271,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcDbShareOfMonth: "Share of the month",
     ofcRvAverageTransaction: "Average transaction",
     ofcRvCompliance: "Register paying",
+    ofcRvComplianceTerritory: "Register paying is not shown for a territory. The platform does not record which registered taxpayers belong to a territory, so it cannot say what share of them paid.",
     ofcRvComplianceHint: "The share of taxpayers registered here who paid anything in the period.",
     ofcPfGrowth: "Against last month",
     ofcPfCategories: "Levies worked",
@@ -9924,6 +9926,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcDbShareOfMonth: "Kason watan",
     ofcRvAverageTransaction: "Matsakaicin ma’amala",
     ofcRvCompliance: "Rajistar da ke biya",
+    ofcRvComplianceTerritory: "Ba a nuna rajistar da ke biya ga yanki ba. Dandalin bai rubuta wadanne masu biyan haraji da aka yi rajista ne na wani yanki ba, don haka ba zai iya fadin kason da suka biya ba.",
     ofcRvComplianceHint: "Kason masu biyan haraji da aka yi rajista a nan da suka biya wani abu a lokacin.",
     ofcPfGrowth: "Kan watan jiya",
     ofcPfCategories: "Harajin da ake aiki da su",
