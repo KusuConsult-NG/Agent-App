@@ -55,6 +55,7 @@
 import { formatNaira } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { UNDER_OPEN_OBJECTION_SQL } from '../lib/enforcement-suspended';
+import { chargePeriodShutSql } from '../lib/payable-invoice';
 import { pool, query, withTransaction } from '../db/pool';
 import { queueNotification } from './notifications';
 import { citizenPortalUrl } from '../lib/public-urls';
@@ -178,6 +179,19 @@ async function processWindow(
       -- is dismissed the invoice becomes eligible again on its own, because
       -- this is a predicate and not a flag.
       AND NOT ${UNDER_OPEN_OBJECTION_SQL}
+      -- And only a bill that can be paid as it stands.
+      --
+      -- A bill whose charge was ended by a reversal, or that was raised in a
+      -- month since closed, is owed but has to be issued again before anybody
+      -- can pay it. Every reminder ends "pay now" with a link, and for these
+      -- that was a link to a payment that would be refused. They stay on the
+      -- arrears worklist, marked as needing to be issued again, and once one
+      -- is, the new bill is reminded about like any other.
+      AND EXISTS (
+            SELECT 1 FROM transactions tx
+             WHERE tx.invoice_id = i.id
+               AND tx.status IN ('INVOICE_GENERATED', 'FAILED', 'PAYMENT_INITIATED', 'PAYMENT_PENDING')
+               AND ${chargePeriodShutSql('tx')} IS NULL)
       AND i.expires_at IS NOT NULL
       AND i.expires_at > now() + INTERVAL '2 days'
       AND i.expires_at BETWEEN now() + ($1 || ' days')::INTERVAL

@@ -104,15 +104,35 @@ beforeEach(async () => {
    * cleared. Thirty days is what the platform issues, so the two-week window
    * is the one a real invoice actually reaches.
    */
-  await query(
+  const invoice = await queryOne<{ id: string }>(
     pool,
     `INSERT INTO invoices (invoice_number, assessment_id, taxpayer_id, amount_kobo,
                            total_amount_kobo, verification_code, created_by, status, expires_at,
                            reminder_sent_2w)
      SELECT 'INV-RM-1', $1, $2, 300000, 300000, 'RMCODE1', u.id, 'UNPAID',
             now() + interval '14 days', false
-       FROM users u WHERE u.phone = $3 LIMIT 1`,
+       FROM users u WHERE u.phone = $3 LIMIT 1
+     RETURNING id`,
     [assessment!.id, taxpayer!.id, OFFICER],
+  );
+
+  /*
+   * And the charge that goes with it.
+   *
+   * `raiseInvoiceIn` is the only thing that writes an invoice, and it writes
+   * the transaction in the same breath. The sweep reminds only a bill that can
+   * be paid as it stands, which it reads from that transaction, so an invoice
+   * on its own is a state the platform cannot produce and the sweep rightly
+   * passes it by.
+   */
+  await query(
+    pool,
+    `INSERT INTO transactions (transaction_reference, taxpayer_id, invoice_id, assessment_id,
+                               revenue_item_id, lga_id, amount_kobo, total_amount_kobo,
+                               status, created_by)
+     SELECT 'TXN-RM-1', $1, $2, $3, $4, $5, 300000, 300000, 'INVOICE_GENERATED', u.id
+       FROM users u WHERE u.phone = $6 LIMIT 1`,
+    [taxpayer!.id, invoice!.id, assessment!.id, item, lgaId, OFFICER],
   );
 
   // The wording switched on for this event only: the sweep's own cases take

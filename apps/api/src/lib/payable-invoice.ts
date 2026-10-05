@@ -76,6 +76,11 @@ export const OWED_INVOICE_SQL = `(i.status IN ('UNPAID', 'PARTIALLY_PAID', 'EXPI
  * Read on Plateau's calendar, as the close and its lock read it (migration
  * 093). A bill raised in a month since closed cannot be paid as it stands:
  * paying it would add to the figure the close froze. It is issued again into
- * an open month first. Written against the alias `t` for `transactions`.
+ * an open month first. The alias names `transactions` in the caller's query —
+ * a constant from code, never input.
  */
-export const CHARGE_PERIOD_SHUT_SQL = `period_is_shut((t.created_at AT TIME ZONE 'Africa/Lagos')::date)`;
+export const chargePeriodShutSql = (alias: string) =>
+  `period_is_shut((${alias}.created_at AT TIME ZONE 'Africa/Lagos')::date)`;
+
+/** The same, against the alias `t`. */
+export const CHARGE_PERIOD_SHUT_SQL = chargePeriodShutSql('t');

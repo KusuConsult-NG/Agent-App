@@ -325,6 +325,49 @@ describe('The reminder sweep only counts what it actually queued', () => {
  * the platform gave it, so the day a revenue item is given a longer window to
  * pay this fails rather than the comment quietly going out of date.
  */
+describe('a bill that has to be issued again before it can be paid', () => {
+  /*
+   * Every reminder ends "pay now" with a link. For a bill whose charge a
+   * reversal ended, or that was raised in a month since closed, that was a
+   * link to a payment the platform would refuse.
+   */
+  it('is not told to pay when its charge was ended by a reversal', async () => {
+    const invoiceId = await invoiceDueAt('21', twoWeeksOut());
+    await pool.query(`UPDATE transactions SET status = 'REVERSED' WHERE invoice_id = $1`, [invoiceId]);
+
+    await sendDueReminders(pool);
+    assert.deepEqual(await messagesFor(invoiceId), []);
+    assert.equal(await reminderFlag(invoiceId), false, 'and its flag is left for the bill it becomes');
+  });
+
+  it('is not told to pay when its month has been closed', async () => {
+    const invoiceId = await invoiceDueAt('22', twoWeeksOut());
+    const now = new Date();
+    const lastMonth = {
+      start: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)),
+      end: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0)),
+      during: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 15, 10)),
+    };
+    await pool.query('ALTER TABLE transactions DISABLE TRIGGER transactions_immutable');
+    try {
+      await pool.query('UPDATE transactions SET created_at = $2 WHERE invoice_id = $1', [
+        invoiceId,
+        lastMonth.during,
+      ]);
+    } finally {
+      await pool.query('ALTER TABLE transactions ENABLE TRIGGER transactions_immutable');
+    }
+    await pool.query(
+      `INSERT INTO financial_periods (label, period_start, period_end, status, closed_at, closed_by, closing_note)
+       VALUES ('Last month', $1, $2, 'CLOSED', now(), (SELECT id FROM users LIMIT 1), 'Reconciled.')`,
+      [lastMonth.start, lastMonth.end],
+    );
+
+    await sendDueReminders(pool);
+    assert.deepEqual(await messagesFor(invoiceId), []);
+  });
+});
+
 describe('the reminder ladder, against the invoices the platform issues', () => {
   const window = (event: string) => {
     const found = REMINDER_WINDOWS.find((entry) => entry.event === event);
