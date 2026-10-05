@@ -23,21 +23,21 @@
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.2",
     "pdfkit": "^0.20.2",
-    "pg": "^8.13.1",
+    "pg": "^8.23.1",
     "qrcode": "^1.5.4",
     "web-push": "^3.6.7",
-    "zod": "^4.6.2"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.7",
-    "@types/node": "^26.5.1",
+    "@types/node": "^26.6.4",
     "@types/pdfkit": "^0.17.6",
     "@types/pg": "^8.11.10",
     "@types/qrcode": "^1.5.5",
     "@types/web-push": "^3.6.4",
-    "tsx": "^4.23.13",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }
