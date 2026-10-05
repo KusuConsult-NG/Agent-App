@@ -67,6 +67,7 @@ interface Figures {
   transaction_count: string;
   unreconciled: string;
   pending_payments: string;
+  awaiting_settlement: string;
 }
 
 export function PeriodsScreen({ user }: { user: User }) {
@@ -354,7 +355,9 @@ function CloseOrReopen({
   const outstanding: number | 'unknown' =
     figures === null || figures === 'unavailable'
       ? 'unknown'
-      : Number(figures.unreconciled) + Number(figures.pending_payments);
+      : Number(figures.unreconciled) +
+        Number(figures.pending_payments) +
+        Number(figures.awaiting_settlement);
 
   /*
    * A reason is needed whenever the server might ask for one.
@@ -451,7 +454,8 @@ function CloseOrReopen({
                   <p>{t.ofcPeNotReadyBody}</p>
                   <p>
                     {t.ofcPeUnreconciled}: <strong>{figures.unreconciled}</strong> ·{' '}
-                    {t.ofcPePendingPayments}: <strong>{figures.pending_payments}</strong>
+                    {t.ofcPePendingPayments}: <strong>{figures.pending_payments}</strong> ·{' '}
+                    {t.ofcPeAwaitingSettlement}: <strong>{figures.awaiting_settlement}</strong>
                   </p>
                 </Alert>
               )}

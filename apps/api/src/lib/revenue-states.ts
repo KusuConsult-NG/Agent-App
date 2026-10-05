@@ -81,3 +81,23 @@ export const MONEY_TAKEN_STATES_SQL = asSqlList([
   ...REVENUE_RECOGNISED_STATES,
   ...RETURNED_STATES,
 ]);
+
+/**
+ * The recognised states in which the money has not yet reached a government
+ * account: confirmed by the gateway, not yet matched to a bank credit.
+ *
+ * A collection becomes RECEIPT_GENERATED when a bank statement covering it is
+ * matched, and SETTLED after that. Until then it is counted as collected and
+ * is not an exception (settlement takes a day or two), but nobody can yet
+ * point to it in the State's account. Closing a month waits for these
+ * (`periods.ts`), because the month's settled figure, and the bank credits
+ * that would complete it, freeze with the close.
+ *
+ * Written as the recognised set less the states a matched credit reaches, so
+ * a recognised state added later lands here until somebody says otherwise:
+ * the safe side for a question asked before a figure is frozen.
+ */
+const BANKED_STATES: readonly string[] = ['RECEIPT_GENERATED', 'SETTLED'];
+export const AWAITING_SETTLEMENT_STATES_SQL = asSqlList(
+  REVENUE_RECOGNISED_STATES.filter((state) => !BANKED_STATES.includes(state)),
+);

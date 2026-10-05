@@ -106,7 +106,11 @@ async function close(periodId: string, body: Record<string, unknown> = {}) {
 }
 
 /** A verified collection dated inside a chosen month. */
-async function backdatedCollection(when: Date, amountKobo = 5_000_000n): Promise<string> {
+async function backdatedCollection(
+  when: Date,
+  amountKobo = 5_000_000n,
+  status = 'SETTLED',
+): Promise<string> {
   const row = await queryOne<{ id: string }>(
     pool,
     `INSERT INTO transactions (
@@ -115,10 +119,10 @@ async function backdatedCollection(when: Date, amountKobo = 5_000_000n): Promise
      )
      SELECT 'TXN-PER-' || gen_random_uuid()::text, t.taxpayer_id, t.invoice_id,
             t.assessment_id, t.revenue_item_id, t.lga_id, $1, $1,
-            'SETTLED', t.created_by, $2, t.territory_id
+            $3, t.created_by, $2, t.territory_id
        FROM transactions t WHERE t.status = 'SETTLED' ORDER BY t.created_at LIMIT 1
      RETURNING id`,
-    [amountKobo.toString(), when],
+    [amountKobo.toString(), when, status],
   );
   assert.ok(row, 'a settled transaction existed to copy');
   return row!.id;
@@ -362,6 +366,53 @@ describe('what closing refuses to do quietly', () => {
       (listed.body as Record<string, string>[])[0]!.closing_note,
       /statutory deadline/,
     );
+  });
+
+  /*
+   * Money the month took that the bank has not paid in yet.
+   *
+   * Not an exception — settlement takes a day or two — but the settled figure
+   * freezes with the rest, and a bank credit dated inside a closed month
+   * cannot be recorded without reopening it. So the close waits for the bank,
+   * and an officer who cannot wait says why.
+   */
+  it('waits for money the bank has not yet paid in, unless somebody says why', async () => {
+    await collect('8');
+    const bounds = lastMonth();
+    await backdatedCollection(bounds.start, 5_000_000n, 'RECONCILIATION_PENDING');
+
+    const figures = await get(
+      `/government/periods/figures?periodStart=${iso(bounds.start)}&periodEnd=${iso(bounds.end)}`,
+      auth('finance'),
+    );
+    assert.equal(figures.status, 200, JSON.stringify(figures.body));
+    assert.equal(figures.body.awaiting_settlement, '1', 'the preview shows what the close will refuse over');
+    assert.equal(figures.body.unreconciled, '0', 'and it is not counted as an exception');
+
+    const period = await openPeriod(bounds);
+    const refused = await close(period.id);
+    assert.equal(refused.status, 409, JSON.stringify(refused.body));
+    assert.equal(refused.body.error.code, 'PERIOD_NOT_SETTLED');
+    assert.match(refused.body.error.message, /1 collection\(s\) not yet paid into a government account/);
+
+    const forced = await close(period.id, {
+      overrideReason: 'Statutory deadline; the bank has confirmed the credit for the 1st.',
+    });
+    assert.equal(forced.status, 200, JSON.stringify(forced.body));
+    assert.equal(forced.body.overridden, true);
+  });
+
+  it('does not wait for money another month took', async () => {
+    // The control: unsettled money from this month says nothing about last.
+    await collect('9');
+    const bounds = lastMonth();
+    await backdatedCollection(bounds.start);
+    await backdatedCollection(new Date(), 5_000_000n, 'RECONCILIATION_PENDING');
+
+    const period = await openPeriod(bounds);
+    const closed = await close(period.id);
+    assert.equal(closed.status, 200, JSON.stringify(closed.body));
+    assert.equal(closed.body.overridden, false);
   });
 
   it('refuses two periods that cover the same day', async () => {

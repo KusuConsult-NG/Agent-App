@@ -2286,6 +2286,7 @@ export interface TranslationDictionary {
   ofcPeFiguresUnknownBody: string;
   ofcPeUnreconciled: string;
   ofcPePendingPayments: string;
+  ofcPeAwaitingSettlement: string;
   ofcPeFiguresNow: string;
   ofcPeFrozen: string;
   ofcPeReopenSeparate: string;
@@ -6125,12 +6126,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPeClosingNote: "What is being certified",
     ofcPeReopenReason: "Why it is being reopened",
     ofcPeNotReady: "Not ready to close",
-    ofcPeNotReadyBody: "Closing over an unresolved exception or a pending payment freezes a figure already known to be wrong. It is sometimes the right call, and it is never a silent one.",
+    ofcPeNotReadyBody: "Closing over an unresolved exception, a pending payment or a collection the bank has not yet paid in freezes a figure that is wrong or not yet whole. It is sometimes the right call, and it is never a silent one.",
     ofcPeOverride: "Why you are closing over them",
     ofcPeFiguresUnknown: "What this month still holds could not be read",
     ofcPeFiguresUnknownBody: "The platform could not count this month's unresolved exceptions or pending payments, so it cannot tell you whether the figure is settled. It may be. Closing is still possible, and it needs a reason in writing, because a month closed without knowing is a month closed over whatever was there.",
     ofcPeUnreconciled: "Unresolved exceptions",
     ofcPePendingPayments: "Payments still pending",
+    ofcPeAwaitingSettlement: "Collections not yet paid into a government account",
     ofcPeFiguresNow: "What the month holds now",
     ofcPeFrozen: "Frozen at close",
     ofcPeReopenSeparate: "Reopening is the administrator's, not the closer's. The officer who closes the books also being able to unclose them removes most of what a period lock is for.",
@@ -9759,12 +9761,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPeClosingNote: "Abin da ake tabbatarwa",
     ofcPeReopenReason: "Dalilin sake budewa",
     ofcPeNotReady: "Bai shirya rufewa ba",
-    ofcPeNotReadyBody: "Rufewa a kan bambancin da ba a warware ba ko biyan da ke jira yana daskarar da adadin da aka riga aka san ba daidai ba ne. Wani lokaci shi ne daidai, kuma ba a taba yin sa a boye ba.",
+    ofcPeNotReadyBody: "Rufewa a kan bambancin da ba a warware ba, biyan da ke jira, ko karbar kudin da banki bai tura ba tukuna yana daskarar da adadin da ba daidai ba ne ko bai cika ba. Wani lokaci shi ne daidai, kuma ba a taba yin sa a boye ba.",
     ofcPeOverride: "Dalilin rufewa duk da haka",
     ofcPeFiguresUnknown: "Ba a iya karanta abin da wannan wata ke rike da shi ba",
     ofcPeFiguresUnknownBody: "Dandalin bai iya kirga sauran matsalolin da ba a warware ba ko biyan da ke jira na wannan wata ba, don haka ba zai iya gaya maka ko lambar ta tabbata ba. Watakila ta tabbata. Har yanzu ana iya rufewa, kuma yana bukatar dalili a rubuce, domin wata da aka rufe ba tare da sani ba, an rufe shi ne a kan duk abin da ke ciki.",
     ofcPeUnreconciled: "Bambancin da ba a warware ba",
     ofcPePendingPayments: "Biyan da ke jira",
+    ofcPeAwaitingSettlement: "Karbar kudin da bai isa asusun gwamnati ba tukuna",
     ofcPeFiguresNow: "Abin da watan ke da shi yanzu",
     ofcPeFrozen: "An daskare a rufewa",
     ofcPeReopenSeparate: "Sake budewa na mai gudanarwa ne, ba na wanda ya rufe ba. Idan jami’in da ya rufe littattafan zai iya sake budewa, hakan na kawar da yawancin dalilin kulle lokacin.",

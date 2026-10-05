@@ -592,3 +592,55 @@ describe('A reversal says whose doing it was', () => {
     assert.equal(refund, null, 'no refund is recorded for a reversal that was refused');
   });
 });
+
+/*
+ * Money from a month that has been closed.
+ *
+ * The close freezes what the month collected, so a reversal of one of its
+ * collections is refused by the database until the month is reopened. That is
+ * the design. What has to hold is that the officer carrying it out is told
+ * which month, and what to do — reopen it, with a reason — rather than handed
+ * a refusal with nowhere to go, and that nothing moved on the way.
+ */
+describe('a reversal of money a closed month collected', () => {
+  it('is refused, names the month, says how to proceed, and moves nothing', async () => {
+    const paid = await collect('31');
+
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
+    const during = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 15, 10));
+    await pool.query('ALTER TABLE transactions DISABLE TRIGGER transactions_immutable');
+    try {
+      await pool.query('UPDATE transactions SET created_at = $2 WHERE id = $1', [
+        paid.transactionId,
+        during,
+      ]);
+    } finally {
+      await pool.query('ALTER TABLE transactions ENABLE TRIGGER transactions_immutable');
+    }
+    await pool.query(
+      `INSERT INTO financial_periods (label, period_start, period_end, status, closed_at, closed_by, closing_note)
+       VALUES ('Closed month', $1, $2, 'CLOSED', now(), (SELECT id FROM users LIMIT 1), 'Reported.')`,
+      [start, end],
+    );
+
+    const refused = await reverse(paid.transactionId);
+    assert.equal(refused.status, 409, JSON.stringify(refused.body));
+    assert.equal(refused.body.error.code, 'FINANCIAL_CONTROL_BLOCKED', JSON.stringify(refused.body));
+    assert.match(refused.body.error.message, /Closed month is closed/);
+    assert.equal(refused.body.error.nextStep, 'Reopen the period, with a reason.');
+
+    const after = await queryOne<{ status: string; refunds: string; receipt: string }>(
+      pool,
+      `SELECT t.status,
+              (SELECT count(*)::text FROM refunds WHERE transaction_id = t.id) AS refunds,
+              (SELECT status FROM receipts WHERE transaction_id = t.id LIMIT 1) AS receipt
+         FROM transactions t WHERE t.id = $1`,
+      [paid.transactionId],
+    );
+    assert.equal(after!.status, 'SETTLED', 'the collection is as it was');
+    assert.equal(after!.refunds, '0', 'and no refund was started');
+    assert.notEqual(after!.receipt, 'REVERSED', 'and the receipt still stands');
+  });
+});

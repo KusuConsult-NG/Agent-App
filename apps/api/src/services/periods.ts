@@ -27,7 +27,7 @@
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { AppError, badRequest, conflict, notFound } from '../lib/errors';
-import { REVENUE_STATES_SQL } from '../lib/revenue-states';
+import { AWAITING_SETTLEMENT_STATES_SQL, REVENUE_STATES_SQL } from '../lib/revenue-states';
 import { outstandingExceptionSql } from './reconciliation';
 import { CURRENT_FINDINGS_SQL } from '../lib/reconciliation-findings';
 import { recordAudit } from './audit';
@@ -157,6 +157,7 @@ export async function periodFigures(
   transaction_count: string;
   unreconciled: string;
   pending_payments: string;
+  awaiting_settlement: string;
 }> {
   assertCalendarDay(periodStart, 'periodStart');
   assertCalendarDay(periodEnd, 'periodEnd');
@@ -168,6 +169,7 @@ export async function periodFigures(
     transaction_count: string;
     unreconciled: string;
     pending_payments: string;
+    awaiting_settlement: string;
   }>(
     db,
     `SELECT
@@ -200,7 +202,21 @@ export async function periodFigures(
           AND ${plateauDateSql('t.created_at')} BETWEEN $1::date AND $2::date) AS unreconciled,
        (SELECT count(*)::text FROM payments
          WHERE status IN ('INITIATED','PENDING')
-           AND ${plateauDateSql('initiated_at')} BETWEEN $1::date AND $2::date) AS pending_payments`,
+           AND ${plateauDateSql('initiated_at')} BETWEEN $1::date AND $2::date) AS pending_payments,
+       /*
+        * And the money the month took that the bank has not yet paid in.
+        *
+        * A collection the gateway confirmed is counted as collected, and it is
+        * not an exception: settlement takes a day or two and the reconciliation
+        * sweep only calls it late after that. But the month's settled figure
+        * is frozen along with everything else, and so are the bank credits
+        * that would make it whole — a credit dated inside a closed month cannot
+        * be recorded without reopening it. So the close waits for these too,
+        * and an officer who cannot wait says why, as they do for the others.
+        */
+       (SELECT count(*)::text FROM transactions
+         WHERE status IN ${AWAITING_SETTLEMENT_STATES_SQL}
+           AND ${plateauDateSql('created_at')} BETWEEN $1::date AND $2::date) AS awaiting_settlement`,
     [periodStart, periodEnd],
   );
   return row!;
@@ -258,10 +274,10 @@ export async function openPeriod(
 /**
  * Close a period, freezing what it collected.
  *
- * Refuses over an unreconciled exception or a pending payment unless the
- * officer supplies an override reason — because closing over either freezes a
- * figure already known to be wrong, and the point of a closed month is a figure
- * somebody stands behind.
+ * Refuses over an unreconciled exception, a pending payment, or a collection
+ * the bank has not yet paid in, unless the officer supplies an override reason
+ * — because closing over any of them freezes a figure that is wrong or not yet
+ * whole, and the point of a closed month is a figure somebody stands behind.
  */
 export async function closePeriod(
   actor: Actor,
@@ -303,13 +319,17 @@ export async function closePeriod(
     }
 
     const figures = await periodFigures(client, period.period_start, period.period_end);
-    const outstanding = Number(figures.unreconciled) + Number(figures.pending_payments);
+    const outstanding =
+      Number(figures.unreconciled) +
+      Number(figures.pending_payments) +
+      Number(figures.awaiting_settlement);
     if (outstanding > 0 && !input.overrideReason?.trim()) {
       throw conflict(
         'PERIOD_NOT_SETTLED',
-        `${period.label} has ${figures.unreconciled} unresolved exception(s) and ` +
-          `${figures.pending_payments} payment(s) still pending.`,
-        'Resolve them, or say in writing why the month is being closed over them.',
+        `${period.label} has ${figures.unreconciled} unresolved exception(s), ` +
+          `${figures.pending_payments} payment(s) still pending, and ` +
+          `${figures.awaiting_settlement} collection(s) not yet paid into a government account.`,
+        'Resolve them or wait for the bank, or say in writing why the month is being closed over them.',
       );
     }
 
@@ -346,6 +366,7 @@ export async function closePeriod(
         commissionKobo: figures.commission_kobo,
         unreconciledAtClose: figures.unreconciled,
         pendingAtClose: figures.pending_payments,
+        awaitingSettlementAtClose: figures.awaiting_settlement,
       },
       reason: input.overrideReason?.trim() || input.note.trim(),
     });
