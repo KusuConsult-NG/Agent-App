@@ -248,6 +248,36 @@ function tokenise(formula: string): Token[] {
   return tokens;
 }
 
+/**
+ * The values a rate has to be given before it can be computed, by name.
+ *
+ * The field app asked for one thing — a base amount, for PERCENTAGE and TIERED
+ * items — and nothing for a FORMULA item, whatever the formula named. So a
+ * formula rate an officer could create and the catalogue would list could not
+ * be collected in the field at all: every quote came back "needs a value for
+ * area". The app now asks for exactly these, so what it collects and what the
+ * engine reads come from one place.
+ *
+ * Names appear once, in the order the formula first uses them, which is the
+ * order an officer wrote them in and the order a form should ask for them.
+ */
+export function inputsFor(rate: Pick<RateVersion, 'rate_type' | 'formula'>): string[] {
+  switch (rate.rate_type) {
+    case 'PERCENTAGE':
+    case 'TIERED':
+      return ['baseAmountKobo'];
+    case 'FORMULA': {
+      const names: string[] = [];
+      for (const token of tokenise(rate.formula ?? '')) {
+        if (token.type === 'ident' && !names.includes(token.value)) names.push(token.value);
+      }
+      return names;
+    }
+    default:
+      return [];
+  }
+}
+
 const PRECEDENCE: Record<string, number> = { '+': 1, '-': 1, '*': 2, '/': 2 };
 
 /**

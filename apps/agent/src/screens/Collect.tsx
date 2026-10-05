@@ -142,6 +142,20 @@ export function paymentOutcomeText(
         : t.colPayAwaitingSettlement;
 }
 
+/**
+ * A formula's input name, as a person would read it: `floorAreaSqm` becomes
+ * "Floor area sqm". The names are the officer's, written into the rate; this
+ * only stops a form asking for something spelt like code.
+ */
+export function inputLabel(name: string): string {
+  const words = name
+    .replace(/_/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .trim()
+    .toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function CollectScreen({
   navigate,
   connection,
@@ -163,6 +177,21 @@ export function CollectScreen({
   const [items, setItems] = useState<RevenueItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<RevenueItem | null>(null);
   const [baseAmount, setBaseAmount] = useState('');
+  /*
+   * What this item's rate has to be told, for this taxpayer, by name.
+   *
+   * The screen used to decide from the catalogue's rate type: a base amount
+   * for PERCENTAGE and TIERED, and nothing otherwise. A FORMULA item names its
+   * own inputs — an area, a number of rooms — and was sent none, so every
+   * quote for one was refused and the item could not be collected in the
+   * field. The server now says what the rate in force for this taxpayer's
+   * Council reads, and the screen asks for exactly that.
+   *
+   * `null` until it has answered. If it cannot be asked, the old rule stands
+   * in, so a base-amount item still works offline from the cache.
+   */
+  const [required, setRequired] = useState<string[] | null>(null);
+  const [measures, setMeasures] = useState<Record<string, string>>({});
   const [quote, setQuote] = useState<Quote | null>(null);
 
   /*
@@ -267,8 +296,49 @@ export function CollectScreen({
     }
   }
 
-  const needsBaseAmount =
-    selectedItem?.rate_type === 'PERCENTAGE' || selectedItem?.rate_type === 'TIERED';
+  useEffect(() => {
+    setRequired(null);
+    setMeasures({});
+    if (!selectedItem || !taxpayer) return;
+    let current = true;
+    api
+      .get<{ rateType: string; inputs: string[] }>(
+        `/revenue/items/${selectedItem.id}/inputs?taxpayerId=${taxpayer.id}`,
+      )
+      .then((answer) => {
+        // An answer without a list is not "nothing to ask"; the old rule stands.
+        if (current && Array.isArray(answer?.inputs)) setRequired(answer.inputs);
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [selectedItem, taxpayer]);
+
+  const asked =
+    required ??
+    (selectedItem?.rate_type === 'PERCENTAGE' || selectedItem?.rate_type === 'TIERED'
+      ? ['baseAmountKobo']
+      : []);
+  const needsBaseAmount = asked.includes('baseAmountKobo');
+  const measureNames = asked.filter((name) => name !== 'baseAmountKobo');
+
+  /**
+   * The values a formula reads, or the first one that is not a number.
+   *
+   * Sent as typed, decimals and all: the engine reads 15.5 exactly and rounds
+   * only the bill. A negative or a word is caught here so the agent is told
+   * which box, in their language, rather than by the server in English.
+   */
+  function measureInputs(): { inputs: Record<string, string> } | { missing: string } {
+    const inputs: Record<string, string> = {};
+    for (const name of measureNames) {
+      const value = (measures[name] ?? '').trim();
+      if (!/^\d+(\.\d+)?$/.test(value)) return { missing: name };
+      inputs[name] = value;
+    }
+    return { inputs };
+  }
 
   const getQuote = useCallback(async () => {
     // The taxpayer as well as the item: eleven revenue items now carry a rate
@@ -296,6 +366,17 @@ export function CollectScreen({
         }
         inputs.baseAmountKobo = String(Math.round(naira * 100));
       }
+      const measured = measureInputs();
+      if ('missing' in measured) {
+        setError({
+          code: 'INVALID_INPUT',
+          message: t.colNeedMeasure.replace('{{name}}', inputLabel(measured.missing)),
+          moneyStatus: 'NOT_APPLICABLE',
+        });
+        setBusy(false);
+        return;
+      }
+      Object.assign(inputs, measured.inputs);
       setQuote(await api.post<Quote>('/revenue/quote', { revenueItemId: selectedItem.id, inputs, taxpayerId: taxpayer.id }));
       flow.current?.step('amount-calculated');
     } catch (caught) {
@@ -303,7 +384,7 @@ export function CollectScreen({
     } finally {
       setBusy(false);
     }
-  }, [selectedItem, taxpayer, needsBaseAmount, baseAmount]);
+  }, [selectedItem, taxpayer, needsBaseAmount, baseAmount, measures, required]);
 
   async function createAndPay() {
     if (!taxpayer || !selectedItem) return;
@@ -317,6 +398,9 @@ export function CollectScreen({
       if (needsBaseAmount) {
         inputs.baseAmountKobo = String(Math.round(Number.parseFloat(baseAmount.replace(/,/g, '')) * 100));
       }
+      // The same values the quote was given; it refused anything else.
+      const measured = measureInputs();
+      if ('inputs' in measured) Object.assign(inputs, measured.inputs);
 
       /*
        * Where this is being collected.
@@ -622,6 +706,20 @@ export function CollectScreen({
               />
             </Field>
           )}
+
+          {measureNames.map((name) => (
+            <Field key={name} label={inputLabel(name)} hint={t.colMeasureHint} required>
+              <input
+                inputMode="decimal"
+                value={measures[name] ?? ''}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setMeasures((previous) => ({ ...previous, [name]: value }));
+                }}
+                placeholder="0"
+              />
+            </Field>
+          ))}
 
           <button type="button" disabled={busy || !selectedItem} onClick={getQuote}>
             {busy ? <Spinner /> : null}

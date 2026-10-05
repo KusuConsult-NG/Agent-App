@@ -335,6 +335,32 @@ revenueRouter.post(
 // --- Quote, assessment, invoice --------------------------------------------
 
 /** Price a revenue item without creating anything (PRD §15). */
+/*
+ * What the field app has to ask before it can quote this item for this taxpayer.
+ *
+ * By taxpayer rather than LGA, for the reason the quote below gives: the place
+ * decides which Council's rate applies, and the client is not the one to say.
+ */
+revenueRouter.get(
+  '/items/:id/inputs',
+  requirePermission('assessment:create'),
+  validateQuery(
+    z.object({ taxpayerId: uuidSchema.optional() }),
+    async (req, res, data) => {
+      const lgaId = data.taxpayerId
+        ? (
+            await queryOne<{ lga_id: string }>(
+              pool,
+              'SELECT lga_id FROM taxpayers WHERE id = $1',
+              [data.taxpayerId],
+            )
+          )?.lga_id ?? null
+        : null;
+      res.json(await revenue.collectionInputs(pool, { revenueItemId: req.params.id!, lgaId }));
+    },
+  ),
+);
+
 revenueRouter.post(
   '/quote',
   requirePermission('assessment:create'),

@@ -90,7 +90,7 @@ The reasons are not interchangeable, which is why they are written out per row r
 | `taxpayer:tin_sync` | Edit | revenue_officer, admin | `GET /taxpayers/tin-outstanding`<br>`POST /taxpayers/tin-retry` |
 | `catalogue:read` | View | agent, supervisor, revenue_officer, finance_officer, auditor, admin | `GET /government/presumptive/schedule`<br>`POST /government/presumptive/preview`<br>`POST /government/presumptive/band`<br>`GET /government/search`<br>…and 4 more |
 | `catalogue:configure` | Configure | revenue_officer, admin | `POST /government/presumptive/lga-classes`<br>`POST /government/presumptive/schedule`<br>`GET /government/audit/queries/rate-changes`<br>`GET /revenue/items`<br>…and 3 more |
-| `assessment:create` | Create | agent | `POST /government/enumeration/observations`<br>`POST /government/enumeration/assessments/:id/object`<br>`POST /revenue/quote`<br>`POST /revenue/assessments` |
+| `assessment:create` | Create | agent | `POST /government/enumeration/observations`<br>`POST /government/enumeration/assessments/:id/object`<br>`GET /revenue/items/:id/inputs`<br>`POST /revenue/quote`<br>…and 1 more |
 | `assessment:read:own` | View | agent | `GET /revenue/assessments/:id` |
 | `assessment:read:all` | View | supervisor, revenue_officer, finance_officer, auditor, admin | `GET /revenue/assessments/:id` |
 | `paye:file` | Other | revenue_officer, admin | `POST /government/paye/returns`<br>`POST /government/paye/returns/:id/cancel`<br>`POST /government/enumeration/observations`<br>`POST /government/enumeration/observations/:id/assess`<br>…and 1 more |

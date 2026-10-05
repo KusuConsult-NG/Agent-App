@@ -2765,6 +2765,8 @@ export interface TranslationDictionary {
   colNeedBaseAmount: string;
   colNoTin: string;
   colBasisAmountHint: string;
+  colMeasureHint: string;
+  colNeedMeasure: string;
   colTaxpayerLabel: string;
   colRevenueLabel: string;
   colGovernmentRevenue: string;
@@ -6599,6 +6601,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     colNeedBaseAmount: "Enter the amount the assessment is based on, in naira.",
     colNoTin: "No TIN",
     colBasisAmountHint: "For example turnover, income or contract value. The charge itself is set by government.",
+    colMeasureHint: "What this charge is worked out from. Enter it as a number, for example 15.5.",
+    colNeedMeasure: "Enter {{name}} as a number, zero or more.",
     colTaxpayerLabel: "Taxpayer",
     colRevenueLabel: "Revenue",
     colGovernmentRevenue: "Government revenue",
@@ -10236,6 +10240,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     colNeedBaseAmount: "Ka shigar da kudin da aka gina kimar a kansa, da naira.",
     colNoTin: "Babu TIN",
     colBasisAmountHint: "Misali kudin shiga, riba ko darajar kwangila. Gwamnati ce ke saita kudin da kansa.",
+    colMeasureHint: "Abin da ake lissafa wannan kudin da shi. Ka shigar da shi a matsayin lamba, misali 15.5.",
+    colNeedMeasure: "Ka shigar da {{name}} a matsayin lamba, sifili ko fiye.",
     colTaxpayerLabel: "Mai biyan haraji",
     colRevenueLabel: "Haraji",
     colGovernmentRevenue: "Harajin gwamnati",

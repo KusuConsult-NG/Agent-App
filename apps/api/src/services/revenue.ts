@@ -25,7 +25,7 @@ import {
   nextInvoiceNumber,
   nextTransactionReference,
 } from '../lib/references';
-import { computeAmount, type ComputationInputs, type RateVersion } from './rate-engine';
+import { computeAmount, inputsFor, type ComputationInputs, type RateVersion } from './rate-engine';
 import { recordAudit } from './audit';
 import { log } from '../lib/logger';
 
@@ -186,6 +186,22 @@ export interface QuoteResult {
  * app calls this to render the confirmation screen, so the figure on screen and
  * the figure assessed come from the same code path.
  */
+/**
+ * What a collection of this item has to be told, for this taxpayer.
+ *
+ * Resolved with `resolveRate`, the same call `quote` makes, and with the same
+ * place: eleven items carry a rate per Local Government Area, and a Council's
+ * formula can name different measurements from the statewide one. Asking the
+ * catalogue row would answer for whichever rate happened to be newest.
+ */
+export async function collectionInputs(
+  db: Db,
+  params: { revenueItemId: string; lgaId?: string | null },
+): Promise<{ rateType: string; inputs: string[] }> {
+  const rate = await resolveRate(db, params.revenueItemId, undefined, params.lgaId);
+  return { rateType: rate.rate_type, inputs: inputsFor(rate) };
+}
+
 export async function quote(
   db: Db,
   params: { revenueItemId: string; inputs: ComputationInputs; at?: Date; lgaId?: string | null },
