@@ -38,6 +38,7 @@ import {
   revenueItemByCode,
 } from './helpers';
 import { query, queryOne } from '../db/pool';
+import { translations } from '@psirs/shared';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
 import { REMINDER_WINDOWS, sendDueReminders } from '../services/reminders';
@@ -559,5 +560,44 @@ describe('a reminder for somebody who reads Hausa', () => {
     assert.match(sms!.message, /^GAGGAWA — PSIRS: Ranka ya dade /);
     assert.ok(sms!.message.includes(item!.name_ha ?? item!.name), sms!.message);
     assert.ok(!sms!.message.includes('{{'), `a placeholder reached the taxpayer: ${sms!.message}`);
+  });
+
+  /*
+   * And the date in Hausa too.
+   *
+   * The sweep formatted the due date once, with en-NG, before anything knew
+   * which language the message would go out in, so a Hausa reminder read
+   * "… zai kai ranar biya a 15 October 2026". The month is a word, and the
+   * dictionary has it in both languages (monthJan…monthDec); the day is the
+   * Plateau day, as the English test above holds it.
+   */
+  it('gives the due date in Hausa, on the Plateau calendar', async () => {
+    const expiresAt = twoWeeksOut(23, 30);
+    const invoiceId = await invoiceDueAt('32', expiresAt);
+    await pool.query(
+      `UPDATE taxpayers SET preferred_language = 'ha'
+        WHERE id = (SELECT taxpayer_id FROM invoices WHERE id = $1)`,
+      [invoiceId],
+    );
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat('en-NG', { timeZone: 'Africa/Lagos', day: 'numeric', month: 'numeric', year: 'numeric' })
+        .formatToParts(expiresAt)
+        .map((part) => [part.type, part.value]),
+    );
+    const monthKeys = [
+      'monthJan', 'monthFeb', 'monthMar', 'monthApr', 'monthMay', 'monthJun',
+      'monthJul', 'monthAug', 'monthSep', 'monthOct', 'monthNov', 'monthDec',
+    ] as const;
+    const key = monthKeys[Number(parts.month) - 1]!;
+    const hausa = `${Number(parts.day)} ${translations.ha[key]} ${parts.year}`;
+
+    await sendDueReminders(pool);
+
+    const messages = await messagesFor(invoiceId);
+    assert.ok(messages.length > 0, 'a reminder was queued');
+    for (const message of messages) {
+      assert.ok(message.message.includes(hausa), `${message.channel} does not say ${hausa}: ${message.message.slice(0, 200)}`);
+      assert.ok(!message.message.includes(translations.en[key]), `${message.channel} names the month in English`);
+    }
   });
 });

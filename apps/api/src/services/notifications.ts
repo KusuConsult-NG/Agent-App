@@ -147,6 +147,17 @@ export interface QueueNotificationParams {
    * masked, which is what a support officer needs and all they need.
    */
   secretVariables?: string[];
+  /**
+   * Values worded differently in each language, picked by the language the
+   * template was actually rendered in.
+   *
+   * The recipient's language is resolved in here, so a caller cannot word a
+   * value for it in advance. A due date was formatted once, in English, and
+   * went into the Hausa reminder as "20 October 2026". Given here as
+   * `{ dueDate: { en, ha } }`, each rendering takes its own; a template in a
+   * language with no entry takes the English.
+   */
+  localisedVariables?: Record<string, { en: string; ha?: string }>;
   entityType?: string;
   entityId?: string;
 }
@@ -312,9 +323,18 @@ export async function queueNotification(
      * this file fails any ACTIVE template whose subject names `{{code}}` or
      * `{{link}}`, so this line is the floor under a rule caught earlier.
      */
-    const subject = template.subject ? render(template.subject, maskedVariables) : null;
-    const deliverable = render(template.body, variables);
-    const retained = secretVariables.length ? render(template.body, maskedVariables) : deliverable;
+    // The values worded for this template's language. Never credentials, so
+    // the masked copy takes them as they are.
+    const localised: Record<string, string> = {};
+    for (const [key, worded] of Object.entries(params.localisedVariables ?? {})) {
+      localised[key] = (template.language === 'ha' ? worded.ha : undefined) ?? worded.en;
+    }
+    const renderedVariables = { ...variables, ...localised };
+    const maskedForTemplate = { ...maskedVariables, ...localised };
+
+    const subject = template.subject ? render(template.subject, maskedForTemplate) : null;
+    const deliverable = render(template.body, renderedVariables);
+    const retained = secretVariables.length ? render(template.body, maskedForTemplate) : deliverable;
 
     await client.query(
       `INSERT INTO notifications

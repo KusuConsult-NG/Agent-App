@@ -60,7 +60,7 @@
  *     well as on-demand via a government officer API endpoint.
  */
 
-import { formatNaira } from '@psirs/shared';
+import { formatCalendarDayIn, formatNaira, translations } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { UNDER_OPEN_OBJECTION_SQL } from '../lib/enforcement-suspended';
 import { chargePeriodShutSql } from '../lib/payable-invoice';
@@ -101,12 +101,27 @@ import type { NotificationEvent } from './notifications';
  * announced to the taxpayer as the day before. The taxpayer is in Plateau
  * State; the date they are given has to be theirs.
  */
-const NIGERIAN_DATE = new Intl.DateTimeFormat('en-NG', {
+const NIGERIAN_DAY = new Intl.DateTimeFormat('en-NG', {
   timeZone: 'Africa/Lagos',
   day: 'numeric',
-  month: 'long',
+  month: 'numeric',
   year: 'numeric',
 });
+
+/**
+ * The due date in each language the reminder can go out in.
+ *
+ * The day is the Plateau day (above); the month is a word, so it comes from
+ * the dictionary. This was one en-NG string, formatted before anything knew
+ * the reader's language, and a Hausa reminder read "… a 20 October 2026".
+ */
+function dueDateIn(expiresAt: Date): { en: string; ha: string } {
+  const parts = Object.fromEntries(
+    NIGERIAN_DAY.formatToParts(expiresAt).map((part) => [part.type, part.value]),
+  );
+  const day = { year: Number(parts.year), month: Number(parts.month), day: Number(parts.day) };
+  return { en: formatCalendarDayIn(day, translations.en), ha: formatCalendarDayIn(day, translations.ha) };
+}
 
 interface ReminderWindow {
   event: NotificationEvent;
@@ -273,19 +288,20 @@ async function processWindow(
           throw new ReminderAlreadyClaimed(invoice.id, window.event);
         }
 
-        const dueDate = NIGERIAN_DATE.format(invoice.expires_at);
+        const dueDate = dueDateIn(invoice.expires_at);
 
         const queued = await queueNotification(client, {
           event: window.event,
           taxpayerId: invoice.taxpayer_id,
           variables: {
-            dueDate,
+            dueDate: dueDate.en,
             amount: invoice.total_amount_kobo,
             revenueItem: invoice.revenue_item_name,
             revenueItemHa: invoice.revenue_item_name_ha ?? invoice.revenue_item_name,
             tinNumber: invoice.tin ?? 'Pending',
             portalUrl: citizenPortalUrl(),
           },
+          localisedVariables: { dueDate },
           entityType: 'invoice',
           entityId: invoice.id,
         });
