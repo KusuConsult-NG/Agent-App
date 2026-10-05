@@ -49,6 +49,7 @@ import {
   resetDatabase,
   startTestServer,
   stopTestServer,
+  leaderAttestationToken,
 } from './helpers';
 import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
@@ -123,7 +124,7 @@ async function cooperativeAwaitingItsLeader(): Promise<string> {
 
   const invite = await post(`/groups/${groupId}/attestation-request`, {}, { token: officerToken });
   assert.equal(invite.status, 201, JSON.stringify(invite.body));
-  return (invite.body.invitationUrl as string).split('/group-attestation/')[1]!;
+  return leaderAttestationToken(groupId);
 }
 
 describe('the roster a membership link hands out', () => {

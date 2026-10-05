@@ -406,11 +406,14 @@ export function GroupScreen({ groupId }: { groupId: string }) {
     setBusy(true);
     setError(null);
     try {
-      const result = await api.post<{ invitationUrl: string; message: string }>(
+      // The link goes to the leader's phone and is not returned: the leader
+      // confirms the members this agent recorded. What comes back is where it
+      // went, masked.
+      const result = await api.post<{ sentTo: string; message: string }>(
         `/groups/${groupId}/attestation-request`,
         {},
       );
-      setInvitation(result.invitationUrl);
+      setInvitation(result.sentTo);
     } catch (caught) {
       setError(asApiError(caught));
     } finally {
@@ -500,8 +503,8 @@ export function GroupScreen({ groupId }: { groupId: string }) {
           </button>
 
           {invitation && (
-            <Alert kind="success" title={t.grpSendToLeader}>
-              <p style={{ margin: 0, wordBreak: 'break-all' }}>{invitation}</p>
+            <Alert kind="success" title={t.grpSentToLeader}>
+              <p style={{ margin: 0 }}>{t.grpSentToLeaderBody.replace('{{phone}}', invitation)}</p>
               <p style={{ margin: '0.5rem 0 0' }}>
                 {t.grpLeaderMustConfirm.replace('{{name}}', group.leader_name ?? '')}
               </p>

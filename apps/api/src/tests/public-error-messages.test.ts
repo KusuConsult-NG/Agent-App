@@ -30,6 +30,7 @@ import {
   resetDatabase,
   startTestServer,
   stopTestServer,
+  leaderAttestationToken,
 } from './helpers';
 import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -152,7 +153,8 @@ describe('a public link that does not work', () => {
       undefined,
       { token },
     );
-    const link = String(invited.body.invitationUrl).split('/group-attestation/')[1];
+    assert.equal(invited.status, 201, JSON.stringify(invited.body));
+    const link = await leaderAttestationToken(created.body.groupId);
 
     await pool.query(
       `UPDATE group_attestation_invitations SET expires_at = now() - interval '1 day'

@@ -92,7 +92,13 @@ export type NotificationEvent =
    * the bill on the strength of a message, its own comment said, that the
    * trader had been sent. Nobody had sent it.
    */
-  | 'OBJECTION_RECEIVED';
+  | 'OBJECTION_RECEIVED'
+  /*
+   * The group leader's attestation link (migration 099). Sent to the leader's
+   * phone and returned to nobody, because the agent who asks for it is the
+   * person the leader's confirmation exists to check.
+   */
+  | 'GROUP_ATTESTATION_INVITATION';
 
 /**
  * Render `{{placeholders}}` from a template.

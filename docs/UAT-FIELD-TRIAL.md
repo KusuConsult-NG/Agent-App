@@ -141,7 +141,7 @@ stumbled on and what they thought it meant. That is a wording backlog rather
 than a coverage backlog, and it feeds the same review sheet.
 
 **The review has still not happened, and it is still blocking.** The whole
-dictionary and all thirty-four message templates are drafted without a native
+dictionary and all thirty-five message templates are drafted without a native
 speaker (`docs/HAUSA-REVIEW.md`). Nothing in this trial substitutes for it:
 four agents encountering the strings in the field will tell you which wording
 fails in practice, and a native speaker will tell you which wording is wrong.

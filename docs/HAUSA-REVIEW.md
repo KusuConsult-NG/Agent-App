@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > nineteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,537 strings; that one is two pages and links back
+> because it carries all 3,539 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,537 dictionary strings and 34 message
+It listed 78 strings. It now lists **3,539 dictionary strings and 35 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migrations that insert the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,537 strings is worse than no sheet, because it looks complete; this one cannot
+3,539 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -59,7 +59,7 @@ and if your time runs out it is the right place for it to run out. The agent
 groups come first in the table for that reason.
 
 **Table C is new, and it is the one to read if you read nothing else.** Those
-thirty-four messages reach a citizen who holds no account, has no app, and has
+thirty-five messages reach a citizen who holds no account, has no app, and has
 nobody standing beside them to explain what arrived. The acknowledgement
 wording is the sharpest case: it has to be unmistakably **not** a receipt,
 because the money has not reached government yet, and a citizen who reads it
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,537 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,539 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,537 strings: where the
+- The glossary below is applied consistently across all 3,539 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -498,7 +498,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3441 strings, grouped by where an agent meets them. Lower stakes
+3443 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -1620,8 +1620,8 @@ instructions — but they are what an agent reads all day.
 | `ofcGpAwardedNotCollected` | {{n}} beneficiaries were awarded and have not turned up. That is either a distribution that is not reaching people, or names on a list that do not correspond to anybody — worth establishing which before the next round. | An ba {{n}} masu amfana kyauta amma ba su zo ba. Ko dai rabon bai isa ga mutane ba, ko kuma sunaye ne a jerin da ba su dace da kowa ba — ya kamata a tabbatar da wanne kafin zagaye na gaba. | ☐ | |
 | `ofcGpMembersFor` | Members — {{name}} | Mambobi — {{name}} | ☐ | |
 | `ofcGpEnoughForMore` | enough for {{n}} more | ya isa ga wasu {{n}} | ☐ | |
-| `ofcGpConfirmationLinkFor` | Confirmation link for {{group}} | Hanyar tabbatarwa ta {{group}} | ☐ | |
-| `ofcGpLeaderCodeOnce` | Send this to the group leader. It is shown once — PSIRS stores only a hash of it, so it cannot be read back later. Request another if it is lost. | Ka tura wannan ga shugaban kungiyar. Ana nuna shi sau daya — PSIRS na adana sa hannunsa kawai, don haka ba za a iya sake karanta shi ba. Ka nemi wani idan ya bata. | ☐ | |
+| `ofcGpLinkSentFor` | Confirmation link sent for {{group}} | An tura hanyar tabbatarwa ta {{group}} | ☐ | |
+| `ofcGpLinkSentBody` | It went by text message to {{phone}}, the leader’s number on the group’s record. It is not shown here: only the leader may confirm the list, and the agent who recorded the members must not be able to. Ask again if the leader did not receive it. | An tura ta ta sakon tes zuwa {{phone}}, lambar shugaba a bayanan kungiyar. Ba a nuna ta a nan ba: shugaba kadai ke iya tabbatar da jerin, kuma wakilin da ya rubuta mambobin bai kamata ya iya ba. Ka sake nema idan shugaba bai karba ba. | ☐ | |
 | `ofcGpWaitingDecision` | Waiting for a decision | Ana jiran shawara | ☐ | |
 | `ofcGpWaitingIntro` | An agent has recorded these groups in the field. Members cannot be added until a group is approved, so nothing else happens while they sit here. | Wakili ya rubuta wadannan kungiyoyi a filin aiki. Ba za a iya kara mambobi ba sai an amince da kungiya, don haka babu abin da ke faruwa yayin da suke nan. | ☐ | |
 | `ofcGpDistributions` | Distributions | Rabo | ☐ | |
@@ -1649,7 +1649,7 @@ instructions — but they are what an agent reads all day.
 | `ofcGpCollectedOfAwarded` | {{collected}} of {{awarded}} ({{rate}}%) | {{collected}} daga cikin {{awarded}} ({{rate}}%) | ☐ | |
 | `ofcGpEachBeneficiaryGets` | {{quantity}} {{unit}} each | {{quantity}} {{unit}} kowanne | ☐ | |
 | `ofcGpMemberLeft` | {{member}} is recorded as having left {{group}}. They keep what they already collected and will not be counted in future allocations. | An rubuta cewa {{member}} ya bar {{group}}. Yana rike da abin da ya riga ya karba kuma ba za a kirga shi a rabon nan gaba ba. | ☐ | |
-| `ofcGpConfirmationLinkCreated` | Confirmation link created. | An kirkiri hanyar tabbatarwa. | ☐ | |
+| `ofcGpConfirmationLinkCreated` | Confirmation link sent to the group leader. | An tura hanyar tabbatarwa ga shugaban kungiyar. | ☐ | |
 
 #### The officer portal — levies
 
@@ -3024,7 +3024,8 @@ instructions — but they are what an agent reads all day.
 | `grpRecorded` | Recorded | An rubuta | ☐ | |
 | `grpWaitingOfficer` | Waiting for an officer | Ana jiran jami’i | ☐ | |
 | `grpAskLeaderConfirm` | Ask the leader to confirm | Ka nemi shugaba ya tabbatar | ☐ | |
-| `grpSendToLeader` | Send this to the leader | Tura wannan ga shugaba | ☐ | |
+| `grpSentToLeader` | Sent to the leader’s phone | An tura zuwa wayar shugaba | ☐ | |
+| `grpSentToLeaderBody` | The confirmation link went by text message to {{phone}}, the leader’s number on the group’s record. It is not shown here, because the leader is the one who confirms the members you recorded. | An tura hanyar tabbatarwa ta sakon tes zuwa {{phone}}, lambar shugaba a bayanan kungiyar. Ba a nuna ta a nan ba, saboda shugaba ne ke tabbatar da mambobin da ka rubuta. | ☐ | |
 | `grpNoAssessment` | This does not assess anybody | Wannan ba ya sanya wa kowa haraji | ☐ | |
 
 #### Handing out an allocation
@@ -3354,6 +3355,7 @@ instructions — but they are what an agent reads all day.
 | `errPossibleDuplicateTaxpayer` | A record was found that may be this same person. Check it before opening a new one. | An sami rikodin da zai yiwu na wannan mutumin ne. Ka duba shi kafin ka bude sabuwar rajista. | ☐ | |
 | `errTinServiceUnavailable` | The PSIRS TIN service could not be reached, so this TIN cannot be confirmed. Nobody has been registered. | Ba a iya isa ga sabis din TIN na PSIRS ba, don haka ba a tabbatar da wannan TIN ba. Ba a yi rajistar kowa ba. | ☐ | |
 | `errTinNotFound` | TIN {{tin}} could not be found in the PSIRS TIN service. | Ba a sami TIN {{tin}} a sabis din TIN na PSIRS ba. | ☐ | |
+| `errAttestationNotSent` | The confirmation link could not be sent to the group leader, so no request was made. Try again later. | Ba a iya tura hanyar tabbatarwa ga shugaban kungiyar ba, don haka ba a yi wata bukata ba. Ka sake gwadawa nan gaba. | ☐ | |
 | `errInvoiceExpired` | This bill has expired. Issue it again from the taxpayer's list of bills. | Wannan takardar biya ta kare. A sake fitar da ita daga jerin takardun biyan mai biyan haraji. | ☐ | |
 | `errInvoicePeriodClosed` | This bill was raised in a month that has been closed. No money has been taken. Issue it again from the taxpayer's list of bills, then take the payment. | An fitar da wannan takardar biya a watan da aka rufe. Ba a karbi kudi ba. A sake fitar da ita daga jerin takardun biyan mai biyan haraji, sannan a karbi biyan. | ☐ | |
 | `errInvoiceStillPayable` | This bill can still be paid. Take the payment against it. | Har yanzu ana iya biyan wannan takardar biya. A karbi biya a kanta. | ☐ | |
@@ -4190,7 +4192,7 @@ instructions — but they are what an agent reads all day.
 
 ### C · The messages PSIRS sends
 
-34 templates, and the highest-stakes strings in the project. A
+35 templates, and the highest-stakes strings in the project. A
 citizen holds no account here: the SMS is the entire record of the
 transaction as far as they are concerned, and nobody is standing beside
 them to explain it. Read the acknowledgement wording especially closely —
@@ -4232,6 +4234,7 @@ it has to be unmistakably **not** a receipt.
 | `OBJECTION_UPHELD_REFUND_REQUESTED_SMS_HA` | SMS | — | PSIRS: An amince da kalubalen da aka yi kan kimantawa {{reference}}: {{reason}}. An janye kiyasin, kuma an nemi a mayar da {{amount}} da aka biya. | ☐ | |
 | `OBJECTION_REJECTED_SMS_HA` | SMS | — | PSIRS: Ba a amince da kalubalen da aka yi kan kimantawa {{reference}} ba: {{reason}}. Kimantawar {{amount}} tana nan. Idan ba a biya ba tukuna, a biya ta hannun wakilin karbar haraji ko ofishin PSIRS. | ☐ | |
 | `OBJECTION_RECEIVED_SMS_HA` | SMS | — | PSIRS: An karbi kalubalen da aka yi kan kimantawa {{reference}}. Ba a tilasta biya ba yayin da PSIRS ke duba shi, kuma za a aiko da hukuncin. Ba sai an yi komai ba a wannan lokaci. | ☐ | |
+| `GROUP_ATTESTATION_INVITATION_SMS_HA` | SMS | — | PSIRS: An rubuta ka a matsayin shugaban {{group}} ({{code}}). Ka tabbatar da wadanda ke cikin kungiyar a {{link}} kafin {{expiry}}. Kada ka tura wannan sakon ga kowa: hanyar tabbatarwar taka ce. | ☐ | |
 
 <!-- END:GENERATED -->
 

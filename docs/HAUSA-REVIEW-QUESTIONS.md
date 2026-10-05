@@ -1,6 +1,6 @@
 # Hausa review: everything still waiting on a decision
 
-`HAUSA-REVIEW.md` carries all 3,537 dictionary strings, and most of its length
+`HAUSA-REVIEW.md` carries all 3,539 dictionary strings, and most of its length
 is those tables. The open questions are scattered through seven sections of the
 prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
@@ -18,7 +18,7 @@ new strings and none of review.
 
 ## 1. Not a translation question — PSIRS decides
 
-**443 strings address the reader as `ka`: masculine singular.** A woman
+**445 strings address the reader as `ka`: masculine singular.** A woman
 collecting revenue in Bokkos is addressed as a man by the application she uses
 all day.
 
@@ -31,10 +31,10 @@ about field staff. Counting says otherwise:
 
 | Who reads it | Strings |
 |---|---|
-| The agent app | 250 |
+| The agent app | 252 |
 | The officer portal | 150 |
 | Citizens, referees and group leaders | 43 |
-| **Total** | **443** of 3,537 |
+| **Total** | **445** of 3,539 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
@@ -411,7 +411,7 @@ roll. If any correction you make runs long, that test will say so rather than
 the receipt.
 
 **And `scanHelp` was not the only dead string in this table.** Checking it
-raised the obvious next question, so it was measured: **43 of the 3,537 keys
+raised the obvious next question, so it was measured: **43 of the 3,539 keys
 are never named anywhere outside the dictionary**, and four of them are in the
 table above — `statusOffline`, `offlineMessage`, `statusFailed`, and
 `civicDutyThanks`, the one the `Mungode` typo was in. Three of the four
@@ -674,9 +674,9 @@ failed, a step-up the officer walked away from. `STEP_UP_REQUIRED` has now been
 added, because it guards every consequential money action in the portal and its
 instruction was already in Hausa under an English heading.
 
-**The scale, counted rather than estimated.** The platform raises **183
+**The scale, counted rather than estimated.** The platform raises **184
 distinct error codes**; the officer portal says 8 of them in Hausa, and the
-agent application says 40. The last two are `CASE_MOVED`, raised when two
+agent application says 41. The last two are `CASE_MOVED`, raised when two
 officers escalate one case together and the second finds it already with
 somebody else, and `SWEEP_ALREADY_RUNNING`, raised when one presses any of the
 six buttons that start a background sweep by hand — reminders, refunds, TINs,
@@ -695,7 +695,7 @@ exists to keep honest, which is why all three figures are now recomputed by
 `scripts/build-hausa-review.mjs` and the build refuses when this sentence
 disagrees with them.
 
-Not all 183 can reach an officer. Many are the agent's, many are the platform
+Not all 184 can reach an officer. Many are the agent's, many are the platform
 talking to itself — a storage write that did not complete, a malformed body, a
 route that does not exist. The ones below are a **sample, not the set**: those
 an officer meets while doing the work the portal is for, each carrying a code
@@ -821,8 +821,8 @@ question on this page.
 
 The impersonal `Ba a bude … ba` and `An riga an …` were used throughout rather
 than addressing the officer, because none of the three asks them to do
-anything — they say what the month already is. The `ka` count is unchanged at
-443 for that reason.
+anything — they say what the month already is. They added nothing to the `ka`
+count for that reason.
 
 > `apps/portal/src/ui.tsx` § *TRANSLATED_ERRORS*
 

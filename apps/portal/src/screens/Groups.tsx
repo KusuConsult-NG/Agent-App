@@ -87,7 +87,9 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState('');
-  const [attestationLink, setAttestationLink] = useState<{ name: string; url: string } | null>(null);
+  // Where the leader's link went, masked. The link itself goes to the leader's
+  // phone and is never returned to the person who asked for it.
+  const [attestationLink, setAttestationLink] = useState<{ name: string; sentTo: string } | null>(null);
   const [members, setMembers] = useState<{ group: GroupRow; rows: MemberRow[] } | null>(null);
   const [departureReason, setDepartureReason] = useState('');
 
@@ -154,20 +156,8 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
       )}
 
       {attestationLink && (
-        <Alert kind="info" title={{ text: t.ofcGpConfirmationLinkFor.replace('{{group}}', attestationLink.name) }}>
-          <p style={{ margin: '0 0 8px' }}>{t.ofcGpLeaderCodeOnce}</p>
-          <code
-            style={{
-              display: 'block',
-              wordBreak: 'break-all',
-              fontSize: 'var(--text-sm)',
-              background: 'var(--surface-2, #f3f4f6)',
-              padding: '8px 10px',
-              borderRadius: 8,
-            }}
-          >
-            {attestationLink.url}
-          </code>
+        <Alert kind="info" title={{ text: t.ofcGpLinkSentFor.replace('{{group}}', attestationLink.name) }}>
+          <p style={{ margin: 0 }}>{t.ofcGpLinkSentBody.replace('{{phone}}', attestationLink.sentTo)}</p>
         </Alert>
       )}
 
@@ -469,10 +459,10 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                     disabled={busy}
                     onClick={() =>
                       act(async () => {
-                        const result = await api.post<{ invitationUrl: string }>(
+                        const result = await api.post<{ sentTo: string }>(
                           `/groups/${row.id}/attestation-request`,
                         );
-                        setAttestationLink({ name: row.name, url: result.invitationUrl });
+                        setAttestationLink({ name: row.name, sentTo: result.sentTo });
                         return t.ofcGpConfirmationLinkCreated;
                       })
                     }

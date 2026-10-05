@@ -185,6 +185,13 @@ export const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   POSSIBLE_DUPLICATE_TAXPAYER: 'errPossibleDuplicateTaxpayer',
   TIN_SERVICE_UNAVAILABLE: 'errTinServiceUnavailable',
   TIN_NOT_FOUND: 'errTinNotFound',
+  /*
+   * Asking a group's leader to confirm its members, when the text carrying the
+   * link could not be queued. Translated because the agent must not come away
+   * believing the leader was sent anything: nobody but the leader's phone ever
+   * holds that link, so a request that was not sent is one nobody can answer.
+   */
+  ATTESTATION_NOT_SENT: 'errAttestationNotSent',
 };
 
 /**

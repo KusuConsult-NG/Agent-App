@@ -501,3 +501,24 @@ export async function settleTransaction(transactionId: string): Promise<void> {
     amountKobo: collection.amountKobo,
   });
 }
+
+/**
+ * A group's attestation link, as the leader's phone receives it.
+ *
+ * The request no longer returns the link: it goes by SMS to the leader and
+ * nobody else (`an-agent-vouching-for-their-own-members.test.ts`). So a test
+ * that plays the leader reads it where the gateway would, from the deliverable
+ * body of the newest message queued for the group.
+ */
+export async function leaderAttestationToken(groupId: string): Promise<string> {
+  const row = await queryOne<{ secret_message: string | null }>(
+    pool,
+    `SELECT secret_message FROM notifications
+      WHERE event = 'GROUP_ATTESTATION_INVITATION' AND entity_id = $1
+      ORDER BY created_at DESC LIMIT 1`,
+    [groupId],
+  );
+  const token = /group-attestation\/([\w-]+)/.exec(row?.secret_message ?? '')?.[1];
+  if (!token) throw new Error(`no attestation link was sent to the leader of group ${groupId}`);
+  return token;
+}

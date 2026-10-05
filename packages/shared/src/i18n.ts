@@ -200,6 +200,7 @@ export interface TranslationDictionary {
   errPossibleDuplicateTaxpayer: string;
   errTinServiceUnavailable: string;
   errTinNotFound: string;
+  errAttestationNotSent: string;
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
@@ -1181,7 +1182,7 @@ export interface TranslationDictionary {
   ofcUsEvents: string;
   ofcUsScreen: string;
   ofcUsViews: string;
-  ofcGpConfirmationLinkFor: string;
+  ofcGpLinkSentFor: string;
   ofcSpOpenComplaints: string;
   ofcSpComplaintsBeyondThisPage: string;
 
@@ -1214,7 +1215,7 @@ export interface TranslationDictionary {
   ofcSpPriority: string;
   ofcSpReportedBy: string;
   ofcSpReplies: string;
-  ofcGpLeaderCodeOnce: string;
+  ofcGpLinkSentBody: string;
   ofcGpWaitingDecision: string;
   ofcGpWaitingIntro: string;
   ofcGpDistributions: string;
@@ -3291,7 +3292,8 @@ export interface TranslationDictionary {
   grpRecorded: string;
   grpWaitingOfficer: string;
   grpAskLeaderConfirm: string;
-  grpSendToLeader: string;
+  grpSentToLeader: string;
+  grpSentToLeaderBody: string;
   grpNoAssessment: string;
   authSignInTitle: string;
   authSignIn: string;
@@ -4220,6 +4222,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     errTinServiceUnavailable:
       'The PSIRS TIN service could not be reached, so this TIN cannot be confirmed. Nobody has been registered.',
     errTinNotFound: 'TIN {{tin}} could not be found in the PSIRS TIN service.',
+    errAttestationNotSent: 'The confirmation link could not be sent to the group leader, so no request was made. Try again later.',
     errInvoiceExpired:
       "This bill has expired. Issue it again from the taxpayer's list of bills.",
     errInvoicePeriodClosed:
@@ -5079,7 +5082,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcUsEvents: "Events",
     ofcUsScreen: "Screen",
     ofcUsViews: "Views",
-    ofcGpConfirmationLinkFor: "Confirmation link for {{group}}",
+    ofcGpLinkSentFor: "Confirmation link sent for {{group}}",
     ofcSpOpenComplaints: "{{n}} open complaint(s) about conduct or charges",
     ofcSpComplaintsBeyondThisPage: "{{n}} of them are not in the table below, which shows the most urgent and the most recent. Filter by category to work through the rest.",
     ofcSpAboutRevenue: "These are reports about how revenue was collected, not about the platform. They are listed first below.",
@@ -5107,7 +5110,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcSpPriority: "Priority",
     ofcSpReportedBy: "Reported by",
     ofcSpReplies: "Replies",
-    ofcGpLeaderCodeOnce: "Send this to the group leader. It is shown once — PSIRS stores only a hash of it, so it cannot be read back later. Request another if it is lost.",
+    ofcGpLinkSentBody: "It went by text message to {{phone}}, the leader’s number on the group’s record. It is not shown here: only the leader may confirm the list, and the agent who recorded the members must not be able to. Ask again if the leader did not receive it.",
     ofcGpWaitingDecision: "Waiting for a decision",
     ofcGpWaitingIntro: "An agent has recorded these groups in the field. Members cannot be added until a group is approved, so nothing else happens while they sit here.",
     ofcGpDistributions: "Distributions",
@@ -7070,7 +7073,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     grpRecorded: "Recorded",
     grpWaitingOfficer: "Waiting for an officer",
     grpAskLeaderConfirm: "Ask the leader to confirm",
-    grpSendToLeader: "Send this to the leader",
+    grpSentToLeader: "Sent to the leader’s phone",
+    grpSentToLeaderBody: "The confirmation link went by text message to {{phone}}, the leader’s number on the group’s record. It is not shown here, because the leader is the one who confirms the members you recorded.",
     grpNoAssessment: "This does not assess anybody",
     authSignInTitle: "Sign in to continue",
     authSignIn: "Sign in",
@@ -7645,7 +7649,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFnRecordHowThisException: 'Record how this exception was resolved (at least 10 characters):',
     ofcFnWhatDidTheBank: 'What did the bank say? (at least 10 characters)',
     ofcFnWhatTheVarianceTurned: 'What the variance turned out to be',
-    ofcGpConfirmationLinkCreated: 'Confirmation link created.',
+    ofcGpConfirmationLinkCreated: 'Confirmation link sent to the group leader.',
     ofcKyOpenAndReview: 'Open and review',
     ofcKyReviewedOn: 'Reviewed on',
     ofcKyTheAccessLogCould: 'The access log could not be read.',
@@ -7855,6 +7859,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     errTinServiceUnavailable:
       'Ba a iya isa ga sabis din TIN na PSIRS ba, don haka ba a tabbatar da wannan TIN ba. Ba a yi rajistar kowa ba.',
     errTinNotFound: 'Ba a sami TIN {{tin}} a sabis din TIN na PSIRS ba.',
+    errAttestationNotSent: 'Ba a iya tura hanyar tabbatarwa ga shugaban kungiyar ba, don haka ba a yi wata bukata ba. Ka sake gwadawa nan gaba.',
     errInvoiceExpired:
       'Wannan takardar biya ta kare. A sake fitar da ita daga jerin takardun biyan mai biyan haraji.',
     errInvoicePeriodClosed:
@@ -8714,7 +8719,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcUsEvents: "Abubuwan da suka faru",
     ofcUsScreen: "Shafi",
     ofcUsViews: "Kallo",
-    ofcGpConfirmationLinkFor: "Hanyar tabbatarwa ta {{group}}",
+    ofcGpLinkSentFor: "An tura hanyar tabbatarwa ta {{group}}",
     ofcSpOpenComplaints: "Korafe-korafe {{n}} a bude kan hali ko kudi",
     ofcSpComplaintsBeyondThisPage: "Daga cikinsu, {{n}} ba sa cikin teburin da ke kasa, wanda ke nuna wadanda suka fi gaggawa da na baya-bayan nan. A tace da nau’i domin a bi sauran.",
     ofcSpAboutRevenue: "Wadannan rahotanni ne kan yadda aka karbi haraji, ba kan dandalin ba. An jera su a farko a kasa.",
@@ -8742,7 +8747,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcSpPriority: "Muhimmanci",
     ofcSpReportedBy: "Wanda ya kai rahoto",
     ofcSpReplies: "Amsoshi",
-    ofcGpLeaderCodeOnce: "Ka tura wannan ga shugaban kungiyar. Ana nuna shi sau daya — PSIRS na adana sa hannunsa kawai, don haka ba za a iya sake karanta shi ba. Ka nemi wani idan ya bata.",
+    ofcGpLinkSentBody: "An tura ta ta sakon tes zuwa {{phone}}, lambar shugaba a bayanan kungiyar. Ba a nuna ta a nan ba: shugaba kadai ke iya tabbatar da jerin, kuma wakilin da ya rubuta mambobin bai kamata ya iya ba. Ka sake nema idan shugaba bai karba ba.",
     ofcGpWaitingDecision: "Ana jiran shawara",
     ofcGpWaitingIntro: "Wakili ya rubuta wadannan kungiyoyi a filin aiki. Ba za a iya kara mambobi ba sai an amince da kungiya, don haka babu abin da ke faruwa yayin da suke nan.",
     ofcGpDistributions: "Rabo",
@@ -10705,7 +10710,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     grpRecorded: "An rubuta",
     grpWaitingOfficer: "Ana jiran jami’i",
     grpAskLeaderConfirm: "Ka nemi shugaba ya tabbatar",
-    grpSendToLeader: "Tura wannan ga shugaba",
+    grpSentToLeader: "An tura zuwa wayar shugaba",
+    grpSentToLeaderBody: "An tura hanyar tabbatarwa ta sakon tes zuwa {{phone}}, lambar shugaba a bayanan kungiyar. Ba a nuna ta a nan ba, saboda shugaba ne ke tabbatar da mambobin da ka rubuta.",
     grpNoAssessment: "Wannan ba ya sanya wa kowa haraji",
     authSignInTitle: "Shiga domin ci gaba",
     authSignIn: "Shiga",
@@ -11281,7 +11287,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFnRecordHowThisException: 'Ka rubuta yadda aka warware wannan matsala (akalla haruffa 10):',
     ofcFnWhatDidTheBank: 'Me banki ya ce? (akalla haruffa 10)',
     ofcFnWhatTheVarianceTurned: 'Abin da bambancin ya zamo',
-    ofcGpConfirmationLinkCreated: 'An kirkiri hanyar tabbatarwa.',
+    ofcGpConfirmationLinkCreated: 'An tura hanyar tabbatarwa ga shugaban kungiyar.',
     ofcKyOpenAndReview: 'Bude ka duba',
     ofcKyReviewedOn: 'An duba a ranar',
     ofcKyTheAccessLogCould: 'Ba a iya karanta rikodin shiga ba.',

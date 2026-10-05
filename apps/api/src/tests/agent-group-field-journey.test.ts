@@ -187,6 +187,11 @@ describe('an agent works a cooperative from the field screens', () => {
       deviceId: agent.device,
     });
     assert.equal(invite.status, 201, JSON.stringify(invite.body));
-    assert.ok(invite.body.invitationUrl, 'the screen shows this link to send to the leader');
+    assert.match(
+      invite.body.message,
+      /sent to the group leader's phone/,
+      'the screen shows this message, so it has to say where the link went',
+    );
+    assert.equal(invite.body.invitationUrl, undefined, 'and the link itself is not the agent’s');
   });
 });
