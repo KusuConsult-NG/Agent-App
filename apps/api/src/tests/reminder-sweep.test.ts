@@ -360,8 +360,8 @@ describe('a bill that has to be issued again before it can be paid', () => {
  *
  * TAX_REMINDER_6W has therefore never been sent to anybody. The template is
  * approved and the flag column exists on every invoice and is false on all of
- * them. (This said the Hausa translation was written too. No reminder has
- * one; a Hausa reader is sent the English.) The two suites that appeared to
+ * them. (This said the Hausa translation was written too, when no reminder
+ * had one; migration 101 wrote them.) The two suites that appeared to
  * cover it first moved an invoice's expiry out to forty-two days, which is a
  * state the platform cannot produce — so what they proved was that the
  * fixture ran.
@@ -505,5 +505,59 @@ describe('the reminder ladder, against the invoices the platform issues', () => 
     await sendDueReminders(pool);
     const texts = (await messagesFor(invoiceId)).filter((message) => message.channel === 'SMS');
     assert.equal(texts.length, 1, 'the last-week reminder was sent twice');
+  });
+});
+
+/*
+ * In the language the taxpayer reads.
+ *
+ * Every other message PSIRS sends had a Hausa text from migration 048; the
+ * reminders had none, so a Hausa reader was chased for money in English. The
+ * first test is the structural one, because a reminder with Hausa on SMS and
+ * English by email is the same gap one channel along.
+ */
+describe('a reminder for somebody who reads Hausa', () => {
+  it('exists for every reminder, on every channel the English goes out on', async () => {
+    const rows = await query<{ event: string; channel: string; languages: string[] }>(
+      pool,
+      `SELECT event, channel, array_agg(language ORDER BY language) AS languages
+         FROM notification_templates WHERE event LIKE 'TAX_REMINDER%'
+        GROUP BY event, channel ORDER BY event, channel`,
+    );
+    assert.equal(rows.length, 12, 'four reminders, three channels each');
+    for (const row of rows) {
+      assert.deepEqual(row.languages, ['en', 'ha'], `${row.event} on ${row.channel} has no Hausa`);
+    }
+  });
+
+  it('is sent in Hausa, with the item’s Hausa name and nothing left unfilled', async () => {
+    const invoiceId = await invoiceDueAt('31', twoWeeksOut());
+    await pool.query(
+      `UPDATE taxpayers SET preferred_language = 'ha'
+        WHERE id = (SELECT taxpayer_id FROM invoices WHERE id = $1)`,
+      [invoiceId],
+    );
+    const item = await queryOne<{ name: string; name_ha: string | null }>(
+      pool,
+      `SELECT ri.name, ri.name_ha FROM invoices i
+         JOIN assessments a ON a.id = i.assessment_id
+         JOIN revenue_items ri ON ri.id = a.revenue_item_id
+        WHERE i.id = $1`,
+      [invoiceId],
+    );
+
+    await sendDueReminders(pool);
+
+    const sms = await queryOne<{ message: string; language: string }>(
+      pool,
+      `SELECT message, language FROM notifications
+        WHERE entity_type = 'invoice' AND entity_id = $1 AND channel = 'SMS'`,
+      [invoiceId],
+    );
+    assert.ok(sms, 'no reminder was sent');
+    assert.equal(sms!.language, 'ha');
+    assert.match(sms!.message, /^GAGGAWA — PSIRS: Ranka ya dade /);
+    assert.ok(sms!.message.includes(item!.name_ha ?? item!.name), sms!.message);
+    assert.ok(!sms!.message.includes('{{'), `a placeholder reached the taxpayer: ${sms!.message}`);
   });
 });

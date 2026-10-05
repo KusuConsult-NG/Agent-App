@@ -187,13 +187,27 @@ function templates() {
   // carry `\n`. Missing it silently dropped exactly those two from the sheet —
   // the receipt email and the acknowledgement email, which are the longest and
   // most consequential strings in the set.
+  /*
+   * Found by the language column, not by the code.
+   *
+   * This matched codes ending `_HA`, which is how migration 048 spelt them.
+   * Migration 101's reminders follow their English siblings instead
+   * (`TAX-REMINDER-6W-SMS-HA`), so all twelve were skipped — and the count
+   * below, which checks the sheet is not short, used the same pattern and
+   * agreed with it. A Hausa message spelt any other way would have reached
+   * citizens without reaching the one person who reads them before they do.
+   * Any code, and `'ha'` in the language position, is what makes a row Hausa.
+   */
   const pattern =
-    /\('([A-Z0-9_]+_HA)',\s*'([A-Z_]+)',\s*'([A-Z]+)',\s*'ha',\s*(NULL|E?'(?:[^']|'')*'),\s*E?'((?:[^']|'')*)'/g;
+    /\('([A-Z0-9_-]+)',\s*'([A-Z_0-9]+)',\s*'([A-Z]+)',\s*'ha',\s*(NULL|E?'(?:[^']|'')*'),\s*E?'((?:[^']|'')*)'/g;
+  // Real line breaks as well as `\n` escapes: the reminders are written as
+  // multi-line literals, and a newline inside a table row ends the row.
   const literal = (value) =>
     value
       .replace(/^E?'|'$/g, '')
       .replace(/''/g, "'")
-      .replace(/\\n/g, ' ');
+      .replace(/\\n/g, ' ')
+      .replace(/\s*\n\s*/g, ' ');
   for (const match of source.matchAll(pattern)) {
     rows.push({
       code: match[1],
@@ -204,7 +218,7 @@ function templates() {
     });
   }
 
-  const declared = [...source.matchAll(/\('([A-Z0-9_]+_HA)',/g)].length;
+  const declared = [...source.matchAll(/\('[A-Z0-9_-]+',\s*'[A-Z_0-9]+',\s*'[A-Z]+',\s*'ha',/g)].length;
   if (rows.length !== declared) {
     throw new Error(`parsed ${rows.length} of ${declared} templates — the sheet would be short`);
   }

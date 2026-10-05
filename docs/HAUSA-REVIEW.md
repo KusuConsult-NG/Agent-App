@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > nineteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,539 strings; that one is two pages and links back
+> because it carries all 3,541 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,539 dictionary strings and 35 message
+It listed 78 strings. It now lists **3,541 dictionary strings and 47 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migrations that insert the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,539 strings is worse than no sheet, because it looks complete; this one cannot
+3,541 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -59,7 +59,7 @@ and if your time runs out it is the right place for it to run out. The agent
 groups come first in the table for that reason.
 
 **Table C is new, and it is the one to read if you read nothing else.** Those
-thirty-five messages reach a citizen who holds no account, has no app, and has
+forty-seven messages reach a citizen who holds no account, has no app, and has
 nobody standing beside them to explain what arrived. The acknowledgement
 wording is the sharpest case: it has to be unmistakably **not** a receipt,
 because the money has not reached government yet, and a citizen who reads it
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,539 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,541 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,539 strings: where the
+- The glossary below is applied consistently across all 3,541 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -498,7 +498,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3443 strings, grouped by where an agent meets them. Lower stakes
+3445 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2681,6 +2681,8 @@ instructions — but they are what an agent reads all day.
 | `colNeedBaseAmount` | Enter the amount the assessment is based on, in naira. | Ka shigar da kudin da aka gina kimar a kansa, da naira. | ☐ | |
 | `colNoTin` | No TIN | Babu TIN | ☐ | |
 | `colBasisAmountHint` | For example turnover, income or contract value. The charge itself is set by government. | Misali kudin shiga, riba ko darajar kwangila. Gwamnati ce ke saita kudin da kansa. | ☐ | |
+| `colMeasureHint` | What this charge is worked out from. Enter it as a number, for example 15.5. | Abin da ake lissafa wannan kudin da shi. Ka shigar da shi a matsayin lamba, misali 15.5. | ☐ | |
+| `colNeedMeasure` | Enter {{name}} as a number, zero or more. | Ka shigar da {{name}} a matsayin lamba, sifili ko fiye. | ☐ | |
 | `colTaxpayerLabel` | Taxpayer | Mai biyan haraji | ☐ | |
 | `colRevenueLabel` | Revenue | Haraji | ☐ | |
 | `colGovernmentRevenue` | Government revenue | Harajin gwamnati | ☐ | |
@@ -4192,7 +4194,7 @@ instructions — but they are what an agent reads all day.
 
 ### C · The messages PSIRS sends
 
-35 templates, and the highest-stakes strings in the project. A
+47 templates, and the highest-stakes strings in the project. A
 citizen holds no account here: the SMS is the entire record of the
 transaction as far as they are concerned, and nobody is standing beside
 them to explain it. Read the acknowledgement wording especially closely —
@@ -4235,6 +4237,18 @@ it has to be unmistakably **not** a receipt.
 | `OBJECTION_REJECTED_SMS_HA` | SMS | — | PSIRS: Ba a amince da kalubalen da aka yi kan kimantawa {{reference}} ba: {{reason}}. Kimantawar {{amount}} tana nan. Idan ba a biya ba tukuna, a biya ta hannun wakilin karbar haraji ko ofishin PSIRS. | ☐ | |
 | `OBJECTION_RECEIVED_SMS_HA` | SMS | — | PSIRS: An karbi kalubalen da aka yi kan kimantawa {{reference}}. Ba a tilasta biya ba yayin da PSIRS ke duba shi, kuma za a aiko da hukuncin. Ba sai an yi komai ba a wannan lokaci. | ☐ | |
 | `GROUP_ATTESTATION_INVITATION_SMS_HA` | SMS | — | PSIRS: An rubuta ka a matsayin shugaban {{group}} ({{code}}). Ka tabbatar da wadanda ke cikin kungiyar a {{link}} kafin {{expiry}}. Kada ka tura wannan sakon ga kowa: hanyar tabbatarwar taka ce. | ☐ | |
+| `TAX-REMINDER-6W-SMS-HA` | SMS | — | Ranka ya dade {{name}}, biyan {{revenueItemHa}} dinka na {{amount}} (TIN: {{tinNumber}}) zai kai ranar biya a {{dueDate}}. Ka biya da wuri domin ka ci gaba da bin ka’ida kuma ka samu tallafin gwamnati. Ka duba a {{portalUrl}} | ☐ | |
+| `TAX-REMINDER-6W-EMAIL-HA` | EMAIL | Ana bukatar mataki: biyan {{revenueItemHa}} zai kai ranar biya a {{dueDate}} | Ranka ya dade {{name}}, Wannan tunatarwa ce ta makonni 6 daga Hukumar Haraji ta Jihar Plateau (PSIRS). Biyan {{revenueItemHa}} dinka na {{amount}} zai kai ranar biya a {{dueDate}}. Lambar Shaidar Mai Biyan Haraji (TIN): {{tinNumber}} Bin ka’ida yana sa asusunka na PSIRS ya ci gaba da aiki, kuma yana sa ka cancanci shirye-shiryen tallafi na Jihar Plateau, ciki har da inshorar lafiya, tallafin noma da tallafin karatu. Domin biya ko duba matsayinka, ziyarci: {{portalUrl}} Hukumar Haraji ta Jihar Plateau Gidan Zaman Lafiya da Yawon Bude Ido | ☐ | |
+| `TAX-REMINDER-6W-WHATSAPP-HA` | WHATSAPP | — | 🔔 *Tunatarwar Haraji ta PSIRS* Ranka ya dade {{name}}, Biyan *{{revenueItemHa}}* dinka na *{{amount}}* zai kai ranar biya a *{{dueDate}}*. TIN: {{tinNumber}} Ka biya a kan lokaci domin ka ci gaba da bin ka’ida kuma ka samu tallafin gwamnati. Duba matsayinka: {{portalUrl}} _Hukumar Haraji ta Jihar Plateau_ | ☐ | |
+| `TAX-REMINDER-4W-SMS-HA` | SMS | — | TUNATARWAR PSIRS: Ranka ya dade {{name}}, {{revenueItemHa}} dinka ({{amount}}) zai kai ranar biya a {{dueDate}}. TIN: {{tinNumber}}. Ka biya yanzu domin kada ka shiga bashi. {{portalUrl}} | ☐ | |
+| `TAX-REMINDER-4W-EMAIL-HA` | EMAIL | Tunatarwa: {{revenueItemHa}} zai kai ranar biya cikin makonni 4 — {{dueDate}} | Ranka ya dade {{name}}, Saura makonni 4 kafin ranar biyan {{revenueItemHa}} dinka na {{amount}} ({{dueDate}}). TIN: {{tinNumber}} Rashin biyan abin da ake bin ka yana shafar makin bin ka’idarka, kuma yana iya dakatar da samun shirye-shiryen tallafi na Jihar Plateau. Ka biya yanzu ko ka duba abin da ake bin ka a: {{portalUrl}} Hukumar Haraji ta Jihar Plateau | ☐ | |
+| `TAX-REMINDER-4W-WHATSAPP-HA` | WHATSAPP | — | ⏰ *PSIRS — Tunatarwar Makonni 4* Ranka ya dade {{name}}, Biyan *{{revenueItemHa}}* dinka na *{{amount}}* zai kai ranar biya a *{{dueDate}}*. TIN: {{tinNumber}} Kada ka shiga bashi — ka biya kafin ranar biya. {{portalUrl}} _Hukumar Haraji ta Jihar Plateau_ | ☐ | |
+| `TAX-REMINDER-2W-SMS-HA` | SMS | — | GAGGAWA — PSIRS: Ranka ya dade {{name}}, {{revenueItemHa}} dinka ({{amount}}) zai kai ranar biya nan da makonni 2, a {{dueDate}}. TIN: {{tinNumber}}. Ka biya nan take domin kada a ci ka tara. {{portalUrl}} | ☐ | |
+| `TAX-REMINDER-2W-EMAIL-HA` | EMAIL | GAGGAWA: {{revenueItemHa}} zai kai ranar biya cikin makonni 2 — ka dauki mataki yanzu | Ranka ya dade {{name}}, TUNATARWA TA GAGGAWA daga Hukumar Haraji ta Jihar Plateau. Biyan {{revenueItemHa}} dinka na {{amount}} zai kai ranar biya a {{dueDate}} — wato nan da kwanaki 14. TIN: {{tinNumber}} Rashin biya a kan lokaci zai sa a rubuta bashi a bayananka na PSIRS, wanda zai shafi makin bin ka’idarka da cancantarka ga shirye-shiryen tallafin gwamnati. Ka biya yanzu a: {{portalUrl}} Hukumar Haraji ta Jihar Plateau Gidan Zaman Lafiya da Yawon Bude Ido | ☐ | |
+| `TAX-REMINDER-2W-WHATSAPP-HA` | WHATSAPP | — | 🚨 *PSIRS — GAGGAWA: Sanarwar Makonni 2* Ranka ya dade {{name}}, Biyan *{{revenueItemHa}}* dinka na *{{amount}}* zai kai ranar biya a *{{dueDate}}* — saura kwanaki 14 kacal. TIN: {{tinNumber}} Don Allah ka biya nan take domin kada ka shiga bashi. 👉 {{portalUrl}} _Hukumar Haraji ta Jihar Plateau_ | ☐ | |
+| `TAX-REMINDER-1W-SMS-HA` | SMS | — | PSIRS: Ranka ya dade {{name}}, {{revenueItemHa}} dinka ({{amount}}) zai kai ranar biya nan da mako daya, a {{dueDate}}. TIN: {{tinNumber}}. Bayan wannan rana, sai an sake fitar da takardar biya kafin a iya biya. {{portalUrl}} | ☐ | |
+| `TAX-REMINDER-1W-EMAIL-HA` | EMAIL | Saura mako daya: {{revenueItemHa}} zai kai ranar biya a {{dueDate}} | Ranka ya dade {{name}}, Biyan {{revenueItemHa}} dinka na {{amount}} zai kai ranar biya a {{dueDate}}, nan da mako daya. TIN: {{tinNumber}} Bayan wannan rana takardar biya za ta kare. Abin da ake bin ka ba zai bace ba, amma sai wakilin karbar haraji ko ofishin PSIRS ya sake fitar da takardar kafin a iya biya. Domin biya ko duba matsayinka, ziyarci: {{portalUrl}} Hukumar Haraji ta Jihar Plateau | ☐ | |
+| `TAX-REMINDER-1W-WHATSAPP-HA` | WHATSAPP | — | *PSIRS: saura mako daya* Ranka ya dade {{name}}, Biyan *{{revenueItemHa}}* dinka na *{{amount}}* zai kai ranar biya a *{{dueDate}}*. TIN: {{tinNumber}} Bayan wannan rana, sai an sake fitar da takardar biya kafin a iya biya. {{portalUrl}} _Hukumar Haraji ta Jihar Plateau_ | ☐ | |
 
 <!-- END:GENERATED -->
 

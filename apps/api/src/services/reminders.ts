@@ -19,9 +19,9 @@
  *
  * So TAX_REMINDER_6W has never been sent to anybody. Its template is
  * approved, its flag column exists on every invoice and is false on all of
- * them. (This said its Hausa translation was written. None of the reminders
- * has one: a Hausa reader is sent the English, which notifications.ts prefers
- * to sending nothing.) Two suites appeared to cover it by moving an invoice's
+ * them. (This said its Hausa translation was written when none of the
+ * reminders had one; migration 101 wrote them, for all four windows.) Two
+ * suites appeared to cover it by moving an invoice's
  * expiry out to forty-two days first, which is a state the platform cannot
  * produce; both now use a window an invoice really passes through.
  *
