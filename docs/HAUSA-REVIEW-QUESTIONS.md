@@ -674,18 +674,20 @@ failed, a step-up the officer walked away from. `STEP_UP_REQUIRED` has now been
 added, because it guards every consequential money action in the portal and its
 instruction was already in Hausa under an English heading.
 
-**The scale, counted rather than estimated.** The platform raises **185
+**The scale, counted rather than estimated.** The platform raises **186
 distinct error codes**; the officer portal says 8 of them in Hausa, and the
-agent application says 41. The last two are `CASE_MOVED`, raised when two
+agent application says 41. The newest is `ALREADY_BILLED_THIS_YEAR`, raised
+when an officer assesses a trader who already has a presumptive bill for the
+year. The two before it are `CASE_MOVED`, raised when two
 officers escalate one case together and the second finds it already with
 somebody else, and `SWEEP_ALREADY_RUNNING`, raised when one presses any of the
 six buttons that start a background sweep by hand — reminders, refunds, TINs,
 vehicle-authority notices, commission promotion, the connection graph — while
 that sweep is already in flight. One code covers all six because the officer
 knows which button they pressed; what differs between them is the advice, and
-the advice is carried in the message rather than in the code. Both are English,
+the advice is carried in the message rather than in the code. All three are English,
 like the rest of the administrative row in the table below, and for the same
-reason: whether an officer working a case file or a sweep needs those sentences
+reason: whether an officer working a case file, a sweep or an assessment needs those sentences
 in Hausa is a question for the reviewer rather than an answer this document can
 assume. The first version of this section said twenty-six,
 from a search that matched `conflict('CODE'` on a single line and missed every
@@ -695,7 +697,7 @@ exists to keep honest, which is why all three figures are now recomputed by
 `scripts/build-hausa-review.mjs` and the build refuses when this sentence
 disagrees with them.
 
-Not all 185 can reach an officer. Many are the agent's, many are the platform
+Not all 186 can reach an officer. Many are the agent's, many are the platform
 talking to itself — a storage write that did not complete, a malformed body, a
 route that does not exist. The ones below are a **sample, not the set**: those
 an officer meets while doing the work the portal is for, each carrying a code

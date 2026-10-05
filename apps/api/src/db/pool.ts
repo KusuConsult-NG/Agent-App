@@ -278,6 +278,15 @@ export const LOCK_NAMESPACE = {
    * owner and the document type, the columns the unique index is keyed on.
    */
   KYC_DOCUMENT: 15,
+  /**
+   * One trader's presumptive assessment, while a year's bill is being raised.
+   *
+   * `assessFromObservation` refuses a second bill for a year the trader has
+   * already been billed for, and the bill it looks for may be one another
+   * officer is raising at that moment from a different observation. Keyed on
+   * the taxpayer, because the duplicate is two observations of one person.
+   */
+  PRESUMPTIVE_TAXPAYER: 16,
 } as const;
 
 /**

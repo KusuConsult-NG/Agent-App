@@ -45,7 +45,7 @@
  */
 
 import type { Db } from '../db/pool';
-import { query, queryOne, withTransaction } from '../db/pool';
+import { advisoryLock, LOCK_NAMESPACE, query, queryOne, withTransaction } from '../db/pool';
 import { createAssessmentIn, withdrawUnpaidBill } from './revenue';
 import { recordAudit } from './audit';
 import { queueNotification } from './notifications';
@@ -438,6 +438,7 @@ export async function assessFromObservation(
       [params.observationId],
     );
     if (!observation) throw notFound('That observation');
+    await advisoryLock(client, LOCK_NAMESPACE.PRESUMPTIVE_TAXPAYER, observation.taxpayer_id);
 
     if (observation.attestation_state === 'DISAGREED') {
       throw conflict(
@@ -496,11 +497,52 @@ export async function assessFromObservation(
     let assessmentId: string | null = null;
     let invoiceNumber: string | null = null;
     if (computation.tier !== 'NANO') {
+      /*
+       * One presumptive bill per trader per year.
+       *
+       * The refusal above stops one observation being assessed twice, which
+       * is a retried request. It did nothing about two observations of the
+       * same trader — a second visit, or a second agent at the same stall —
+       * and each was assessed as if it were the only one. Measured with the
+       * tailor in \`what-the-agent-saw\`: two observations, two assessments,
+       * and two invoices of 4,800,000 kobo, both for 2026. The trader owed
+       * one year's presumptive tax and was billed for two.
+       *
+       * A bill counts while its assessment stands and its invoice has not
+       * been cancelled: a lapsed bill is still owed, and one withdrawn after
+       * an upheld objection is not. So the way to reassess a trader whose
+       * first assessment was wrong is the objection, which withdraws the
+       * first bill and leaves this observation free to be assessed.
+       */
+      const year = String(currentYearInPlateau());
+      const billed = await queryOne<{ invoice_number: string }>(
+        client,
+        `SELECT i.invoice_number
+           FROM presumptive_assessments p
+           JOIN assessments a ON a.id = p.assessment_id
+           JOIN invoices i ON i.assessment_id = a.id AND i.status <> 'CANCELLED'
+          WHERE p.taxpayer_id = $1
+            AND p.status <> 'WITHDRAWN'
+            AND a.period_label = $2
+          ORDER BY (i.reissued_as IS NULL) DESC, i.created_at DESC
+          LIMIT 1`,
+        [observation.taxpayer_id, year],
+      );
+      if (billed) {
+        throw conflict(
+          'ALREADY_BILLED_THIS_YEAR',
+          `This trader already has a presumptive bill for ${year} (${billed.invoice_number}). ` +
+            'Assessing this observation as well would bill the same year twice.',
+          'If the first assessment was wrong, the trader objects to it. Once the objection ' +
+            'is upheld and that bill withdrawn, this observation can be assessed.',
+        );
+      }
+
       const raised = await createAssessmentIn(client, {
         taxpayerId: observation.taxpayer_id,
         revenueItemId: await presumptiveItemFor(client, computation.sizeBand),
         inputs: { baseAmountKobo: computation.assumedAnnualTurnoverKobo },
-        periodLabel: String(currentYearInPlateau()),
+        periodLabel: year,
         assessmentType: 'OFFICER',
         actorId: params.actorId,
         actorRole: params.actorRole,
