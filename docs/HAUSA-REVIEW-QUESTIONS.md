@@ -674,25 +674,27 @@ failed, a step-up the officer walked away from. `STEP_UP_REQUIRED` has now been
 added, because it guards every consequential money action in the portal and its
 instruction was already in Hausa under an English heading.
 
-**The scale, counted rather than estimated.** The platform raises **187
+**The scale, counted rather than estimated.** The platform raises **188
 distinct error codes**; the officer portal says 8 of them in Hausa, and the
-agent application says 41. The newest two are presumptive:
+agent application says 41. The newest is `LAST_USER_MANAGER`, raised when an
+administrator tries to remove the permission to manage users from the last
+role that holds it. The two before it are presumptive:
 `NOT_REPLACEABLE_FROM_THAT_DATE`, raised when an officer publishes a
 replacement schedule figure, class or reading of the exemption from a date it
 cannot start on, and `ALREADY_BILLED_THIS_YEAR`, raised when an officer
 assesses a trader who already has a presumptive bill for the year. The two
-before them are `CASE_MOVED`, raised when two
-officers escalate one case together and the second finds it already with
+before them are `CASE_MOVED`, raised when two officers escalate one case
+together and the second finds it already with
 somebody else, and `SWEEP_ALREADY_RUNNING`, raised when one presses any of the
 six buttons that start a background sweep by hand — reminders, refunds, TINs,
 vehicle-authority notices, commission promotion, the connection graph — while
 that sweep is already in flight. One code covers all six because the officer
 knows which button they pressed; what differs between them is the advice, and
-the advice is carried in the message rather than in the code. All four are English,
-like the rest of the administrative row in the table below, and for the same
-reason: whether an officer working a case file, a sweep or an assessment needs those sentences
-in Hausa is a question for the reviewer rather than an answer this document can
-assume. The first version of this section said twenty-six,
+the advice is carried in the message rather than in the code. All five are
+English, like the rest of the administrative row in the table below, and for
+the same reason: whether an officer working a case file, a sweep, an
+assessment or the role editor needs those sentences in Hausa is a question for
+the reviewer rather than an answer this document can assume. The first version of this section said twenty-six,
 from a search that matched `conflict('CODE'` on a single line and missed every
 multi-line call and every `new AppError({ code: … })` literal — which is most
 of them. It understated the gap by a factor of six, on the page this document
@@ -700,7 +702,7 @@ exists to keep honest, which is why all three figures are now recomputed by
 `scripts/build-hausa-review.mjs` and the build refuses when this sentence
 disagrees with them.
 
-Not all 187 can reach an officer. Many are the agent's, many are the platform
+Not all 188 can reach an officer. Many are the agent's, many are the platform
 talking to itself — a storage write that did not complete, a malformed body, a
 route that does not exist. The ones below are a **sample, not the set**: those
 an officer meets while doing the work the portal is for, each carrying a code
