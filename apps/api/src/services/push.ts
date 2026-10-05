@@ -480,14 +480,14 @@ export function pushRequestFor(
 export async function sendPushNotification(
   target: { userId?: string; agentId?: string },
   payload: { title: string; body: string; data?: Record<string, unknown> },
-): Promise<{ sent: number; failed: number }> {
+): Promise<{ sent: number; failed: number; unavailable: number }> {
   const keys = vapidKeys();
   if (!keys) {
     throw new PushNotConfiguredError();
   }
 
   const subscriptions = await subscriptionsFor(target);
-  if (subscriptions.length === 0) return { sent: 0, failed: 0 };
+  if (subscriptions.length === 0) return { sent: 0, failed: 0, unavailable: 0 };
 
   const message = JSON.stringify({
     title: payload.title,
@@ -497,6 +497,13 @@ export async function sendPushNotification(
 
   let sent = 0;
   let failed = 0;
+  /*
+   * Failures that say nothing about the handset: a push service that was down
+   * or rate-limiting, or a connection that never got there. Counted apart so
+   * the messaging layer can tell the queue to try again, rather than recording
+   * a service's bad afternoon as a refusal of this person's notification.
+   */
+  let unavailable = 0;
 
   for (const subscription of subscriptions) {
     /*
@@ -551,6 +558,7 @@ export async function sendPushNotification(
     } catch (error) {
       failed += 1;
       const status = (error as { statusCode?: number }).statusCode;
+      if (status === undefined || status >= 500 || status === 429) unavailable += 1;
 
       /*
        * 404 and 410 are how a push service reports that the handset is gone —
@@ -577,5 +585,5 @@ export async function sendPushNotification(
     }
   }
 
-  return { sent, failed };
+  return { sent, failed, unavailable };
 }

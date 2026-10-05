@@ -294,7 +294,7 @@ describe('sending one', () => {
       { title: 'Settled', body: 'PSIRS has received ₦2,000.' },
     );
 
-    assert.deepEqual(result, { sent: 1, failed: 0 }, JSON.stringify(result));
+    assert.deepEqual(result, { sent: 1, failed: 0, unavailable: 0 }, JSON.stringify(result));
     assert.deepEqual(attempted, ['https://push.example.test/abc123']);
   });
 
@@ -378,6 +378,58 @@ describe('sending one', () => {
     assert.equal(row?.expired_at, null, 'an error with no status is not a dead handset');
   });
 
+  /*
+   * And what the queue is told about it.
+   *
+   * The subscription survived the outage, but the notification did not: the
+   * provider reported every failure that left nothing sent as REJECTED, which
+   * the dispatcher marks FAILED for good. So a push service's bad afternoon,
+   * or a dropped connection, cost the citizen that notification permanently
+   * — while an unconfigured server, the deployment's own fault, was already
+   * reported as UNAVAILABLE and retried. A service that was down is the same
+   * kind of failure, and gets the same answer.
+   */
+  it('tells the queue to try again when the push service was down', async () => {
+    await configure();
+    await answering(503);
+    const keys = subscriberKeys();
+    await saveSubscription(
+      { endpoint: 'https://push.example.test/down', keys: { p256dh: keys.p256dh, auth: keys.auth } },
+      { userId },
+    );
+
+    const result = await providerFor('PUSH').send({ channel: 'PUSH', recipient: userId, message: 'Settled' });
+    assert.equal(result.outcome, 'UNAVAILABLE', JSON.stringify(result));
+  });
+
+  it('and when the connection never got there', async () => {
+    await configure();
+    await answering('network');
+    const keys = subscriberKeys();
+    await saveSubscription(
+      { endpoint: 'https://push.example.test/lost', keys: { p256dh: keys.p256dh, auth: keys.auth } },
+      { userId },
+    );
+
+    const result = await providerFor('PUSH').send({ channel: 'PUSH', recipient: userId, message: 'Settled' });
+    assert.equal(result.outcome, 'UNAVAILABLE', JSON.stringify(result));
+  });
+
+  it('but not when the only device is gone', async () => {
+    // The control: a 410 is a verdict, and retrying a handset that no longer
+    // exists only fills the queue.
+    await configure();
+    await answering(410);
+    const keys = subscriberKeys();
+    await saveSubscription(
+      { endpoint: 'https://push.example.test/gone-for-good', keys: { p256dh: keys.p256dh, auth: keys.auth } },
+      { userId },
+    );
+
+    const result = await providerFor('PUSH').send({ channel: 'PUSH', recipient: userId, message: 'Settled' });
+    assert.equal(result.outcome, 'REJECTED', JSON.stringify(result));
+  });
+
   it('still refuses to report a delivery when there is no key to sign with', async () => {
     await answering(201);
     clearVapidForTesting();
@@ -402,7 +454,7 @@ describe('sending one', () => {
     await configure();
     await answering(201);
     const result = await sendPushNotification({ userId }, { title: 'A', body: 'B' });
-    assert.deepEqual(result, { sent: 0, failed: 0 });
+    assert.deepEqual(result, { sent: 0, failed: 0, unavailable: 0 });
   });
 
   it('skips a subscription with no encryption keys rather than failing the batch', async () => {
@@ -443,7 +495,7 @@ describe('sending one', () => {
     );
 
     const result = await sendPushNotification({ userId }, { title: 'A', body: 'B' });
-    assert.deepEqual(result, { sent: 0, failed: 0 });
+    assert.deepEqual(result, { sent: 0, failed: 0, unavailable: 0 });
     assert.deepEqual(attempted, []);
   });
 });
