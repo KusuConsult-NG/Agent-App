@@ -25,6 +25,7 @@
 import './env';
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { USAGE_BATCH_LIMIT, USAGE_MIN_GROUP_SIZE } from '@psirs/shared';
 import {
   createGovernmentUser,
@@ -255,21 +256,25 @@ describe('the funnel answers the question it exists for', () => {
      * creates no taxpayer, so before this table the two were the same fact:
      * no new taxpayer.
      */
-    const abandoned = '11111111-1111-4111-8111-111111111111';
-    const completed = '22222222-2222-4222-8222-222222222222';
+    /*
+     * Enough of each to be published at all. With one of each, the counts
+     * and the median — one agent's exact duration — were exactly what the
+     * group rule exists to withhold (`a-count-of-one`).
+     */
     const now = new Date().toISOString();
-
-    await usage.record(pool, {
-      surface: 'AGENT_PWA',
-      role: 'agent',
-      events: [
-        { event: 'taxpayer.registration', occurredAt: now, flowId: abandoned, outcome: 'STARTED', step: 'step-0' },
-        { event: 'taxpayer.registration', occurredAt: now, flowId: abandoned, step: 'step-2' },
-        { event: 'taxpayer.registration', occurredAt: now, flowId: abandoned, outcome: 'ABANDONED', step: 'step-2' },
-        { event: 'taxpayer.registration', occurredAt: now, flowId: completed, outcome: 'STARTED', step: 'step-0' },
-        { event: 'taxpayer.registration', occurredAt: now, flowId: completed, outcome: 'COMPLETED', step: 'step-4', durationMs: 90_000 },
-      ],
-    });
+    const events = [];
+    for (let i = 0; i < USAGE_MIN_GROUP_SIZE; i += 1) {
+      const abandoned = randomUUID();
+      const completed = randomUUID();
+      events.push(
+        { event: 'taxpayer.registration' as const, occurredAt: now, flowId: abandoned, outcome: 'STARTED' as const, step: 'step-0' },
+        { event: 'taxpayer.registration' as const, occurredAt: now, flowId: abandoned, step: 'step-2' },
+        { event: 'taxpayer.registration' as const, occurredAt: now, flowId: abandoned, outcome: 'ABANDONED' as const, step: 'step-2' },
+        { event: 'taxpayer.registration' as const, occurredAt: now, flowId: completed, outcome: 'STARTED' as const, step: 'step-0' },
+        { event: 'taxpayer.registration' as const, occurredAt: now, flowId: completed, outcome: 'COMPLETED' as const, step: 'step-4', durationMs: 90_000 },
+      );
+    }
+    await usage.record(pool, { surface: 'AGENT_PWA', role: 'agent', events });
 
     const funnels = (await usage.flowFunnels(pool)) as unknown as {
       event: string;
@@ -280,9 +285,9 @@ describe('the funnel answers the question it exists for', () => {
     }[];
     const registration = funnels.find((row) => row.event === 'taxpayer.registration')!;
 
-    assert.equal(registration.started, '2');
-    assert.equal(registration.completed, '1');
-    assert.equal(registration.abandoned, '1');
+    assert.equal(registration.started, String(2 * USAGE_MIN_GROUP_SIZE));
+    assert.equal(registration.completed, String(USAGE_MIN_GROUP_SIZE));
+    assert.equal(registration.abandoned, String(USAGE_MIN_GROUP_SIZE));
     assert.equal(registration.median_completion_ms, '90000');
   });
 

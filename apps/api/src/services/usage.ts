@@ -106,26 +106,46 @@ function windowOf(params: { from?: Date; to?: Date }): Window {
  * worth acting on — a form nobody finishes is invisible in every other record
  * the platform keeps, because an abandoned registration creates no taxpayer.
  */
+/**
+ * A count, or null when it is small enough to single somebody out.
+ *
+ * The rule above suppressed whole groups by their total, and the cells
+ * inside a group that passed were published as they stood. The window is the
+ * caller's to choose, so a group of eight events in one LGA over one hour
+ * could carry "1 started, 1 completed" — and the funnel carried the median
+ * completion time of that one flow, which is one agent's exact duration.
+ * Measured: Barkin Ladi, the last hour, started 1, completed 1; the
+ * vehicle-capture funnel, started 1, completed 1, median 90,000 ms.
+ *
+ * Zero is kept: it names nobody.
+ */
+function withheldBelow(countExpression: string, minimumIndex: number): string {
+  return `CASE WHEN (${countExpression}) BETWEEN 1 AND $${minimumIndex} - 1 THEN NULL
+               ELSE (${countExpression})::text END`;
+}
+
 export async function flowFunnels(db: Db, params: { from?: Date; to?: Date } = {}) {
   const { from, to } = windowOf(params);
+  const completed = "count(DISTINCT flow_id) FILTER (WHERE outcome = 'COMPLETED')";
   return query(
     db,
     `SELECT event,
-            count(DISTINCT flow_id) FILTER (WHERE outcome = 'STARTED')::text   AS started,
-            count(DISTINCT flow_id) FILTER (WHERE outcome = 'COMPLETED')::text AS completed,
-            count(DISTINCT flow_id) FILTER (WHERE outcome = 'ABANDONED')::text AS abandoned,
-            count(DISTINCT flow_id) FILTER (WHERE outcome = 'FAILED')::text    AS failed,
-            COALESCE(ROUND(
-              percentile_cont(0.5) WITHIN GROUP (
-                ORDER BY duration_ms) FILTER (WHERE outcome = 'COMPLETED')),0)::text
-              AS median_completion_ms
+            ${withheldBelow("count(DISTINCT flow_id) FILTER (WHERE outcome = 'STARTED')", 3)}   AS started,
+            ${withheldBelow(completed, 3)} AS completed,
+            ${withheldBelow("count(DISTINCT flow_id) FILTER (WHERE outcome = 'ABANDONED')", 3)} AS abandoned,
+            ${withheldBelow("count(DISTINCT flow_id) FILTER (WHERE outcome = 'FAILED')", 3)}    AS failed,
+            CASE WHEN ${completed} >= $3
+                 THEN COALESCE(ROUND(
+                        percentile_cont(0.5) WITHIN GROUP (
+                          ORDER BY duration_ms) FILTER (WHERE outcome = 'COMPLETED')),0)::text
+            END AS median_completion_ms
        FROM usage_events
       WHERE occurred_at BETWEEN $1 AND $2
         AND outcome IS NOT NULL
         AND flow_id IS NOT NULL
       GROUP BY event
       ORDER BY count(DISTINCT flow_id) DESC`,
-    [from, to],
+    [from, to, USAGE_MIN_GROUP_SIZE],
   );
 }
 
@@ -216,8 +236,8 @@ export async function reachByLga(db: Db, params: { from?: Date; to?: Date } = {}
   return query(
     db,
     `SELECT l.name AS lga, l.zone,
-            count(DISTINCT u.flow_id) FILTER (WHERE u.outcome = 'STARTED')::text AS started,
-            count(DISTINCT u.flow_id) FILTER (WHERE u.outcome = 'COMPLETED')::text AS completed,
+            ${withheldBelow("count(DISTINCT u.flow_id) FILTER (WHERE u.outcome = 'STARTED')", 3)} AS started,
+            ${withheldBelow("count(DISTINCT u.flow_id) FILTER (WHERE u.outcome = 'COMPLETED')", 3)} AS completed,
             count(*)::text AS events
        FROM usage_events u JOIN lgas l ON l.id = u.lga_id
       WHERE u.occurred_at BETWEEN $1 AND $2
