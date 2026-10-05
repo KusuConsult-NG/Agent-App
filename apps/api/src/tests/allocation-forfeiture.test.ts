@@ -47,6 +47,12 @@ import { queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 
 let officer = '';
+/*
+ * The store's side of the handover. Whoever awarded a share does not also
+ * record it collected (`a-share-handed-to-oneself`), so collections in this
+ * file are recorded by a second officer.
+ */
+let storekeeper = '';
 let lgaId = '';
 let counter = 0;
 
@@ -63,6 +69,8 @@ beforeEach(async () => {
   lgaId = await firstLgaId();
   await createGovernmentUser({ fullName: 'Store Officer', phone: '+2348000000080', role: 'admin' });
   officer = (await loginAs('+2348000000080')).accessToken;
+  await createGovernmentUser({ fullName: 'Store Keeper', phone: '+2348000000081', role: 'admin' });
+  storekeeper = (await loginAs('+2348000000081')).accessToken;
   counter = 0;
 });
 
@@ -180,7 +188,7 @@ describe('A share that was never collected can be released', () => {
     const collected = await post(
       '/allocations/collections',
       { collectionCode: first.body.collectionCode },
-      { token: officer },
+      { token: storekeeper },
     );
     assert.equal(collected.status, 409, JSON.stringify(collected.body));
     assert.equal(collected.body.error.code, 'AWARD_FORFEITED');
@@ -192,7 +200,7 @@ describe('A share that was never collected can be released', () => {
     await post(
       '/allocations/collections',
       { collectionCode: first.body.collectionCode },
-      { token: officer },
+      { token: storekeeper },
     );
 
     const attempt = await post(
@@ -241,7 +249,7 @@ describe('The code a farmer presents is read the way they wrote it', () => {
     const collected = await post(
       '/allocations/collections',
       { collectionCode: typed },
-      { token: officer },
+      { token: storekeeper },
     );
 
     assert.equal(
@@ -260,7 +268,7 @@ describe('The code a farmer presents is read the way they wrote it', () => {
     const collected = await post(
       '/allocations/collections',
       { collectionCode: first.body.collectionCode },
-      { token: officer },
+      { token: storekeeper },
     );
     assert.equal(collected.status, 200, JSON.stringify(collected.body));
     assert.match(collected.body.message, /collected 2/i);
@@ -268,7 +276,7 @@ describe('The code a farmer presents is read the way they wrote it', () => {
     const again = await post(
       '/allocations/collections',
       { collectionCode: first.body.collectionCode },
-      { token: officer },
+      { token: storekeeper },
     );
     assert.equal(again.status, 409, 'and only once');
   });
