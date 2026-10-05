@@ -2,13 +2,15 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
-import { serialiseKobo } from '@psirs/shared';
+import { BASE_AMOUNT_INPUT, FORMULA_INPUT_NAMES, serialiseKobo } from '@psirs/shared';
+import { inputsFor } from '../services/rate-engine';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { authenticate, requirePermission, requireActiveAgent, requireStepUp } from '../middleware/auth';
 import { idempotent } from '../middleware/idempotency';
 import { asyncHandler, koboSchema, uuidSchema, validateBody, validateQuery } from '../middleware/validate';
 import { assertOwnRecord, callerAgentId, seesEverything } from '../lib/ownership';
-import { notFound, badRequest } from '../lib/errors';
+import { conflict, notFound, badRequest } from '../lib/errors';
+import { VEHICLE_RENEWAL_ITEM_CODES } from '../lib/vehicle-renewal-items';
 import { CHARGE_PERIOD_SHUT_SQL } from '../lib/payable-invoice';
 import * as revenue from '../services/revenue';
 import { recordAudit } from '../services/audit';
@@ -167,6 +169,39 @@ revenueRouter.post(
         const [field, message] = required[data.rateType];
         if (data[field] === undefined || data[field] === null || data[field] === '') {
           ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message });
+        }
+
+        /*
+         * A formula reads only measurements the field app can ask for in both
+         * languages.
+         *
+         * The field app asks the agent for each input a formula names, and its
+         * label comes from the dictionary by that name. A name the officer
+         * invented has no label in either language: the box would show the
+         * name itself, spelt like code, to a reader of Hausa as much as of
+         * English. So the names are a list (FORMULA_INPUTS, plus the declared
+         * amount), and anything else is refused here, naming the list.
+         */
+        if (data.rateType === 'FORMULA' && typeof data.formula === 'string' && data.formula.trim()) {
+          let names: string[] = [];
+          try {
+            names = inputsFor({ rate_type: 'FORMULA', formula: data.formula });
+          } catch {
+            // An unsupported character is refused when the formula is checked;
+            // there is no name to judge here.
+          }
+          const allowed = new Set<string>([...FORMULA_INPUT_NAMES, BASE_AMOUNT_INPUT]);
+          const unknown = names.filter((name) => !allowed.has(name));
+          if (unknown.length > 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['formula'],
+              message:
+                `A formula can read only measurements the field app asks for: ` +
+                `${[...allowed].join(', ')}. ${unknown.map((name) => `"${name}"`).join(', ')} ` +
+                `${unknown.length === 1 ? 'is' : 'are'} not one of them.`,
+            });
+          }
         }
 
         if (data.rateType === 'TIERED' && data.tiers !== undefined) {
@@ -444,6 +479,27 @@ revenueRouter.post(
       longitude: z.number().min(-180).max(180).optional(),
     }),
     async (req, res, data) => {
+      /*
+       * Not a vehicle renewal. Those are raised by the renewal flow, which
+       * checks the vehicle and its owner, allows 6, 12 or 24 months, records
+       * the renewal and issues the papers once paid; charged here, none of
+       * that happens. The collect screen could not reach these only because
+       * it sent no inputs for a formula item, and it now asks for them.
+       */
+      const item = await queryOne<{ code: string }>(
+        pool,
+        'SELECT code FROM revenue_items WHERE id = $1',
+        [data.revenueItemId],
+      );
+      if (item && VEHICLE_RENEWAL_ITEM_CODES.includes(item.code)) {
+        throw conflict(
+          'RENEWED_FROM_THE_VEHICLE',
+          'Vehicle particulars are renewed from the vehicle itself, which checks the vehicle and its ' +
+            'owner and issues the papers once the payment lands. Nothing has been charged.',
+          'Open the vehicle and renew it from there.',
+        );
+      }
+
       const result = await revenue.createAssessment({
         ...data,
         actorId: req.auth!.userId,

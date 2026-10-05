@@ -22,6 +22,7 @@ import { vehicleRegistry, type VehicleLookupOutcome } from '../integrations';
 import { recordAudit } from './audit';
 import { registerDocument, renderVehicleDocumentPdf } from './documents';
 import { createAssessment } from './revenue';
+import { VEHICLE_RENEWAL_ITEM_CODES } from '../lib/vehicle-renewal-items';
 import { queueNotification } from './notifications';
 import { log } from '../lib/logger';
 import { escapeLike } from '../lib/like';
@@ -362,6 +363,18 @@ export async function initiateRenewal(params: {
 }) {
   if (![6, 12, 24].includes(params.renewalPeriodMonths)) {
     throw badRequest('Vehicle particulars can be renewed for 6, 12 or 24 months.');
+  }
+
+  const item = await queryOne<{ code: string }>(
+    pool,
+    'SELECT code FROM revenue_items WHERE id = $1',
+    [params.revenueItemId],
+  );
+  if (!item || !VEHICLE_RENEWAL_ITEM_CODES.includes(item.code)) {
+    throw badRequest(
+      'That is not a vehicle renewal. Choose the private or the commercial vehicle particulars renewal.',
+      [{ field: 'revenueItemId', issue: 'Not a vehicle renewal item' }],
+    );
   }
 
   const vehicle = await withTransaction(async (client) =>

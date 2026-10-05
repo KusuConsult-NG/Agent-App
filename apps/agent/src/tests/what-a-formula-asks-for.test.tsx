@@ -9,13 +9,15 @@
  */
 
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
-import { translations } from '@psirs/shared';
-import { CollectScreen, inputLabel } from '../screens/Collect';
+import { FORMULA_INPUTS, translations } from '@psirs/shared';
+import { CollectScreen, inputLabel, measureLabel } from '../screens/Collect';
 import { api } from '../lib/api';
+import { setAppLanguage } from '../lib/i18n';
 
 const en = translations.en;
+const ha = translations.ha;
 
 const TRADER = {
   id: 'tp-1',
@@ -58,18 +60,18 @@ function mockApi() {
   } as never);
 }
 
-async function chooseTheShop() {
+async function chooseTheShop(words: typeof en = en) {
   render(<CollectScreen navigate={() => {}} connection="ONLINE" />);
   const box = document.querySelector('input') as HTMLInputElement;
   fireEvent.change(box, { target: { value: 'Gyang' } });
-  fireEvent.click(screen.getByRole('button', { name: /^Search$/ }));
+  fireEvent.click(screen.getByRole('button', { name: words.actionSearch }));
   await waitFor(() => screen.getByText(/Gyang Provisions/));
   fireEvent.click(screen.getByText(/Gyang Provisions/));
   await waitFor(() => expect(document.querySelector('select')).toBeTruthy());
   fireEvent.change(document.querySelector('select') as HTMLSelectElement, {
     target: { value: SHOP.id },
   });
-  return screen.findByText('Floor area sqm');
+  return screen.findByText(words.colFiFloorAreaSqm);
 }
 
 describe('a formula item at the counter', () => {
@@ -78,6 +80,7 @@ describe('a formula item at the counter', () => {
     localStorage.clear();
     vi.restoreAllMocks();
   });
+  afterEach(() => setAppLanguage('en'));
 
   it('asks for what the formula reads, and quotes with it as typed', async () => {
     const post = mockApi();
@@ -107,7 +110,7 @@ describe('a formula item at the counter', () => {
     fireEvent.click(screen.getByRole('button', { name: /Calculate amount/i }));
 
     await waitFor(() =>
-      expect(screen.getByText(en.colNeedMeasure.replace('{{name}}', 'Floor area sqm'))).toBeTruthy(),
+      expect(screen.getByText(en.colNeedMeasure.replace('{{name}}', en.colFiFloorAreaSqm))).toBeTruthy(),
     );
     expect(post).not.toHaveBeenCalled();
   });
@@ -124,7 +127,37 @@ describe('a formula item at the counter', () => {
     expect(api.get).toHaveBeenCalledWith(expect.stringMatching(/^\/revenue\/items\?.*taxpayerId=tp-1/));
   });
 
-  it('reads an input name the way a person would', () => {
+  /*
+   * The label is the dictionary's, in the reader's language.
+   *
+   * It was built from the name the officer typed into the formula, so a Hausa
+   * reader was asked for "Floor area sqm" in English. A name on the list of
+   * measurements has a label in both languages; the API refuses a formula
+   * naming anything else.
+   */
+  it('asks a Hausa reader in Hausa', async () => {
+    setAppLanguage('ha');
+    mockApi();
+    await chooseTheShop(ha);
+    expect(screen.getByText(ha.colFiFloorAreaSqm)).toBeTruthy();
+    expect(screen.queryByText('Floor area sqm')).toBeNull();
+  });
+
+  it('has both labels for every measurement a formula may read', () => {
+    for (const [name, key] of Object.entries(FORMULA_INPUTS)) {
+      for (const words of [en, ha]) {
+        const label = (words as unknown as Record<string, string>)[key];
+        expect(typeof label, `${name} has no label`).toBe('string');
+        expect(label.trim().length, `${name} has an empty label`).toBeGreaterThan(0);
+      }
+      expect(ha[key], `${name} is not translated`).not.toBe(en[key]);
+    }
+  });
+
+    it('reads an input name the way a person would', () => {
+    // A rate written before the list existed still gets a readable box.
+    expect(measureLabel('legacyThing', en)).toBe('Legacy thing');
+    expect(measureLabel('rooms', ha)).toBe(ha.colFiRooms);
     expect(inputLabel('area')).toBe('Area');
     expect(inputLabel('floorAreaSqm')).toBe('Floor area sqm');
     expect(inputLabel('number_of_rooms')).toBe('Number of rooms');

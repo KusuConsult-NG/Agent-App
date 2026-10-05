@@ -24,7 +24,7 @@ import type { ConnectionState } from '../lib/device';
 import { queryParams, useRoute } from '../router';
 import { useI18n } from '../lib/i18n';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
-import { enumLabel, formatDateIn, formatNaira, formatDateTimeIn, localName, translations, type Language, type TranslationDictionary } from '@psirs/shared';
+import { enumLabel, formatDateIn, formatNaira, formatDateTimeIn, formulaInputLabelKey, localName, translations, type Language, type TranslationDictionary } from '@psirs/shared';
 
 interface RevenueItem {
   id: string;
@@ -143,9 +143,24 @@ export function paymentOutcomeText(
 }
 
 /**
+ * The label for a measurement a formula reads, in the reader's language.
+ *
+ * A name on the platform's list of measurements (`FORMULA_INPUTS`) has a label
+ * in the dictionary, in English and Hausa. The API refuses a new formula that
+ * names anything else, so the fallback below is only for a rate written before
+ * that rule, or straight into the database: better a readable English label
+ * than a box with no label at all.
+ */
+export function measureLabel(name: string, t: TranslationDictionary): string {
+  const key = formulaInputLabelKey(name);
+  return key ? (t[key] as string) : inputLabel(name);
+}
+
+/**
  * A formula's input name, as a person would read it: `floorAreaSqm` becomes
- * "Floor area sqm". The names are the officer's, written into the rate; this
- * only stops a form asking for something spelt like code.
+ * "Floor area sqm". The fallback for a name not on the list of measurements;
+ * it stops a form asking for something spelt like code, and is not a
+ * translation.
  */
 export function inputLabel(name: string): string {
   const words = name
@@ -372,7 +387,7 @@ export function CollectScreen({
       if ('missing' in measured) {
         setError({
           code: 'INVALID_INPUT',
-          message: t.colNeedMeasure.replace('{{name}}', inputLabel(measured.missing)),
+          message: t.colNeedMeasure.replace('{{name}}', measureLabel(measured.missing, t)),
           moneyStatus: 'NOT_APPLICABLE',
         });
         setBusy(false);
@@ -710,7 +725,7 @@ export function CollectScreen({
           )}
 
           {measureNames.map((name) => (
-            <Field key={name} label={inputLabel(name)} hint={t.colMeasureHint} required>
+            <Field key={name} label={measureLabel(name, t)} hint={t.colMeasureHint} required>
               <input
                 inputMode="decimal"
                 value={measures[name] ?? ''}

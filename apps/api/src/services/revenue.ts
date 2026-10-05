@@ -26,6 +26,7 @@ import {
   nextTransactionReference,
 } from '../lib/references';
 import { computeAmount, inputsFor, type ComputationInputs, type RateVersion } from './rate-engine';
+import { VEHICLE_RENEWAL_ITEM_CODES } from '../lib/vehicle-renewal-items';
 import { recordAudit } from './audit';
 import { log } from '../lib/logger';
 
@@ -122,7 +123,7 @@ export async function listItems(
              OR $3 = ANY(ri.applicable_lga_ids))
         AND ($4::text IS NULL OR ri.name ILIKE '%' || $4 || '%' OR ri.code ILIKE '%' || $4 || '%')
         AND ($6::uuid IS NULL OR rc.authority_id = $6)
-        AND ($7::boolean IS FALSE OR r.id IS NOT NULL)
+        AND ($7::boolean IS FALSE OR (r.id IS NOT NULL AND ri.code <> ALL($8::text[])))
       ORDER BY ra.tier, rc.name, ri.name`,
     [
       options.categoryId ?? null,
@@ -132,6 +133,8 @@ export async function listItems(
       options.includeWithdrawn ?? false,
       options.authorityId ?? null,
       options.chargeableOnly ?? false,
+      // Vehicle renewals are raised from the vehicle, not the collect screen.
+      VEHICLE_RENEWAL_ITEM_CODES,
     ],
   );
 }

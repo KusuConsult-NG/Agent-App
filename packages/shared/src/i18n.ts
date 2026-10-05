@@ -2767,6 +2767,21 @@ export interface TranslationDictionary {
   colBasisAmountHint: string;
   colMeasureHint: string;
   colNeedMeasure: string;
+  colFiFloorAreaSqm: string;
+  colFiLandAreaSqm: string;
+  colFiSignAreaSqm: string;
+  colFiFrontageMetres: string;
+  colFiRooms: string;
+  colFiSeats: string;
+  colFiEmployees: string;
+  colFiVehicles: string;
+  colFiAnimals: string;
+  colFiStalls: string;
+  colFiMachines: string;
+  colFiMonths: string;
+  colFiDays: string;
+  colFiTonnes: string;
+  colFiRenewalPeriodMonths: string;
   colTaxpayerLabel: string;
   colRevenueLabel: string;
   colGovernmentRevenue: string;
@@ -6603,6 +6618,21 @@ export const translations: Record<Language, TranslationDictionary> = {
     colBasisAmountHint: "For example turnover, income or contract value. The charge itself is set by government.",
     colMeasureHint: "What this charge is worked out from. Enter it as a number, for example 15.5.",
     colNeedMeasure: "Enter {{name}} as a number, zero or more.",
+    colFiFloorAreaSqm: "Floor area (square metres)",
+    colFiLandAreaSqm: "Plot area (square metres)",
+    colFiSignAreaSqm: "Size of the sign (square metres)",
+    colFiFrontageMetres: "Frontage onto the road (metres)",
+    colFiRooms: "Number of rooms",
+    colFiSeats: "Number of seats",
+    colFiEmployees: "Number of employees",
+    colFiVehicles: "Number of vehicles",
+    colFiAnimals: "Number of animals",
+    colFiStalls: "Number of stalls",
+    colFiMachines: "Number of machines",
+    colFiMonths: "Number of months",
+    colFiDays: "Number of days",
+    colFiTonnes: "Weight (tonnes)",
+    colFiRenewalPeriodMonths: "Renewal period (months)",
     colTaxpayerLabel: "Taxpayer",
     colRevenueLabel: "Revenue",
     colGovernmentRevenue: "Government revenue",
@@ -10242,6 +10272,21 @@ export const translations: Record<Language, TranslationDictionary> = {
     colBasisAmountHint: "Misali kudin shiga, riba ko darajar kwangila. Gwamnati ce ke saita kudin da kansa.",
     colMeasureHint: "Abin da ake lissafa wannan kudin da shi. Ka shigar da shi a matsayin lamba, misali 15.5.",
     colNeedMeasure: "Ka shigar da {{name}} a matsayin lamba, sifili ko fiye.",
+    colFiFloorAreaSqm: "Girman dakin kasuwanci (murabba’in mita)",
+    colFiLandAreaSqm: "Girman fili (murabba’in mita)",
+    colFiSignAreaSqm: "Girman allon talla (murabba’in mita)",
+    colFiFrontageMetres: "Tsawon gaba a bakin hanya (mita)",
+    colFiRooms: "Yawan dakuna",
+    colFiSeats: "Yawan kujeru",
+    colFiEmployees: "Yawan ma’aikata",
+    colFiVehicles: "Yawan motoci",
+    colFiAnimals: "Yawan dabbobi",
+    colFiStalls: "Yawan rumfuna",
+    colFiMachines: "Yawan na’urori",
+    colFiMonths: "Yawan watanni",
+    colFiDays: "Yawan kwanaki",
+    colFiTonnes: "Nauyi (tan)",
+    colFiRenewalPeriodMonths: "Tsawon lokacin sabuntawa (watanni)",
     colTaxpayerLabel: "Mai biyan haraji",
     colRevenueLabel: "Haraji",
     colGovernmentRevenue: "Harajin gwamnati",

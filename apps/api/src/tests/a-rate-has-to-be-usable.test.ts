@@ -190,6 +190,26 @@ describe('setting the price of a public service', () => {
     assert.equal(await newVersions(), 5, 'a proper configuration is still a proper configuration');
   });
 
+  /*
+   * A formula reads only measurements the field app can label in both
+   * languages. Its boxes are labelled from the dictionary by input name, and a
+   * name the officer invented has no label in either: a Hausa reader would be
+   * asked for "shopSize". So the names are a list, and the refusal names it.
+   */
+  it('refuses a formula reading a measurement the field app cannot label', async () => {
+    const response = await setRate({ rateType: 'FORMULA', formula: 'shopSize * 500' });
+    assert.equal(response.status, 422, JSON.stringify(response.body));
+    const said = JSON.stringify(response.body);
+    assert.match(said, /shopSize/, 'the refusal names the input it will not take');
+    assert.match(said, /floorAreaSqm/, 'and the measurements it would');
+    assert.equal(await newVersions(), 0);
+  });
+
+  it('accepts one that reads measurements on the list', async () => {
+    const response = await setRate({ rateType: 'FORMULA', formula: 'floorAreaSqm * 500 + rooms * 2000' });
+    assert.equal(response.status, 201, JSON.stringify(response.body));
+  });
+
   it('accepts a percentage of nothing, which is a real rate', async () => {
     // Zero basis points is the Fourth Schedule's first band, not a mistake.
     // The rule is that the parameter must be *given*, not that it must be
