@@ -24,7 +24,7 @@ import type { ConnectionState } from '../lib/device';
 import { queryParams, useRoute } from '../router';
 import { useI18n } from '../lib/i18n';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
-import { enumLabel, formatDateIn, formatNaira, formatDateTimeIn, formulaInputLabelKey, localName, translations, type Language, type TranslationDictionary } from '@psirs/shared';
+import { enumLabel, formatDateIn, formatNaira, formatDateTimeIn, formulaInputLabelKey, localName, nairaToKobo, translations, type Language, type TranslationDictionary } from '@psirs/shared';
 
 interface RevenueItem {
   id: string;
@@ -357,6 +357,31 @@ export function CollectScreen({
     return { inputs };
   }
 
+  /*
+   * The amount the tax is worked out on, read the way the portal reads one.
+   *
+   * This was `Number.parseFloat`, which stops at the first character it does
+   * not understand and keeps whatever came before it. Measured: "12.500.000"
+   * was sent as ₦12.50, "15000 0" as ₦15,000 and "1e6" as ₦1,000,000, each
+   * quoted without a word on the figure that decides the bill. The measures a
+   * formula reads were already held to a plain number; the base amount, which
+   * matters more, was not. `nairaToKobo` takes digits, commas and up to two
+   * decimals and refuses the rest, so the box says what it could not read
+   * rather than guessing.
+   */
+  function baseAmountKobo(): { kobo: string } | { problem: string } {
+    const typed = baseAmount.trim();
+    if (!typed) return { problem: t.colNeedBaseAmount };
+    let kobo: bigint;
+    try {
+      kobo = nairaToKobo(typed);
+    } catch {
+      return { problem: t.ofcCfNotAnAmount.replace('{{amount}}', typed) };
+    }
+    if (kobo <= 0n) return { problem: t.colNeedBaseAmount };
+    return { kobo: kobo.toString() };
+  }
+
   const getQuote = useCallback(async () => {
     // The taxpayer as well as the item: eleven revenue items now carry a rate
     // per Local Government Area, and the server resolves which from the
@@ -371,17 +396,13 @@ export function CollectScreen({
       if (needsBaseAmount) {
         // Entered in naira for the agent's convenience; converted to kobo here
         // so no decimal ever reaches the financial path.
-        const naira = Number.parseFloat(baseAmount.replace(/,/g, ''));
-        if (!Number.isFinite(naira) || naira <= 0) {
-          setError({
-            code: 'INVALID_INPUT',
-            message: t.colNeedBaseAmount,
-            moneyStatus: 'NOT_APPLICABLE',
-          });
+        const base = baseAmountKobo();
+        if ('problem' in base) {
+          setError({ code: 'INVALID_INPUT', message: base.problem, moneyStatus: 'NOT_APPLICABLE' });
           setBusy(false);
           return;
         }
-        inputs.baseAmountKobo = String(Math.round(naira * 100));
+        inputs.baseAmountKobo = base.kobo;
       }
       const measured = measureInputs();
       if ('missing' in measured) {
@@ -413,7 +434,9 @@ export function CollectScreen({
     try {
       const inputs: Record<string, string> = {};
       if (needsBaseAmount) {
-        inputs.baseAmountKobo = String(Math.round(Number.parseFloat(baseAmount.replace(/,/g, '')) * 100));
+        // The same reading the quote was given; it refused anything else.
+        const base = baseAmountKobo();
+        if ('kobo' in base) inputs.baseAmountKobo = base.kobo;
       }
       // The same values the quote was given; it refused anything else.
       const measured = measureInputs();
