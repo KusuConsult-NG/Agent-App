@@ -55,6 +55,8 @@ import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 
 let officerToken = '';
+/** Approves what `officerToken` registers: a registrant cannot approve their own group. */
+let reviewerToken = '';
 let lgaId = '';
 
 const LEADER_PHONE = '+2348030000210';
@@ -76,6 +78,12 @@ beforeEach(async () => {
     role: 'revenue_officer',
   });
   officerToken = (await loginAs('+2348000000210')).accessToken;
+  await createGovernmentUser({
+    fullName: 'Reviewing Officer',
+    phone: '+2348000000211',
+    role: 'revenue_officer',
+  });
+  reviewerToken = (await loginAs('+2348000000211')).accessToken;
   lgaId = await firstLgaId();
 });
 
@@ -101,7 +109,7 @@ async function cooperativeAwaitingItsLeader(): Promise<string> {
   const approved = await post(
     `/groups/${groupId}/review`,
     { decision: 'APPROVE', reason: 'Verified against the ministry register of cooperatives.' },
-    { token: officerToken },
+    { token: reviewerToken },
   );
   assert.equal(approved.status, 200, JSON.stringify(approved.body));
 

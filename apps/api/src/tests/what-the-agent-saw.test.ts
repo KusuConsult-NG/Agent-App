@@ -2796,7 +2796,8 @@ describe('the other cells of the schedule', () => {
     // Approved, because standing is only conferred on a group PSIRS admitted;
     // the test below covers what happens when it has not been.
     await pool.query(`UPDATE taxpayer_groups SET status = 'ACTIVE' WHERE id = $1`, [association]);
-    const officer = await loginAs('+2348000000001');
+    // Not the officer `guild` records as registering it: they cannot confer it.
+    const officer = await loginAs('+2348000000002');
 
     const conferred = await post(
       `/groups/${association}/tax-role`,
@@ -2840,7 +2841,7 @@ describe('the other cells of the schedule', () => {
     );
     assert.equal(registered!.status, 'PENDING', 'a newly registered group is not yet approved');
 
-    const officer = await loginAs('+2348000000001');
+    const officer = await loginAs('+2348000000002');
     const response = await post(
       `/groups/${association}/tax-role`,
       { taxRole: 'ATTESTATION', reason: 'Recognised under the market bye-law of 2026.' },

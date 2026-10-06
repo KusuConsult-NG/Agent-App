@@ -24,7 +24,7 @@ import { randomBytes } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
-import { AppError, badRequest, conflict, notFound } from '../lib/errors';
+import { AppError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { nextGroupCode } from '../lib/references';
 import { generateVerificationCode, maskPhone, sha256 } from '../lib/crypto';
 import { recordAudit } from './audit';
@@ -132,6 +132,34 @@ export async function registerGroup(params: {
   });
 }
 
+/**
+ * The officer who registered a group is not the one who vouches for it.
+ *
+ * `group:manage` both registers a group and approves it, and nothing kept
+ * the two apart. Measured: a revenue officer registered a farmers' union with
+ * a leader phone of their choosing (201), approved it themselves (200,
+ * ACTIVE) and gave it the ATTESTATION role (200), with the same officer as
+ * `registered_by` and `approved_by`. Approval is what makes its attested
+ * members eligible for incentive programmes, and ATTESTATION lets the group's
+ * word on a member's stall stand against an agent's count. Approval is the
+ * check that somebody other than the person making the claim looked at it.
+ *
+ * So approving the group, and conferring a part in enumeration on it, take an
+ * officer other than the one who registered it. Suspending it, or taking its
+ * part away, do not: both only reduce what the group can do.
+ */
+function assertNotRegistrant(
+  group: { registered_by: string | null },
+  actorId: string,
+  what: string,
+): void {
+  if (group.registered_by !== actorId) return;
+  throw forbidden(
+    `You registered this group, so another officer has to ${what}.`,
+    'Ask a colleague with group management to review it.',
+  );
+}
+
 /** An officer's decision on whether a group is genuine. */
 export async function reviewGroup(params: {
   groupId: string;
@@ -141,12 +169,13 @@ export async function reviewGroup(params: {
   actorRole: string;
 }): Promise<{ status: string }> {
   return withTransaction(async (client) => {
-    const group = await queryOne<{ id: string; status: string }>(
+    const group = await queryOne<{ id: string; status: string; registered_by: string | null }>(
       client,
-      'SELECT id, status FROM taxpayer_groups WHERE id = $1 FOR UPDATE',
+      'SELECT id, status, registered_by FROM taxpayer_groups WHERE id = $1 FOR UPDATE',
       [params.groupId],
     );
     if (!group) throw notFound('That group');
+    if (params.decision === 'APPROVE') assertNotRegistrant(group, params.actorId, 'approve it');
 
     const status = params.decision === 'APPROVE' ? 'ACTIVE' : 'SUSPENDED';
     await client.query(
@@ -194,9 +223,14 @@ export async function setGroupTaxRole(params: {
   actorRole: string;
 }): Promise<{ taxRole: string }> {
   return withTransaction(async (client) => {
-    const group = await queryOne<{ id: string; status: string; tax_role: string }>(
+    const group = await queryOne<{
+      id: string;
+      status: string;
+      tax_role: string;
+      registered_by: string | null;
+    }>(
       client,
-      'SELECT id, status, tax_role FROM taxpayer_groups WHERE id = $1 FOR UPDATE',
+      'SELECT id, status, tax_role, registered_by FROM taxpayer_groups WHERE id = $1 FOR UPDATE',
       [params.groupId],
     );
     if (!group) throw notFound('That group');
@@ -211,6 +245,9 @@ export async function setGroupTaxRole(params: {
         `This group is ${group.status.toLowerCase()} and cannot be given a part in enumeration ` +
           'until it has been approved.',
       );
+    }
+    if (params.taxRole !== 'NONE') {
+      assertNotRegistrant(group, params.actorId, 'give it a part in enumeration');
     }
 
     await client.query('UPDATE taxpayer_groups SET tax_role = $2 WHERE id = $1', [
