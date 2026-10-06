@@ -22,7 +22,7 @@
 import { quantityHundredths } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
-import { badRequest, conflict, notFound } from '../lib/errors';
+import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { generateVerificationCode, normaliseVerificationCode } from '../lib/crypto';
 import { recordAudit } from './audit';
 import { evaluateEligibility } from './incentives';
@@ -275,9 +275,10 @@ export async function recordCollection(params: {
       quantity: string;
       unit: string;
       taxpayer_name: string;
+      awarded_by: string;
     }>(
       client,
-      `SELECT a.id, a.status, a.quantity, r.unit,
+      `SELECT a.id, a.status, a.quantity, r.unit, a.awarded_by,
               COALESCE(t.business_name, t.first_name || ' ' || COALESCE(t.last_name,'')) AS taxpayer_name
          FROM incentive_awards a
          JOIN incentive_allocation_rounds r ON r.id = a.round_id
@@ -300,6 +301,32 @@ export async function recordCollection(params: {
     }
     if (award.status === 'FORFEITED') {
       throw conflict('AWARD_FORFEITED', 'This allocation was forfeited and cannot be collected.');
+    }
+
+    /*
+     * Whoever awarded a share does not also record it collected.
+     *
+     * The award hands its collection code to the officer who made it — the
+     * response says "Give the beneficiary this code" — and an officer may
+     * record collections too, because `requireActiveAgent` waves officers
+     * through. So one officer could award a share to any eligible taxpayer
+     * and mark it collected with the code they had just been given, and the
+     * store's books would show goods reaching a farmer who never came.
+     * Measured through the routes: an administrator awarded Ladi Farmer two
+     * bags and recorded them collected, 201 then 200, with awarded_by and
+     * collected_by the same person. Whether what left the store reached
+     * people is the question this module exists to answer, and it could not
+     * answer it for that one.
+     *
+     * The handover is the store agent's, or any other officer's. Collusion
+     * between two people is beyond what one check can see; one person alone
+     * is not.
+     */
+    if (award.awarded_by === params.actorId) {
+      throw forbidden(
+        'You awarded this share, so somebody else has to record it as collected.',
+        'The beneficiary collects from the store agent, who records the handover with the code.',
+      );
     }
 
     await client.query(
