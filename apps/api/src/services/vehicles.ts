@@ -193,16 +193,40 @@ export async function upsertVehicle(params: {
     const source = found ? 'AUTHORITY_LOOKUP' : 'MANUAL_ENTRY';
     const message = captureMessage(authority.outcome);
 
-    const existing = await queryOne<{ id: string; source: string }>(
+    const existing = await queryOne<{ id: string; source: string; taxpayer_id: string | null }>(
       client,
-      'SELECT id, source FROM vehicles WHERE registration_number = $1',
+      'SELECT id, source, taxpayer_id FROM vehicles WHERE registration_number = $1',
       [normalised],
     );
 
     if (existing) {
+      /*
+       * A second sighting can name the owner a record lacks; it does not
+       * change whose vehicle it is.
+       *
+       * This wrote `COALESCE($2, taxpayer_id)`, so whichever taxpayer the
+       * latest capture named replaced the one on the record. Measured: a
+       * plate captured for one taxpayer was captured again naming another
+       * (201), the vehicle moved to the second taxpayer with no audit row,
+       * and a renewal paid by them was then accepted (201) -- the owner check
+       * in `initiateRenewal` compares against the record, and the record had
+       * just been rewritten. The phone still merges as before.
+       */
+      if (
+        existing.taxpayer_id &&
+        params.input.taxpayerId &&
+        params.input.taxpayerId !== existing.taxpayer_id
+      ) {
+        throw conflict(
+          'VEHICLE_OWNER_MISMATCH',
+          `${normalised} is registered to a different taxpayer on the platform, so it cannot ` +
+            'be recorded against this one.',
+          'If the vehicle has changed hands, confirm the change of owner with PSIRS first.',
+        );
+      }
       await client.query(
         `UPDATE vehicles
-            SET taxpayer_id = COALESCE($2, taxpayer_id),
+            SET taxpayer_id = COALESCE(taxpayer_id, $2),
                 owner_phone = COALESCE($3, owner_phone),
                 authority_reference = COALESCE($4, authority_reference),
                 authority_verified_at = CASE WHEN $5 THEN now() ELSE authority_verified_at END,
