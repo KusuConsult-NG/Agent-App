@@ -41,14 +41,34 @@ export interface VehicleLookup {
 }
 
 /** Search the platform, then the authoritative registry (PRD §22 step 1-2). */
+/*
+ * What a plate lookup answers with: the vehicle, not the person behind it.
+ *
+ * Every agent in the State can look up any plate (`vehicle:read:all`), and
+ * the lookup joined the owner's taxpayer record. Measured: an agent's lookup
+ * returned the owner's TIN, their phone twice over (the taxpayer's and the
+ * vehicle's), and their names, and wrote nothing to
+ * `taxpayer_record_access_logs`, which records every other route to a named
+ * person's details. The field app shows none of those: it shows the plate,
+ * the name written on the vehicle record, make and model, chassis and expiry.
+ *
+ * So the lookup leaves them out rather than logging a read nobody needed.
+ * The renewal still checks the owner on the server, against `taxpayer_id`.
+ * An explicit list, so a column added to `vehicles` later is not sent to
+ * every agent by default.
+ */
+const LOOKUP_COLUMNS = `v.id, v.taxpayer_id, v.registration_number, v.chassis_number,
+  v.engine_number, v.make, v.model, v.year_of_manufacture, v.vehicle_type, v.vehicle_class,
+  v.colour, v.owner_name, v.source, v.authority_reference, v.authority_verified_at,
+  v.owner_verified, v.current_expiry_date, v.status, v.status_reason,
+  v.authority_lookup_outcome`;
+
 export async function lookupVehicle(db: Db, registrationNumber: string): Promise<VehicleLookup> {
   const normalised = registrationNumber.trim().toUpperCase().replace(/\s+/g, '');
 
   const local = await queryOne<Record<string, unknown>>(
     db,
-    `SELECT v.*, tp.first_name, tp.last_name, tp.business_name, tp.tin, tp.phone AS taxpayer_phone
-       FROM vehicles v LEFT JOIN taxpayers tp ON tp.id = v.taxpayer_id
-      WHERE v.registration_number = $1`,
+    `SELECT ${LOOKUP_COLUMNS} FROM vehicles v WHERE v.registration_number = $1`,
     [normalised],
   );
 
@@ -92,9 +112,13 @@ export async function lookupVehicle(db: Db, registrationNumber: string): Promise
     };
   }
 
+  // The authority's answer carries the owner's phone too. Capturing the
+  // vehicle reads it from the authority on the server, so the agent's
+  // screen has no use for it.
+  const { ownerPhone: _ownerPhone, ...vehicle } = authority.vehicle ?? {};
   return {
     source: 'AUTHORITY',
-    vehicle: authority.vehicle as unknown as Record<string, unknown>,
+    vehicle: vehicle as unknown as Record<string, unknown>,
     authorityConfirmed: true,
     message: 'Vehicle found at the vehicle authority. Confirm the owner before proceeding.',
   };
