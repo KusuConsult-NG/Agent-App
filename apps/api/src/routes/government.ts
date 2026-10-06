@@ -23,6 +23,7 @@ import {
   validateQuery,
 } from '../middleware/validate';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
+import { contentDisposition } from '../lib/content-disposition';
 import { bestEffort } from '../lib/best-effort';
 import { recordAudit, verifyAuditChain } from '../services/audit';
 import * as auth from '../services/auth';
@@ -4609,7 +4610,7 @@ governmentRouter.get(
     res.setHeader('content-type', file.contentType);
     // Never cached: this is somebody's bank advice on an open investigation.
     res.setHeader('cache-control', 'private, no-store');
-    res.setHeader('content-disposition', `inline; filename="${file.filename}"`);
+    res.setHeader('content-disposition', contentDisposition('inline', file.filename));
     res.send(file.bytes);
   }),
 );
