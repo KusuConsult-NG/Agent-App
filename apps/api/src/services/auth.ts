@@ -1177,6 +1177,24 @@ export async function setOfficerTerritories(params: {
   actorRole: string;
   reason: string;
 }) {
+  /*
+   * Nobody sets their own coverage.
+   *
+   * A role change and an account status already refuse the person they are
+   * about; this was the third lever on what an officer can see, and the one
+   * without that check. Territories are what a supervisor's reports are
+   * scoped to. Measured: with supervisors granted `user:manage` through the
+   * roles screen, a supervisor covering one territory assigned themselves
+   * three (200) and their reports widened with them, no second person
+   * involved. Narrowing is refused too, as it is for a role: the change is
+   * somebody else's to make either way.
+   */
+  if (params.targetUserId === params.actorId) {
+    throw forbidden(
+      'You cannot change the territories you cover. Another administrator has to make this change.',
+    );
+  }
+
   return withTransaction(async (client) => {
     const target = await queryOne<{ id: string; full_name: string; role: string }>(
       client,
