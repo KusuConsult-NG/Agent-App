@@ -372,8 +372,9 @@ export async function openCase(
   viewer: Viewer,
   input: OpenCaseInput,
 ): Promise<{ id: string; caseNumber: string }> {
+  const subjectUserId = await subjectOf(db, input);
   if (input.assigneeId) await assertAssignable(db, input.assigneeId);
-  if (input.assigneeId && input.assigneeId === input.subjectUserId) {
+  if (input.assigneeId && input.assigneeId === subjectUserId) {
     throw badRequest('A case cannot be assigned to the officer it is about.');
   }
 
@@ -400,7 +401,7 @@ export async function openCase(
         input.transactionId ?? null,
         input.agentId ?? null,
         input.taxpayerId ?? null,
-        input.subjectUserId ?? null,
+        subjectUserId,
         input.lgaId ?? null,
         input.sourceType ?? 'MANUAL',
         input.sourceId ?? null,
@@ -434,6 +435,34 @@ export async function openCase(
 
     return { id, caseNumber };
   });
+}
+
+/**
+ * Who a case is about, when the flag it was opened from already says.
+ *
+ * A fraud flag about an officer names them, and the case opened from it is
+ * about the same person. Measured: an auditor opened a case from a frequent
+ * manual intervention flag without naming its subject, and assigned it to the
+ * officer the flag was about (201); that officer read it (200) and commented
+ * on it (204), because the case recorded no subject for the checks above to
+ * find. A source id that matched no flag was accepted too, so the work list's
+ * count of cases against each flag could be pointed anywhere.
+ */
+async function subjectOf(db: Db, input: OpenCaseInput): Promise<string | null> {
+  const named = input.subjectUserId ?? null;
+  if (input.sourceType !== 'FRAUD_FLAG' || !input.sourceId) return named;
+
+  const flag = await queryOne<{ entity_type: string; entity_id: string }>(
+    db,
+    'SELECT entity_type, entity_id FROM fraud_flags WHERE id = $1',
+    [input.sourceId],
+  );
+  if (!flag) throw notFound('That fraud flag');
+  if (flag.entity_type !== 'USER') return named;
+  if (named && named !== flag.entity_id) {
+    throw badRequest('That flag is about a different officer from the one this case names.');
+  }
+  return flag.entity_id;
 }
 
 /**
@@ -1522,11 +1551,14 @@ export async function myWork(db: Db, viewer: Viewer) {
                LEFT JOIN agents a ON a.id = f.agent_id
                LEFT JOIN users u ON u.id = a.user_id
               WHERE f.status IN ('OPEN','UNDER_REVIEW')
+                -- Not a flag about the officer looking (the review route).
+                AND NOT (f.entity_type = 'USER' AND f.entity_id = $1)
               ORDER BY
                 CASE f.severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1
                                 WHEN 'MEDIUM' THEN 2 ELSE 3 END,
                 f.created_at DESC
               LIMIT 25`,
+            [viewer.userId],
           )
         : Promise.resolve([]),
     ]);

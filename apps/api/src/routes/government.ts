@@ -2235,10 +2235,11 @@ governmentRouter.get(
       severity: z.string().optional(),
       limit: z.coerce.number().int().min(1).max(500).default(100),
     }),
-    async (_req, res, data) => {
+    async (req, res, data) => {
       res.json(
         await query(
           pool,
+          // Never a flag about the officer asking: see the review route below.
           `SELECT f.id, f.rule, f.severity, f.entity_type, f.entity_id, f.detail, f.status,
                   f.created_at, f.resolution_note, a.agent_code, u.full_name AS agent_name,
                   t.transaction_reference
@@ -2248,8 +2249,9 @@ governmentRouter.get(
              LEFT JOIN transactions t ON t.id = f.transaction_id
             WHERE ($1::text IS NULL OR f.status = $1)
               AND ($2::text IS NULL OR f.severity = $2)
+              AND NOT (f.entity_type = 'USER' AND f.entity_id = $4)
             ORDER BY f.created_at DESC LIMIT $3`,
-          [data.status ?? null, data.severity ?? null, data.limit],
+          [data.status ?? null, data.severity ?? null, data.limit, req.auth!.userId],
         ),
       );
     },
@@ -2271,12 +2273,35 @@ governmentRouter.post(
           status: string;
           agent_id: string | null;
           reviewed_by: string | null;
+          entity_type: string;
+          entity_id: string | null;
         }>(
           client,
-          'SELECT id, status, agent_id, reviewed_by FROM fraud_flags WHERE id = $1',
+          `SELECT id, status, agent_id, reviewed_by, entity_type, entity_id
+             FROM fraud_flags WHERE id = $1`,
           [req.params.id],
         );
         if (!flag) throw notFound('That fraud flag');
+
+        /*
+         * Nobody reviews a flag about themselves.
+         *
+         * Two rules flag officers rather than agents — UNUSUAL_OFFICER_ACTIVITY
+         * and FREQUENT_MANUAL_INTERVENTION, the second raised on whoever keeps
+         * requesting reversals, refunds and corrections — and fraud:manage is
+         * held by the revenue officers those requests come from. Measured: a
+         * revenue officer flagged for frequent manual interventions saw the
+         * flag in the list and dismissed it, "These were all legitimate
+         * corrections" (200), recorded as reviewed by the officer it was
+         * about. The flags list and the work list no longer show an officer
+         * the flags about them either.
+         */
+        if (flag.entity_type === 'USER' && flag.entity_id === req.auth!.userId) {
+          throw forbidden(
+            'This flag is about you, so another officer has to review it.',
+            'Leave it for a colleague; you can explain the activity to them.',
+          );
+        }
 
         /*
          * Reversing an upheld investigation takes a second officer.
