@@ -130,6 +130,13 @@ describe('a public link that does not work', () => {
       fullName: 'Attestation Officer',
     });
     const token = (await loginAs('+2348030000150')).accessToken;
+    // A registrant cannot approve their own group, so a colleague does.
+    await createGovernmentUser({
+      role: 'admin',
+      phone: '+2348030000151',
+      fullName: 'Reviewing Officer',
+    });
+    const reviewer = (await loginAs('+2348030000151')).accessToken;
 
     const created = await post(
       '/groups',
@@ -146,7 +153,7 @@ describe('a public link that does not work', () => {
     await post(
       `/groups/${created.body.groupId}/review`,
       { decision: 'APPROVE', reason: 'Verified against the ministry register.' },
-      { token },
+      { token: reviewer },
     );
     const invited = await post(
       `/groups/${created.body.groupId}/attestation-request`,

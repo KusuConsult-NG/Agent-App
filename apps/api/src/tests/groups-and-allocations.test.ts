@@ -682,7 +682,9 @@ describe('a cooperative that turns out to be a front', () => {
         leaderName: 'Absent Chairman',
         leaderPhone: '+2348030000099',
       },
-      { token: officerToken, idempotencyKey: 'front-group' },
+      // Registered in the field and approved by the officer: the officer who
+      // registers a group cannot be the one who approves it.
+      { token: agent.token, deviceId: agent.device, idempotencyKey: 'front-group' },
     );
     assert.equal(created.status, 201, JSON.stringify(created.body));
     const id = created.body.groupId as string;

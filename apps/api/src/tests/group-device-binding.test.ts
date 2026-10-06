@@ -41,6 +41,8 @@ import { seedDemoAgent } from '../db/seed-agent';
 let agentToken = '';
 let agentDevice = '';
 let officerToken = '';
+/** Approves what `officerToken` registers: a registrant cannot approve their own group. */
+let reviewerToken = '';
 let lgaId = '';
 
 before(async () => {
@@ -61,6 +63,12 @@ beforeEach(async () => {
     fullName: 'Group Officer',
   });
   officerToken = (await loginAs('+2348030000120')).accessToken;
+  await createGovernmentUser({
+    role: 'admin',
+    phone: '+2348030000121',
+    fullName: 'Reviewing Officer',
+  });
+  reviewerToken = (await loginAs('+2348030000121')).accessToken;
 
   const demo = await seedDemoAgent();
   const session = await loginAs(demo!.phone, demo!.password, demo!.deviceIdentifier);
@@ -113,7 +121,7 @@ describe('recording who belongs', () => {
     await post(
       `/groups/${created.body.groupId}/review`,
       { decision: 'APPROVE', reason: 'Verified against the ministry register.' },
-      { token: officerToken },
+      { token: reviewerToken },
     );
     return created.body.groupId;
   }
